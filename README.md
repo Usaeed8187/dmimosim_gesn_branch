@@ -20,7 +20,7 @@ Copy or generate the dMIMO channel data for simulation
 mkdir -p ns3/channels
 cp -a <ns3_data_folder/*.npz> ./ns3/channels
 ```
-Activate Conda environment, and run the simulation scripts for SU-MIMO
+Activate the Conda environment
 ```
 conda activate sionna
 ```
