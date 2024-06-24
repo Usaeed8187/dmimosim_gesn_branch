@@ -33,8 +33,15 @@
 ```
 >> python
 >>> import tensorflow as tf
->>> tf.config.experimental.list_physical_devices('GPU')
+>>> tf.config.list_physical_devices('GPU')
 ```
+
+7. (Optional) Set environment variable to reduce warning messages from Tensorflow. Add the following in your shell init files (.bashrc, .zshrc, etc.)
+```
+export TF_CPP_MIN_LOG_LEVEL=3
+```
+
+
 
 
 

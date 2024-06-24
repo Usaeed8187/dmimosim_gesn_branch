@@ -56,8 +56,8 @@ def stbc_decode(y, h):
 
     # check input data dimension
     assert y.shape == h.shape, "channel estimation must have matched shape as received symbols"
-    assert y.shape[-1] == 2, "total number of tx/rx antennas must be two"
-    assert y.shape[-2] % 2 == 0, "total number of symbols must be even"
+    assert h.shape[-1] == 2, "total number of tx/rx antennas must be two"
+    assert h.shape[-2] % 2 == 0, "total number of symbols must be even"
 
     # split received symbols into two sets (y0, y1), last dimension is receive antenna index
     # see table III in reference
@@ -89,7 +89,15 @@ def stbc_decode(y, h):
     x = tf.concat((x1, x2), axis=-1)  # [..., num_syms/2, 2]
     x = tf.reshape(x, (*x.shape[:-2], -1))  # [..., num_syms]
 
-    return x
+    # calculate combining gain per 2x2 channel (CSI)
+    s = tf.math.real(h * tf.math.conj(h))
+    s = tf.reduce_sum(s, axis=[-1, -2])
+    # duplicate CSI for two consecutive symbols
+    s = tf.expand_dims(s, axis=-1)
+    s = tf.concat((s, s), axis=-1)
+    s = tf.reshape(s, (*s.shape[:-2], -1))
+
+    return x, s
 
 
 # Module test
@@ -106,7 +114,7 @@ if __name__ == "__main__":
     num_frames = 512
     num_symbols = 14  # must be even
     num_bits_per_symbol = 2  # QPSK
-    ebno_db = 6.0
+    ebno_db = 10.0
     no = ebnodb2no(ebno_db, num_bits_per_symbol, 1.0)
 
     # Create layer/modules
@@ -122,9 +130,11 @@ if __name__ == "__main__":
 
     # Generate Rayleigh fading channel coefficients
     # h has the same shape as tx for convenience
+    # two consecutive symbols have same 2x2 channel coefficients:
+    #   [..., num_syms, ntx] -> [..., num_syms/2, 2, 2]
     h = tf.complex(tf.math.sqrt(0.25), 0.0) * tf.complex(tf.random.normal(tx.shape), tf.random.normal(tx.shape))
 
-    # reshape tx and h as [..., num_syms/2, 2, ntx] for 2rx-2tx channels
+    # reshape tx and h as [..., num_syms/2, nrx, ntx] for 2rx-2tx channels
     tx = tf.reshape(tx, (*tx.shape[:-2], -1, 2, 2))  # [..., num_syms/2, nss, ntx]
     hh = tf.reshape(h, (*h.shape[:-2], -1, 2, 2))    # [..., num_syms/2, nrx, ntx]
 
@@ -134,8 +144,11 @@ if __name__ == "__main__":
     ry = add_noise([ry, no])
 
     # Receiver processing
-    y = stbc_decode(ry, h)  # assuming perfect CSI
-    d = demapper([y, no])
+    yd, csi = stbc_decode(ry, h)  # assuming perfect CSI
+
+    # Demapping
+    yd = yd / tf.cast(csi, tf.complex64)  # CSI scaling
+    d = demapper([yd, no / csi])
 
     # Estimate BER
     avg_ber = compute_ber(d, s)
