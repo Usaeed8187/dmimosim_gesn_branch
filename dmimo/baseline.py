@@ -15,10 +15,10 @@ from sionna.utils import BinarySource, ebnodb2no
 from sionna.utils.metrics import compute_ber
 
 from dmimo.config import Ns3Config
-from dmimo.channel import LoadNs3Channel, dMIMOChannels
+from dmimo.channel import LoadNs3Channel, dMIMOChannels, lmmse_channel_estimation
 from dmimo.mimo import SVDPrecoder, SVDEqualizer
 
-def sim_baseline(precoding_method="SVD", csi_delay=1, batch_size=8, num_bits_per_symbol=2, coderate=0.5):
+def sim_baseline(precoding_method="SVD", csi_delay=1, batch_size=8, num_bits_per_symbol=2, coderate=0.5, perfect_csi=False):
 
     # dMIMO configuration
     num_ut = 1
@@ -33,16 +33,11 @@ def sim_baseline(precoding_method="SVD", csi_delay=1, batch_size=8, num_bits_per
     num_streams_per_tx = num_ut_ant
 
     # Create an RX-TX association matrix
-    # rx_tx_association[i,j]=1 means that receiver i gets at least one stream
-    # from transmitter j. Depending on the transmission direction (uplink or downlink),
-    # the role of UT and BS can change. However, as we have only a single
-    # transmitter and receiver, this does not matter:
+    # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
     rx_tx_association = np.array([[1]])
 
     # Instantiate a StreamManagement object
     # This determines which data streams are determined for which receiver.
-    # In this simple setup, this is fairly easy. However, it can get more involved
-    # for simulations with many transmitters and receivers.
     sm = StreamManagement(rx_tx_association, num_streams_per_tx)
 
     rg = ResourceGrid(num_ofdm_symbols=14,
@@ -111,14 +106,16 @@ def sim_baseline(precoding_method="SVD", csi_delay=1, batch_size=8, num_bits_per
     x = mapper(d)
     x_rg = rg_mapper(x)
 
-    # Perfect channel estimation
-    h_freq_csi, pl_tmp = ns3_channel("Baseline", slot_idx=first_slot_idx - csi_delay, batch_size=batch_size)
-    # h_freq_csi = tf.expand_dims(h_freq_csi, 1)  # [batch_size, num_rx, num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size]
-    # h_freq_csi = tf.expand_dims(h_freq_csi, 3)  # [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
-    # add some noise to channel estimation
-    h_freq_csi = chest_noise([h_freq_csi, 5e-3])
+    if perfect_csi:
+        # Perfect channel estimation
+        h_freq_csi, pl_tmp = ns3_channel("Baseline", slot_idx=first_slot_idx - csi_delay, batch_size=batch_size)
+        # add some noise to channel estimation
+        h_freq_csi = chest_noise([h_freq_csi, 5e-3])
+    else:
+        # LMMSE channel estimation
+        h_freq_csi, err_var_csi = lmmse_channel_estimation(slot_idx=first_slot_idx - csi_delay)
 
-    # used to simulate perfect CSI at the receiver
+    # apply precoding to OFDM grids
     if precoding_method == "ZF":
         x_rg, g = zf_precoder([x_rg, h_freq_csi])
     elif precoding_method == "SVD":
@@ -127,7 +124,6 @@ def sim_baseline(precoding_method="SVD", csi_delay=1, batch_size=8, num_bits_per
         raise "unsupported precoding method"
 
     # apply dMIMO channels to the resource grid in the frequency domain.
-    # y_old = dmimo_chans([x_rg, no])
     y = dmimo_chans([x_rg, first_slot_idx])
 
     # SVD equalization
