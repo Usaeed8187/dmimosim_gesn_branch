@@ -15,10 +15,10 @@ from sionna.utils import BinarySource, ebnodb2no
 from sionna.utils.metrics import compute_ber
 
 from dmimo.config import Ns3Config
-from dmimo.channel import LoadNs3Channel, dMIMOChannels, lmmse_channel_estimation
+from dmimo.channel import LoadNs3Channel, dMIMOChannels #, lmmse_channel_estimation
 from dmimo.mimo import SVDPrecoder, SVDEqualizer
 
-def sim_baseline(precoding_method="SVD", csi_delay=1, batch_size=8, num_bits_per_symbol=2, coderate=0.5, perfect_csi=False):
+def sim_baseline(precoding_method="SVD", csi_delay=1, batch_size=8, num_bits_per_symbol=2, coderate=0.5, perfect_csi=True):
 
     # dMIMO configuration
     num_ut = 1
