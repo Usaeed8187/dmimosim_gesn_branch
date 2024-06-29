@@ -2,8 +2,6 @@ import os
 import sys
 import shutil
 import glob
-import tempfile
-import multiprocessing as mp
 
 import numpy as np
 
@@ -58,42 +56,42 @@ def read_ns3_channels(ns3_folder, num_ofdm_syms, num_bs=1, num_ue=10, num_bs_ant
                 offset = 2*num_bs
                 filename = foldername + "hmat_0_{}.npy".format(m + offset)
                 H = np.load(filename)
-                assert  H.shape == (fft_size, num_bs_ant, num_ue_ant)
-                Hts[m*num_ue_ant:(m+1)*num_ue_ant, :, symidx, :] = np.transpose(H, [2, 1, 0])
+                assert  H.shape == (num_ue_ant, num_bs_ant, fft_size)
+                Hts[m*num_ue_ant:(m+1)*num_ue_ant, :, symidx, :] = H
 
             # read RxSqud chanels
             for m in range(num_ue):
                 offset = 2*num_bs + num_ue
                 filename = foldername + "hmat_{}_1.npy".format(m + offset)
                 H = np.load(filename)
-                assert H.shape == (fft_size, num_ue_ant, num_bs_ant)
-                Hrs[:,m*num_ue_ant:(m+1)*num_ue_ant, symidx, :] = np.transpose(H, [2, 1, 0])
+                assert H.shape == (num_bs_ant, num_ue_ant, fft_size)
+                Hrs[:,m*num_ue_ant:(m+1)*num_ue_ant, symidx, :] = H
 
             # read DMIMO chanels
             H = np.load(foldername + "hmat_0_1.npy")  # direct BS-BS channel
-            Hdm[0:num_bs_ant,0:num_bs_ant,symidx,:] = np.transpose(H, [2, 1, 0])
+            Hdm[0:num_bs_ant,0:num_bs_ant,symidx,:] = H
             offset = 2*num_bs + num_ue
             for m in range(num_ue):  # RxSqud UE
                 rxidx_low, rxidx_high = (num_bs_ant + m*num_ue_ant, num_bs_ant + (m+1)*num_ue_ant)
                 # TxBS -> RxUE
                 filename = foldername + "hmat_0_{}.npy".format(m + offset)
                 H = np.load(filename)
-                assert H.shape == (fft_size, num_bs_ant, num_ue_ant)
-                Hdm[rxidx_low:rxidx_high, 0:num_bs_ant, symidx, :] = np.transpose(H, [2, 1, 0])
+                assert H.shape == (num_ue_ant, num_bs_ant, fft_size)
+                Hdm[rxidx_low:rxidx_high, 0:num_bs_ant, symidx, :] = H
                 for n in range(num_ue):  # TxSqud UE
                     txidx_low, txidx_high = (num_bs_ant + n*num_ue_ant, num_bs_ant + (n+1)*num_ue_ant)
                     # TxUE -> RxUE
                     filename = foldername + "hmat_{}_{}.npy".format(n + 2*num_bs, m + offset)
                     H = np.load(filename)
-                    assert H.shape == (fft_size, num_ue_ant, num_ue_ant)
-                    Hdm[rxidx_low:rxidx_high, txidx_low:txidx_high, symidx, :] = np.transpose(H, [2, 1, 0])
+                    assert H.shape == (num_ue_ant, num_ue_ant, fft_size)
+                    Hdm[rxidx_low:rxidx_high, txidx_low:txidx_high, symidx, :] = H
             for n in range(num_ue):
                 txid_low, txid_high = (num_bs_ant + n*num_ue_ant, num_bs_ant + (n+1)*num_ue_ant)
                 # TxUE -> RxBS
                 filename = foldername + "hmat_{}_1.npy".format(m + offset)
                 H = np.load(filename)
-                assert H.shape == (fft_size, num_ue_ant, num_bs_ant)
-                Hdm[0:num_bs_ant, txid_low:txid_high, symidx, :] = np.transpose(H, [2, 1, 0])
+                assert H.shape == (num_bs_ant, num_ue_ant, fft_size)
+                Hdm[0:num_bs_ant, txid_low:txid_high, symidx, :] = H
            
             # remove tempory time_idx_<symidx> subfolders
             shutil.rmtree(foldername, ignore_errors=True)
