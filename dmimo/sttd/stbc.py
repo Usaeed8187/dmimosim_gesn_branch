@@ -56,7 +56,7 @@ def stbc_decode(y, h):
 
     # check input data dimension
     assert y.shape == h.shape, "channel estimation must have matched shape as received symbols"
-    assert h.shape[-1] == 2, "total number of tx/rx antennas must be two"
+    assert h.shape[-1] == 2, "total number of tx antennas must be two"
     assert h.shape[-2] % 2 == 0, "total number of symbols must be even"
 
     # split received symbols into two sets (y0, y1), last dimension is receive antenna index
