@@ -193,7 +193,7 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_siz
 
 
 def sim_su_mimo_all(precoding_method="SVD", total_slots=20, num_slots_p1=1, num_slots_p2=3, start_slot_idx=5, csi_delay=1,
-                    num_bits_per_symbol=2, coderate=0.5, perfect_csi=False):
+                    num_bits_per_symbol=2, coderate=0.5, perfect_csi=False, ns3_folder="./ns3/channels"):
     """"
     Simulation of SU-MIMO transmission phases according to the frame structure
     """
@@ -203,7 +203,7 @@ def sim_su_mimo_all(precoding_method="SVD", total_slots=20, num_slots_p1=1, num_
     for first_slot_idx in np.arange(start_slot_idx, total_slots, num_slots_p1+num_slots_p2):
         total_cycles += 1
         results, x_hat = sim_su_mimo(precoding_method=precoding_method, first_slot_idx=first_slot_idx, batch_size=num_slots_p2, csi_delay=csi_delay,
-                                     num_bits_per_symbol=num_bits_per_symbol, coderate=coderate, perfect_csi=perfect_csi)
+                                     num_bits_per_symbol=num_bits_per_symbol, coderate=coderate, perfect_csi=perfect_csi, ns3_folder=ns3_folder)
         uncoded_ber += results[0]
         ber += results[1]
         goodput += results[2]
