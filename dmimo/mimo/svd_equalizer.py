@@ -8,6 +8,7 @@ from .precoding import sumimo_svd_equalizer
 
 
 class SVDEqualizer(Layer):
+    """SVD Equalizer for SU-MIMO"""
 
     def __init__(self,
                  resource_grid,
@@ -30,8 +31,7 @@ class SVDEqualizer(Layer):
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]
         #
         # h has shape
-        # [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols,...
-        # ..., fft_size]
+        # [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
 
         # Transformations to bring h and y in the desired shapes
 
@@ -41,28 +41,24 @@ class SVDEqualizer(Layer):
         y_equalized = tf.cast(y_equalized, self._dtype)
 
         # Transpose h:
-        # [num_tx, num_rx, num_rx_ant, num_tx_ant, num_ofdm_symbols,...
-        #  ..., fft_size, batch_size]
+        # [num_tx, num_rx, num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size, batch_size]
         h_eq = tf.transpose(h, [3, 1, 2, 4, 5, 6, 0])
 
         # Gather desired channel for precoding:
-        # [num_tx, num_rx_per_tx, num_rx_ant, num_tx_ant, num_ofdm_symbols,...
-        #  ..., fft_size, batch_size]
+        # [num_tx, num_rx_per_tx, num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size, batch_size]
         h_eq_desired = tf.gather(h_eq, self._stream_management.precoding_ind,
                                  axis=1, batch_dims=1)
 
         # Flatten dims 2,3:
-        # [num_tx, num_rx_per_tx * num_rx_ant, num_tx_ant, num_ofdm_symbols,...
-        #  ..., fft_size, batch_size]
+        # [num_tx, num_rx_per_tx * num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size, batch_size]
         h_eq_desired = flatten_dims(h_eq_desired, 2, axis=1)
 
         # Transpose:
-        # [batch_size, num_tx, num_ofdm_symbols, fft_size,...
-        #  ..., num_streams_per_tx, num_tx_ant]
+        # [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx, num_tx_ant]
         h_eq_desired = tf.transpose(h_eq_desired, [5, 0, 3, 4, 1, 2])
         h_eq_desired = tf.cast(h_eq_desired, self._dtype)
 
-        # SVD precoding
+        # SVD equalizing
         y_equalized = sumimo_svd_equalizer(y_equalized, h_eq_desired)
 
         # Transpose output to desired shape:
