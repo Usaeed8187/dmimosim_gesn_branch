@@ -19,8 +19,8 @@ from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.mimo import SVDPrecoder, SVDEqualizer
 
 
-def sim_su_mimo(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_size=8,
-                num_bits_per_symbol=2, coderate=0.5, perfect_csi=False):
+def sim_su_mimo(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_size=3,
+                num_bits_per_symbol=2, coderate=0.5, perfect_csi=False, ns3_folder="../ns3/channels"):
     """
     Simulation of SU-MIMO scenarios using different settings
 
@@ -36,6 +36,7 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_siz
     :param num_bits_per_symbol: modulation order
     :param coderate: LDPC code rate
     :param perfect_csi: Use perfect CSI for precoding/equalization for testing purpose
+    :param ns3_folder: folder for ns-3 channel data
     :return: [uncoded BER, LDPC BER, Goodput], demodulated QAM symbols (for debugging purpose)
     """
 
@@ -122,7 +123,7 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_siz
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
     # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder="../ns3/channels", total_slots=21)
+    ns3_config = Ns3Config(data_folder=ns3_folder, total_slots=21)
     dmimo_chans = dMIMOChannels(ns3_config, "dMIMO-Forward", add_noise=True)
     chest_noise = AWGN()
 
@@ -190,3 +191,21 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_siz
 
     return [uncoded_ber.numpy(), ber.numpy(), goodput], x_hat.numpy()
 
+
+def sim_su_mimo_all(precoding_method="SVD", total_slots=20, num_slots_p1=1, num_slots_p2=3, start_slot_idx=5, csi_delay=1,
+                    num_bits_per_symbol=2, coderate=0.5, perfect_csi=False):
+    """"
+    Simulation of SU-MIMO transmission phases according to the frame structure
+    """
+
+    total_cycles = 0
+    uncoded_ber, ber, goodput = 0, 0, 0
+    for first_slot_idx in np.arange(start_slot_idx, total_slots, num_slots_p1+num_slots_p2):
+        total_cycles += 1
+        results, x_hat = sim_su_mimo(precoding_method=precoding_method, first_slot_idx=first_slot_idx, batch_size=num_slots_p2, csi_delay=csi_delay,
+                                     num_bits_per_symbol=num_bits_per_symbol, coderate=coderate, perfect_csi=perfect_csi)
+        uncoded_ber += results[0]
+        ber += results[1]
+        goodput += results[2]
+
+        return [uncoded_ber.numpy()/total_cycles, ber.numpy()/total_cycles, goodput/total_cycles]

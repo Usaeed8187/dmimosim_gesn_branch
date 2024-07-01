@@ -20,7 +20,7 @@ from dmimo.mimo import SVDPrecoder, SVDEqualizer
 
 
 def sim_baseline(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_size=8,
-                 num_bits_per_symbol=2, coderate=0.5, perfect_csi=False):
+                 num_bits_per_symbol=2, coderate=0.5, perfect_csi=False, ns3_folder="../ns3/channels"):
     """
     Simulation of baseline scenarios using 4x4 MIMO channels
 
@@ -31,6 +31,7 @@ def sim_baseline(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_si
     :param num_bits_per_symbol: modulation order
     :param coderate: LDPC code rate
     :param perfect_csi: Use perfect CSI for precoding/equalization for testing purpose
+    :param ns3_folder: folder for ns-3 channel data
     :return: [uncoded BER, LDPC BER, Goodput], demodulated QAM symbols (for debugging purpose)
     """
 
@@ -106,7 +107,7 @@ def sim_baseline(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_si
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
     # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder="../ns3/channels", total_slots=21)
+    ns3_config = Ns3Config(data_folder=ns3_folder, total_slots=21)
     dmimo_chans = dMIMOChannels(ns3_config, "Baseline", add_noise=True)
     chest_noise = AWGN()
 
