@@ -1,4 +1,4 @@
-# Precoder for dMIMO channels
+# SVD precoding for dMIMO channels
 import tensorflow as tf
 
 
