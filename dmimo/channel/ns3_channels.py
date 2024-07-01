@@ -214,7 +214,7 @@ class LoadNs3Channel:
 
             # forward channel via RxSq UEs, normalize according to total_ue_ant
             # TODO: determine power scaling method
-            h_fw = np.matmul(h_rs, h_dm[:, :, self._cfg.num_bs_ant:, :])
+            h_fw = np.sqrt(1.0/self._cfg.num_txue) * np.matmul(h_rs, h_dm[:, :, self._cfg.num_bs_ant:, :])
             # h_fw = np.sqrt(1.0/self._cfg.num_bs_ant) * np.matmul(h_rs, h_dm[:, :, self._cfg.num_bs_ant:, :])
             h_freq = np.concatenate((h_dm[:, :, :self._cfg.num_bs_ant, :], h_fw), 2)  # (num_ofdm_symbol,fft_size,2*num_bs_ant,total_squad_ant)
             h_freq = np.transpose(h_freq, (2, 3, 0, 1))

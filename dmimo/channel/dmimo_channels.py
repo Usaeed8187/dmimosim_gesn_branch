@@ -6,8 +6,8 @@ including TxSquad, dMIMO, and RxSquad models
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.layers import Layer
-from sionna.channel import ApplyOFDMChannel, AWGN
 
+from sionna.channel import ApplyOFDMChannel, AWGN
 from sionna.ofdm import ResourceGrid
 
 from dmimo.config import Ns3Config
@@ -15,7 +15,6 @@ from .ns3_channels import LoadNs3Channel
 
 
 class dMIMOChannels(Layer):
-    # pylint: disable=line-too-long
 
     def __init__(self, config: Ns3Config, channel_type, resource_grid: ResourceGrid=None,
                  add_noise=True, normalize_channel=False, return_channel=False,
@@ -32,6 +31,23 @@ class dMIMOChannels(Layer):
         self._apply_channel = ApplyOFDMChannel(add_awgn=False, dtype=tf.as_dtype(self.dtype))
         self._awgn = AWGN(dtype=dtype)
 
+    @property
+    def ns3_config(self):
+        return self._config
+
+    @property
+    def ns3_channel(self):
+        return self._load_channel
+
+    @property
+    def channel_type(self):
+        return self._channel_type
+
+    def load_channel(self, slot_idx, batch_size=1):
+        assert slot_idx >= 0, "Slot indices must be non-negative integers"
+        h_freq, snrdb = self._load_channel(self._channel_type, slot_idx=slot_idx, batch_size=batch_size)
+        return h_freq, snrdb
+
     def call(self, inputs):
 
         # x: channel input samples, sidx: current slot index
@@ -45,7 +61,7 @@ class dMIMOChannels(Layer):
 
         # load pre-generated channel
         # h_freq shape: [batch_size, num_rx_ant, num_tx_ant, num_ofdm_sym, fft_size]
-        # snrdb shape:
+        # snrdb shape: [batch_size, num_rx/num_tx, num_ofdm_sym]
         h_freq, snrdb = self._load_channel(self._channel_type, slot_idx=sidx, batch_size=batch_size)
 
         # TODO: Tx/Rx UE selection, Resource Grid handling
