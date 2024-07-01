@@ -208,4 +208,4 @@ def sim_su_mimo_all(precoding_method="SVD", total_slots=20, num_slots_p1=1, num_
         ber += results[1]
         goodput += results[2]
 
-        return [uncoded_ber.numpy()/total_cycles, ber.numpy()/total_cycles, goodput/total_cycles]
+        return [uncoded_ber/total_cycles, ber/total_cycles, goodput/total_cycles]
