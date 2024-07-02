@@ -55,7 +55,7 @@ class LoadNs3Channel:
 
         h_freq_all = np.expand_dims(h_freq_all, 1)  # (batch_size, num_rx, num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size)
         h_freq_all = np.expand_dims(h_freq_all, 3)  # (batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size)
-        rx_snr_all = np.expand_dims(rx_snr_all, 1)  # (batch_size, num_rx, num_rx_ant, num_ofdm_sym)
+        rx_snr_all = np.expand_dims(rx_snr_all, 1)  # (batch_size, num_rx, num_rx/num_tx, num_rx_ant/num_tx_ant, num_ofdm_sym)
 
         return tf.cast(h_freq_all, self._dtype), rx_snr_all
 
@@ -169,6 +169,8 @@ class LoadNs3Channel:
 
             rx_snr_db = np.concatenate((np.repeat(rx_snr_db[:1], self._cfg.num_bs_ant, axis=0),
                                         np.repeat(rx_snr_db[1:], self._cfg.num_ue_ant, axis=0)), axis=0)  # [num_rxs_ant,num_ofdm_sym]
+        elif channel_type == "dMIMO-Raw":
+            pass
 
         else:
             raise ValueError("unsupported channel type")
@@ -231,6 +233,10 @@ class LoadNs3Channel:
             h_freq = np.concatenate((h_dm[:, :, :self._cfg.num_bs_ant, :], h_fw), 2)
             # (2*num_bs_ant,total_squad_ant, num_ofdm_symbol,fft_size)
             h_freq = np.transpose(h_freq, (2, 3, 0, 1))
+
+        elif channel_type == "dMIMO-Raw":
+            h_freq = self._Hdm   # original dMIMO channel from ns-3
+            rx_snr_db = self._Ldm  # origin pathloss in dB from ns-3
 
         else:
             raise ValueError("unsupported channel type")
