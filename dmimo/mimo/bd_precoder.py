@@ -4,16 +4,17 @@ import sionna
 from sionna.utils import flatten_dims
 from sionna.ofdm import RemoveNulledSubcarriers
 
-from .precoding import sumimo_svd_precoder
+from .bd_precoding import mumimo_bd_precoder, mumimo_zf_precoder
 
 
-class SVDPrecoder(Layer):
-    """SVD Precoder for SU-MIMO"""
+class BDPrecoder(Layer):
+    """BD Precoder for MU-MIMO"""
 
     def __init__(self,
                  resource_grid,
                  stream_management,
                  return_effective_channel=False,
+                 use_zero_forcing=True,
                  dtype=tf.complex64,
                  **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
@@ -22,16 +23,15 @@ class SVDPrecoder(Layer):
         self._resource_grid = resource_grid
         self._stream_management = stream_management
         self._return_effective_channel = return_effective_channel
+        self._use_zero_forcing = use_zero_forcing
         self._remove_nulled_scs = RemoveNulledSubcarriers(self._resource_grid)
 
     def _compute_effective_channel(self, h, g):
-        """Compute effective channel after SVD precoding"""
+        """Compute effective channel after precoding"""
 
         # Input dimensions:
-        # h: [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant,...
-        #     ..., num_ofdm_symbols, fft_size]
-        # g: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_tx_ant,
-        #     ..., num_streams_per_tx]
+        # h: [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
+        # g: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_tx_ant, num_streams_per_tx]
 
         # Transpose h to shape:
         # [batch_size, num_rx, num_tx, num_ofdm_symbols, fft_size, num_rx_ant, num_tx_ant]
@@ -39,19 +39,23 @@ class SVDPrecoder(Layer):
         h = tf.cast(h, g.dtype)
 
         # Add one dummy dimension to g to be broadcastable to h:
-        # [batch_size, 1, num_tx, num_ofdm_symbols, fft_size, num_tx_ant, num_streams_per_tx]
+        # [batch_size, 1, num_tx, num_ofdm_symbols, fft_size, num_tx_ant,...
+        #  ..., num_streams_per_tx]
         g = tf.expand_dims(g, 1)
 
         # Compute post precoding channel:
-        # [batch_size, num_rx, num_tx, num_ofdm, fft_size, num_rx_ant, num_streams_per_tx]
+        # [batch_size, num_rx, num_tx, num_ofdm, fft_size, num_rx_ant,...
+        #  ..., num_streams_per_tx]
         h_eff = tf.matmul(h, g)
 
         # Permute dimensions to common format of channel tensors:
-        # [batch_size, num_rx, num_rx_ant, num_tx, num_streams_per_tx, num_ofdm, fft_size]
+        # [batch_size, num_rx, num_rx_ant, num_tx, num_streams_per_tx,...
+        #  ..., num_ofdm, fft_size]
         h_eff = tf.transpose(h_eff, [0, 1, 5, 2, 6, 3, 4])
 
         # Remove nulled subcarriers:
-        # [batch_size, num_rx, num_rx_ant, num_tx, num_streams_per_tx, num_ofdm, num_effective_subcarriers]
+        # [batch_size, num_rx, num_rx_ant, num_tx, num_streams_per_tx,...
+        #  ..., num_ofdm, num_effective_subcarriers]
         h_eff = self._remove_nulled_scs(h_eff)
 
         return h_eff
@@ -78,8 +82,7 @@ class SVDPrecoder(Layer):
 
         # Gather desired channel for precoding:
         # [num_tx, num_rx_per_tx, num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size, batch_size]
-        h_pc_desired = tf.gather(h_pc, self._stream_management.precoding_ind,
-                                 axis=1, batch_dims=1)
+        h_pc_desired = tf.gather(h_pc, self._stream_management.precoding_ind, axis=1, batch_dims=1)
 
         # Flatten dims 2,3:
         # [num_tx, num_rx_per_tx * num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size, batch_size]
@@ -90,10 +93,20 @@ class SVDPrecoder(Layer):
         h_pc_desired = tf.transpose(h_pc_desired, [5, 0, 3, 4, 1, 2])
         h_pc_desired = tf.cast(h_pc_desired, self._dtype)
 
-        # SVD precoding
-        x_precoded, g = sumimo_svd_precoder(x_precoded,
+        # Rx antenna indices for MU-MIMO
+        num_streams_per_tx = h_pc_desired.shape[-2]
+        num_ue = (num_streams_per_tx - 4) // 2  # number of UE with 2 antennas each
+        rx_indices = [[0, 1], [2, 3]]  # BS node antennas indices
+        for k in range(num_ue):
+            offset = 4 + 2 * k  # first antennas index for k-th UE
+            rx_indices.append([offset, offset+1])
+
+        # BD precoding
+        x_precoded, g = mumimo_bd_precoder(x_precoded,
                                            h_pc_desired,
-                                           return_precoding_matrix=True)
+                                           rx_indices,
+                                           return_precoding_matrix=self._return_effective_channel,
+                                           use_zero_forcing=self._use_zero_forcing)
 
         # Transpose output to desired shape:
         # [batch_size, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
