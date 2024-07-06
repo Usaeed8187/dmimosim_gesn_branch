@@ -42,7 +42,7 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=3, csi_delay=1, batch_siz
 
     # dMIMO configuration
     num_bs_ant = 24  # total number of Tx squad antennas
-    num_ue_ant = 8   # total number of Rx atennas for effective channel
+    num_ue_ant = 8   # total number of Rx antennas for effective channel
 
     # Estimated EbNo
     ebno_db = 16.0  # temporary fixed for LMMSE equalization

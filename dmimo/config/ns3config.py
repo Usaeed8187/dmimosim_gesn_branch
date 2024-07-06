@@ -1,6 +1,6 @@
 # Configuration for the ns3 simulation
 
-from dmimo.config import NetworkConfig
+from .sysconfig import NetworkConfig
 
 
 class Ns3Config(NetworkConfig):

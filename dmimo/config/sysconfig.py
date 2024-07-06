@@ -1,6 +1,6 @@
 # dMIMO network scenarios
 
-from dmimo.config import Config
+from .config import Config
 
 
 class NetworkConfig(Config):
