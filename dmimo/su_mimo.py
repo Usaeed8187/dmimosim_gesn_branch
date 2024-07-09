@@ -20,9 +20,7 @@ from dmimo.mimo import SVDPrecoder, SVDEqualizer
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 
-def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_size=3, num_tx_streams=8,
-                num_bits_per_symbol=2, coderate=0.5, perfect_csi=False,
-                cfo_sigma=0.0, sto_sigma=0.0, ns3_folder="../ns3/channels/"):
+def sim_su_mimo(cfg: SimConfig, precoding_method="SVD"):
     """
     Simulation of SU-MIMO scenarios using different settings
 
@@ -31,27 +29,23 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_siz
 
     TODO: add link/rank adaption, UE selection
 
+    :param cfg: simulation settings
     :param precoding_method: SVD or ZF
-    :param first_slot_idx: first subframe/slot for data transmission
-    :param csi_delay: CSI estimation feedback delay (in number of subframes/slots)
-    :param batch_size: number of frame/slots in each phase 2 cycle
-    :param num_bits_per_symbol: modulation order
-    :param coderate: LDPC code rate
-    :param perfect_csi: Use perfect CSI for precoding/equalization for testing purpose
-    :param ns3_folder: folder for ns-3 channel data
     :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
     """
 
     # dMIMO configuration
     # num_bs_ant = 24  # total number of Tx squad antennas
     # num_ue_ant = 8   # total number of Rx antennas for effective channel
-    cfg = SimConfig()
 
     # Estimated EbNo
     ebno_db = 16.0  # temporary fixed for LMMSE equalization
 
     # The number of transmitted streams is equal to the number of UE antennas
-    num_streams_per_tx = num_tx_streams
+    num_streams_per_tx = cfg.num_tx_streams
+
+    # batch processing for all slots in phase 2
+    batch_size = cfg.num_slots_p2
 
     # Create an RX-TX association matrix
     # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
@@ -86,9 +80,9 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_siz
                           pilot_ofdm_symbol_indices=[2, 11])
 
     # LDPC params
-    num_codewords = num_bits_per_symbol//2  # number of codewords per frame
-    ldpc_n = int(rg.num_data_symbols*num_bits_per_symbol/num_codewords)  # Number of coded bits
-    ldpc_k = int(ldpc_n*coderate)  # Number of information bits
+    num_codewords = cfg.modulation_order//2  # number of codewords per frame
+    ldpc_n = int(rg.num_data_symbols*cfg.modulation_order/num_codewords)  # Number of coded bits
+    ldpc_k = int(ldpc_n*cfg.code_rate)  # Number of information bits
 
     # The binary source will create batches of information bits
     binary_source = BinarySource()
@@ -101,7 +95,7 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_siz
     dintlvr = Deinterleaver(interleaver=intlvr)
 
     # The mapper maps blocks of information bits to constellation symbols
-    mapper = Mapper("qam", num_bits_per_symbol)
+    mapper = Mapper("qam", cfg.modulation_order)
 
     # The resource grid mapper maps symbols onto an OFDM resource grid
     rg_mapper = ResourceGridMapper(rg)
@@ -120,20 +114,20 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_siz
     lmmse_equ = LMMSEEqualizer(rg, sm)
 
     # The demapper produces LLR for all coded bits
-    demapper = Demapper("maxlog", "qam", num_bits_per_symbol)
+    demapper = Demapper("maxlog", "qam", cfg.modulation_order)
 
     # The decoder provides hard-decisions on the information bits
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
     # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder=ns3_folder, total_slots=21)
+    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=21)
     dmimo_chans = dMIMOChannels(ns3_config, "dMIMO-Forward", add_noise=True)
     chest_noise = AWGN()
 
     # Compute the noise power for a given Eb/No value.
     # This takes not only the coderate but also the overheads related pilot
     # transmissions and nulled carriers
-    no = ebnodb2no(ebno_db, num_bits_per_symbol, coderate, rg)
+    no = ebnodb2no(ebno_db, cfg.modulation_order, cfg.code_rate, rg)
 
     # Transmitter processing
     b = binary_source([batch_size, 1, rg.num_streams_per_tx, num_codewords, encoder.k])
@@ -143,14 +137,15 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_siz
     x = mapper(d)
     x_rg = rg_mapper(x)
 
-    if perfect_csi:
+    if cfg.perfect_csi:
         # Perfect channel estimation
-        h_freq_csi, pl_tmp = dmimo_chans.load_channel(slot_idx=first_slot_idx - csi_delay, batch_size=batch_size)
+        h_freq_csi, pl_tmp = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
     else:
         # LMMSE channel estimation
-        h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi, slot_idx=first_slot_idx - csi_delay)
+        h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
+                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay)
 
     # TODO: optimize node selection
     h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
@@ -164,13 +159,13 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_siz
         ValueError("unsupported precoding method")
 
     # add CFO/STO to simulate synchronization errors
-    if sto_sigma > 0:
-        x_precoded = add_timing_offset(x_precoded, sto_val(cfg, cfo_sigma))
-    if cfo_sigma > 0:
-        x_precoded = add_frequency_offset(x_precoded, cfo_val(cfg, cfo_sigma))
+    if cfg.sto_sigma > 0:
+        x_precoded = add_timing_offset(x_precoded, sto_val(cfg, cfg.cfo_sigma))
+    if cfg.cfo_sigma > 0:
+        x_precoded = add_frequency_offset(x_precoded, cfo_val(cfg, cfg.cfo_sigma))
 
     # apply dMIMO channels to the resource grid in the frequency domain.
-    y = dmimo_chans([x_precoded, first_slot_idx])
+    y = dmimo_chans([x_precoded, cfg.first_slot_idx])
     # [batch_size, 1, num_streams_per_tx, num_ofdm_sym, fft_size]
     y = y[:, :, :num_streams_per_tx, :, :]
 
@@ -208,29 +203,25 @@ def sim_su_mimo(precoding_method="SVD", first_slot_idx=5, csi_delay=1, batch_siz
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
 
-def sim_su_mimo_all(precoding_method="SVD", total_slots=20, num_slots_p1=1, num_slots_p2=3, start_slot_idx=5,
-                    csi_delay=1, num_tx_streams=8, num_bits_per_symbol=2, coderate=0.5,
-                    perfect_csi=False, cfo_sigma=0.0, sto_sigma=0.0, ns3_folder="./ns3/channels"):
+def sim_su_mimo_all(cfg: SimConfig, precoding_method="SVD"):
     """"
     Simulation of SU-MIMO transmission phases according to the frame structure
     """
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput = 0, 0, 0, 0
-    for first_slot_idx in np.arange(start_slot_idx, total_slots, num_slots_p1+num_slots_p2):
+    for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
-        bers, bits, x_hat = sim_su_mimo(precoding_method=precoding_method, first_slot_idx=first_slot_idx,
-                                        batch_size=num_slots_p2, csi_delay=csi_delay, num_tx_streams=num_tx_streams,
-                                        num_bits_per_symbol=num_bits_per_symbol, coderate=coderate,
-                                        cfo_sigma=cfo_sigma, sto_sigma=sto_sigma,
-                                        perfect_csi=perfect_csi, ns3_folder=ns3_folder)
+        cfg.first_slot_idx = first_slot_idx
+        bers, bits, x_hat = sim_su_mimo(cfg, precoding_method=precoding_method)
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
         goodput += bits[0]
         throughput += bits[1]
 
-    slot_time = 1e-3  # 1ms subframe/slot duration
-    goodput = goodput / (total_cycles * slot_time * 1e6) * (num_slots_p2)/(num_slots_p1+num_slots_p2)  # Mbps
-    throughput = throughput / (total_cycles * slot_time * 1e6) * (num_slots_p2)/(num_slots_p1+num_slots_p2)  # Mbps
+    slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
+    overhead = cfg.num_slots_p2/(cfg.num_slots_p1 + cfg.num_slots_p2)
+    goodput = goodput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
+    throughput = throughput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
 
     return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput]
