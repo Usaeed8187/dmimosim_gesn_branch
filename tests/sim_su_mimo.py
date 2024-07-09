@@ -24,7 +24,7 @@ if __name__ == "__main__":
     cfg.total_slots = 25        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 9           # feedback delay in number of subframe
-    cfg.num_tx_streams = 2      # 2/4 equal to total number of streams
+    cfg.num_tx_streams = 4      # 2/4 equal to total number of streams
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.ns3_folder = "../ns3/channels/"

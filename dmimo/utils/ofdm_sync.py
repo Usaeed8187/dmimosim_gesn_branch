@@ -36,6 +36,8 @@ def sto_val(cfg: SimConfig, sto_ns):
 def add_frequency_offset(x, cfo_sigma):
     """
     Add frequency offset errors to OFDM signals
+    1) BS antennas has zero CFO errors
+    2) all antennas on the same UE have the same CFO
 
     :param x: OFDM signal grid
     :param cfo_sigma: normalized CFO standard deviation
@@ -66,8 +68,8 @@ def add_frequency_offset(x, cfo_sigma):
 def add_timing_offset(x, sto_sigma):
     """
     Modeling fractional STO in frequency domain
-    1) BS antennas has zero STO offsets
-    2) all antennas for each UE have the same STO
+    1) BS antennas has zero STO errors
+    2) all antennas on the same UE have the same STO
 
     :param x: OFDM signal grid
     :param sto_sigma: normalized STO standard deviation
