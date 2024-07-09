@@ -21,6 +21,7 @@ class SimConfig(Config):
         self._slot_duration = 1e-3          # slot duration in seconds
         self._ns3_folder = "../ns3/channels"  # data folder for ns-3 channels
         self._perfect_csi = False           # Use perfect CSI for debugging
+        self._csi_prediction = False        # Use CSI prediction
         self._sto_sigma = 0.0               # standard deviation of STO in nanoseconds
         self._cfo_sigma = 0.0               # standard deviation of CFO in Hz
 
@@ -138,6 +139,14 @@ class SimConfig(Config):
     @perfect_csi.setter
     def perfect_csi(self, val):
         self._perfect_csi = val
+
+    @property
+    def csi_prediction(self):
+        return self._csi_prediction
+
+    @csi_prediction.setter
+    def csi_prediction(self, val):
+        self._csi_prediction = val
 
     @property
     def sto_sigma(self):
