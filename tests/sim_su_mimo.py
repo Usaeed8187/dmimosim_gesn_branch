@@ -1,83 +1,79 @@
 """
-Simulation of dMIMO SU-MIMO scenario with ns-3 channels
+Simulation of baseline scenario with ns-3 channels
 
-Note: this scripts should be called from the project root folder
+This scripts should be called from the "tests" folder
 """
 
 # add system folder for the dmimo library
 import sys
 import os
-sys.path.append(os.getcwd())
+sys.path.append(os.path.join('..'))
 
+import matplotlib.pyplot as plt
 import numpy as np
-from dmimo import sim_su_mimo
+
+from dmimo.su_mimo import sim_su_mimo_all
+
 
 # Main function
 if __name__ == "__main__":
-    ns3_folder = "./ns3/channels/"
+    total_slots = 20
+    start_slot_idx = 15
+    ns3_folder = "../ns3/channels/"
 
-    ber_QPSK = np.zeros((2, 4))
-    ldpc_ber_QPSK = np.zeros((2, 4))
-    goodput_QPSK = np.zeros((2, 4))
-    for csi_delay in range(4):
-        rst_svd, xh_svd = sim_su_mimo(precoding_method="SVD", num_bits_per_symbol=2, first_slot_idx=10, csi_delay=csi_delay, ns3_folder=ns3_folder)
-        ber_QPSK[0, csi_delay] = rst_svd[0]
-        ldpc_ber_QPSK[0, csi_delay] = rst_svd[1]
-        goodput_QPSK[0, csi_delay] = rst_svd[2]
-        rst_zf, xh_zf = sim_su_mimo(precoding_method="ZF", num_bits_per_symbol=2, first_slot_idx=10, csi_delay=csi_delay, ns3_folder=ns3_folder)
-        ber_QPSK[1, csi_delay] = rst_zf[0]
-        ldpc_ber_QPSK[1, csi_delay] = rst_zf[1]
-        goodput_QPSK[1, csi_delay] = rst_zf[2]
+    csi_delay = 13  # feedback delay in number of subframe
+    num_tx_streams = 4   # equal to total number of streams
+    modulation_orders = [2, 4, 6]  # modulation order: 2/4/6 for QPSK/16QAM/64QAM
+    num_modulations = len(modulation_orders)
 
-        print("Results for SVD with QPSK (csi_delay={})".format(csi_delay))
-        print("  Uncoded BER: ", ber_QPSK[0, csi_delay])
-        print("  LDPC BER: ", ldpc_ber_QPSK[0, csi_delay])
-        print("  Goodput: ", goodput_QPSK[0, csi_delay])
-        print("Results for ZF with QPSK (csi_delay={})".format(csi_delay))
-        print("  Uncoded BER: ", ber_QPSK[1, csi_delay])
-        print("  LDPC BER: ", ldpc_ber_QPSK[1, csi_delay])
-        print("  Goodput: ", goodput_QPSK[1, csi_delay])
+    cfo_sigma = 300.0  # in Hz
+    sto_sigma = 10  # in nanosecond
 
-    ber_16QAM = np.zeros((2, 4))
-    ldpc_ber_16QAM = np.zeros((2, 4))
-    goodput_16QAM = np.zeros((2, 4))
-    for csi_delay in range(4):
-        rst_svd, xh_svd = sim_su_mimo(precoding_method="SVD", num_bits_per_symbol=4, first_slot_idx=5, csi_delay=csi_delay, ns3_folder=ns3_folder)
-        ber_16QAM[0, csi_delay] = rst_svd[0]
-        ldpc_ber_16QAM[0, csi_delay] = rst_svd[1]
-        goodput_16QAM[0, csi_delay] = rst_svd[2]
-        rst_zf, xh_zf = sim_su_mimo(precoding_method="ZF", num_bits_per_symbol=4, first_slot_idx=5, csi_delay=csi_delay, ns3_folder=ns3_folder)
-        ber_16QAM[1, csi_delay] = rst_zf[0]
-        ldpc_ber_16QAM[1, csi_delay] = rst_zf[1]
-        goodput_16QAM[1, csi_delay] = rst_zf[2]
+    ber = np.zeros((2, num_modulations))
+    ldpc_ber = np.zeros((2, num_modulations))
+    goodput = np.zeros((2, num_modulations))
+    throughput = np.zeros((2, num_modulations))
+    for k in range(num_modulations):
+        rst_svd = sim_su_mimo_all(precoding_method="SVD", total_slots=total_slots, start_slot_idx=start_slot_idx,
+                                  csi_delay=csi_delay, num_tx_streams=num_tx_streams,
+                                  cfo_sigma=cfo_sigma, sto_sigma=sto_sigma,
+                                  num_bits_per_symbol=modulation_orders[k], ns3_folder=ns3_folder)
+        ber[0, k] = rst_svd[0]
+        ldpc_ber[0, k] = rst_svd[1]
+        goodput[0, k] = rst_svd[2]
+        throughput[0, k] = rst_svd[3]
+        rst_zf = sim_su_mimo_all(precoding_method="ZF", total_slots=total_slots, start_slot_idx=start_slot_idx,
+                                 csi_delay=csi_delay, num_tx_streams=num_tx_streams,
+                                 cfo_sigma=cfo_sigma, sto_sigma=sto_sigma,
+                                 num_bits_per_symbol=modulation_orders[k], ns3_folder=ns3_folder)
+        ber[1, k] = rst_zf[0]
+        ldpc_ber[1, k] = rst_zf[1]
+        goodput[1, k] = rst_zf[2]
+        throughput[1, k] = rst_zf[3]
 
-        print("Results for SVD with 16QAM (csi_delay={})".format(csi_delay))
-        print("  Uncoded BER: ", ber_16QAM[0, csi_delay])
-        print("  LDPC BER: ", ldpc_ber_16QAM[0, csi_delay])
-        print("  Goodput: ", goodput_16QAM[0, csi_delay])
-        print("Results for ZF with 16QAM (csi_delay={})".format(csi_delay))
-        print("  Uncoded BER: ", ber_16QAM[1, csi_delay])
-        print("  LDPC BER: ", ldpc_ber_16QAM[1, csi_delay])
-        print("  Goodput: ", goodput_16QAM[1, csi_delay])
+    fig, ax = plt.subplots(1, 3, figsize=(15, 4))
 
-    ber_64QAM = np.zeros((2, 4))
-    ldpc_ber_64QAM = np.zeros((2, 4))
-    goodput_64QAM = np.zeros((2, 4))
-    for csi_delay in range(4):
-        rst_svd, xh_svd = sim_su_mimo(precoding_method="SVD", num_bits_per_symbol=6, first_slot_idx=5, csi_delay=csi_delay, ns3_folder=ns3_folder)
-        ber_64QAM[0, csi_delay] = rst_svd[0]
-        ldpc_ber_64QAM[0, csi_delay] = rst_svd[1]
-        goodput_64QAM[0, csi_delay] = rst_svd[2]
-        rst_zf, xh_zf = sim_su_mimo(precoding_method="ZF", num_bits_per_symbol=6, first_slot_idx=5, csi_delay=csi_delay, ns3_folder=ns3_folder)
-        ber_64QAM[1, csi_delay] = rst_zf[0]
-        ldpc_ber_64QAM[1, csi_delay] = rst_zf[1]
-        goodput_64QAM[1, csi_delay] = rst_zf[2]
+    ax[0].set_title("SU-MIMO")
+    ax[0].set_xlabel('Modulation (bits/symbol)')
+    ax[0].set_ylabel('BER')
+    ax[0].plot(modulation_orders, ber.transpose(), 'o-')
+    ax[0].legend(['SVD', 'ZF'])
 
-        print("Results for SVD with 64QAM (csi_delay={})".format(csi_delay))
-        print("  Uncoded BER: ", ber_64QAM[0, csi_delay])
-        print("  LDPC BER: ", ldpc_ber_64QAM[0, csi_delay])
-        print("  Goodput: ", goodput_64QAM[0, csi_delay])
-        print("Results for ZF with 64QAM (csi_delay={})".format(csi_delay))
-        print("  Uncoded BER: ", ber_64QAM[1, csi_delay])
-        print("  LDPC BER: ", ldpc_ber_64QAM[1, csi_delay])
-        print("  Goodput: ", goodput_64QAM[1, csi_delay])
+    ax[1].set_title("SU-MIMO")
+    ax[1].set_xlabel('Modulation (bits/symbol)')
+    ax[1].set_ylabel('Coded BER')
+    ax[1].plot(modulation_orders, ldpc_ber.transpose(), 'd-')
+    ax[1].legend(['SVD', 'ZF'])
+
+    ax[2].set_title("SU-MIMO")
+    ax[2].set_xlabel('Modulation (bits/symbol)')
+    ax[2].set_ylabel('Goodput/Throughput (Mbps)')
+    ax[2].plot(modulation_orders, goodput.transpose(), 's-')
+    ax[2].plot(modulation_orders, throughput.transpose(), 'd-')
+    ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF'])
+
+    plt.savefig("../results/su_mimo_results.png")
+
+    np.savez("../results/su_mimo_results.npz", ber=ber, ldpc_ber=ldpc_ber,
+             goodput=goodput, throughput=throughput)
+
