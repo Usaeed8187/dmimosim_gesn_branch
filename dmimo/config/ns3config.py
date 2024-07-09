@@ -25,6 +25,7 @@ class Ns3Config(NetworkConfig):
 
     @total_slots.setter
     def total_slots(self, val):
+        assert val > 0, "Invalid total number of slots value"
         self._total_slots = val
 
     @property
@@ -49,6 +50,7 @@ class Ns3Config(NetworkConfig):
 
     @bs_txpwr_dbm.setter
     def bs_txpwr_dbm(self, val):
+        assert 0 < val <= 50, "Invalid BS Tx power value"
         self._bs_txpwr_dbm = val
 
     @property
@@ -57,6 +59,7 @@ class Ns3Config(NetworkConfig):
 
     @ue_txpwr_dbm.setter
     def ue_txpwr_dbm(self, val):
+        assert 0 < val <= 50, "Invalid UE Tx power value"
         self._ue_txpwr_dbm = val
 
     @property
@@ -81,7 +84,7 @@ class Ns3Config(NetworkConfig):
 
     @noise_figure.setter
     def noise_figure(self, val):
-        assert val > 0, "Invalid noise figure value"
+        assert val >= 0, "Invalid noise figure value"
         self._noise_figure = val
 
     @property

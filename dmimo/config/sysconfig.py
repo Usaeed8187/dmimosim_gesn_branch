@@ -1,4 +1,5 @@
 # dMIMO network scenarios
+import numpy as np
 
 from .config import Config
 
@@ -9,7 +10,7 @@ class NetworkConfig(Config):
         self._name = "Network Configuration"
         self._num_bs = 1            # number of basestation per squad, always 1
         self._num_txue = 10         # number of transmit squad UEs
-        self._num_rxue = 10         # number receiving squad UEs
+        self._num_rxue = 10         # number of receiving squad UEs
         self._num_bs_ant = 4        # number of antennas per BS
         self._num_ue_ant = 2        # number of antennas per UE
         self._txue_mask = None      # selection mask for transmitting squad UEs
@@ -26,6 +27,7 @@ class NetworkConfig(Config):
 
     @num_txue.setter
     def num_txue(self, val):
+        assert 0 < val <= 20, "Invalid number of Tx UEs"
         self._num_txue = val
 
     @property
@@ -34,6 +36,7 @@ class NetworkConfig(Config):
 
     @num_rxue.setter
     def num_rxue(self, val):
+        assert 0 < val <= 20, "Invalid number of Rx UEs"
         self._num_rxue = val
 
     @property
@@ -42,6 +45,7 @@ class NetworkConfig(Config):
 
     @num_bs_ant.setter
     def num_bs_ant(self, val):
+        assert 0 < val <= 8, "Invalid number of BS antennas"
         self._num_bs_ant = val
 
     @property
@@ -50,6 +54,7 @@ class NetworkConfig(Config):
 
     @num_ue_ant.setter
     def num_ue_ant(self, val):
+        assert 0 < val <= 4, "Invalid number of UE antennas"
         self._num_ue_ant = val
 
     @property
@@ -58,8 +63,8 @@ class NetworkConfig(Config):
 
     @txue_mask.setter
     def txue_mask(self, val):
-        assert isinstance(val, list)
-        assert len(val) == self._num_txue
+        assert isinstance(val, list) or isinstance(val, np.ndarray), "Invalid Tx UE selection mask"
+        assert len(val) == self._num_txue, "Invalid Tx UE selection mask"
         self._txue_mask = val
 
     @property
@@ -68,8 +73,8 @@ class NetworkConfig(Config):
 
     @rxue_mask.setter
     def rxue_mask(self, val):
-        assert isinstance(val, list)
-        assert len(val) == self._num_rxue
+        assert isinstance(val, list) or isinstance(val, np.ndarray), "Invalid Rx UE selection mask"
+        assert len(val) == self._num_rxue, "Invalid Rx UE selection mask"
         self._rxue_mask = val
 
 
