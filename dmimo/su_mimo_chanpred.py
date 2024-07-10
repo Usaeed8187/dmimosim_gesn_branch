@@ -42,6 +42,10 @@ def sim_su_mimo_chanpred(cfg: SimConfig, precoding_method="SVD"):
     # Estimated EbNo
     ebno_db = 16.0  # temporary fixed for LMMSE equalization
 
+    # CFO and STO settings
+    sto_sigma = sto_val(cfg, cfg.sto_sigma)
+    cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
+
     # The number of transmitted streams is equal to the number of UE antennas
     num_streams_per_tx = cfg.num_tx_streams
 
@@ -156,8 +160,8 @@ def sim_su_mimo_chanpred(cfg: SimConfig, precoding_method="SVD"):
         h_freq_csi = chan_pred
     else:
         # LMMSE channel estimation
-        h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
-                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay)
+        h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi, slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                           cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
 
     # TODO: optimize node selection
     h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
@@ -172,9 +176,9 @@ def sim_su_mimo_chanpred(cfg: SimConfig, precoding_method="SVD"):
 
     # add CFO/STO to simulate synchronization errors
     if cfg.sto_sigma > 0:
-        x_precoded = add_timing_offset(x_precoded, sto_val(cfg, cfg.cfo_sigma))
+        x_precoded = add_timing_offset(x_precoded, sto_sigma)
     if cfg.cfo_sigma > 0:
-        x_precoded = add_frequency_offset(x_precoded, cfo_val(cfg, cfg.cfo_sigma))
+        x_precoded = add_frequency_offset(x_precoded, cfo_sigma)
 
     # apply dMIMO channels to the resource grid in the frequency domain.
     y = dmimo_chans([x_precoded, cfg.first_slot_idx])

@@ -40,6 +40,10 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
 	# Estimated EbNo
     ebno_db = 10.0  # temporary fixed for LMMSE equalization
 
+    # CFO and STO settings
+    sto_sigma = sto_val(cfg, cfg.sto_sigma)
+    cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
+
     # Use 4 UEs with BS (12 antennas)
     # A 4-antennas basestation is regarded as the combination of two 2-antenna UEs
     num_streams_per_tx = cfg.num_tx_streams  # num_ue * num_ue_ant
@@ -164,9 +168,9 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
 
     # add CFO/STO to simulate synchronization errors
     if cfg.sto_sigma > 0:
-        x_precoded = add_timing_offset(x_precoded, sto_val(cfg, cfg.cfo_sigma))
+        x_precoded = add_timing_offset(x_precoded, sto_sigma)
     if cfg.cfo_sigma > 0:
-        x_precoded = add_frequency_offset(x_precoded, cfo_val(cfg, cfg.cfo_sigma))
+        x_precoded = add_frequency_offset(x_precoded, cfo_sigma)
 
     # apply dMIMO channels to the resource grid in the frequency domain.
     y = dmimo_chans([x_precoded, cfg.first_slot_idx])

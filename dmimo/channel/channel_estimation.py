@@ -9,6 +9,7 @@ from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator
 from sionna.mapping import Mapper
 from sionna.utils import BinarySource, ebnodb2no
 
+from dmimo.utils import add_frequency_offset, add_timing_offset
 from .dmimo_channels import dMIMOChannels
 from .interpolation import LMMSELinearInterp
 
@@ -85,7 +86,8 @@ def estimate_freq_time_cov(dmimo_chans: dMIMOChannels, rg: ResourceGrid, start_s
     return freq_cov_mat, time_cov_mat
 
 
-def lmmse_channel_estimation(dmimo_chans: dMIMOChannels, rg: ResourceGrid, slot_idx, cache_slots=5, ebno_db=10.0):
+def lmmse_channel_estimation(dmimo_chans: dMIMOChannels, rg: ResourceGrid, slot_idx, cache_slots=5, ebno_db=10.0,
+                             cfo_sigma=0.0, sto_sigma=0.0):
 
     # Only allow channel estimation from slot 1 onward
     assert slot_idx > 0, "Current slot index must be a positive integer"
@@ -112,6 +114,12 @@ def lmmse_channel_estimation(dmimo_chans: dMIMOChannels, rg: ResourceGrid, slot_
     bs = binary_source([1, 1, rg.num_streams_per_tx, rg.num_data_symbols * num_bits_per_symbol])
     dx = mapper(bs)
     dx_rg = rg_mapper(dx)
+
+    # add CFO/STO to simulate synchronization errors
+    if sto_sigma > 0:
+        dx_rg = add_timing_offset(dx_rg, sto_sigma)
+    if cfo_sigma > 0:
+        dx_rg = add_frequency_offset(dx_rg, cfo_sigma)
 
     # Pass through ns3 channels
     # output has shape: [1, num_rx, num_rx_ant, num_ofdm_sym, fft_size]
