@@ -46,14 +46,14 @@ def add_frequency_offset(x, cfo_sigma):
 
     # x has shape [batch_size, num_tx, num_tx_ant, num_ofdm_sym, num_subcarriers]
     num_ue = (x.shape[2] - 4) // 2  # TODO: param for BS/UE antennas/streams
-    fft_size = x.shape[-1]
+    num_ofdm_sym, fft_size = x.shape[-2:]
 
     # random CFO for UEs
     cfo = np.random.normal(size=(num_ue, 1, 1))
     cfo = np.concatenate((np.zeros((4, 1, 1)), np.repeat(cfo, repeats=2, axis=0)), axis=0)
-    cfo_phase = cfo_sigma * cfo * np.linspace(0, 1, fft_size).reshape((1, 1, fft_size))
+    cfo_phase = cfo_sigma * cfo * np.linspace(0, num_ofdm_sym, num_ofdm_sym * fft_size, endpoint=False).reshape((1, num_ofdm_sym, fft_size))
     cfo_phase = np.exp(2j * np.pi * cfo_phase)
-    cfo_phase = np.reshape(cfo_phase, (1, 1, -1, 1, fft_size))
+    cfo_phase = np.reshape(cfo_phase, (1, 1, -1, num_ofdm_sym, fft_size))
 
     # convert signal to time-domain
     xt = ifft(x)
@@ -87,7 +87,7 @@ def add_timing_offset(x, sto_sigma):
     sto[sto > 0.5] = 0.5
     sto[sto < -0.5] = -0.5
     # compute phase shift in frequency domain
-    sto_shift = sto_sigma * sto * np.linspace(-0.5, 0.5, fft_size).reshape((1, 1, fft_size))
+    sto_shift = sto_sigma * sto * np.linspace(-0.5, 0.5, fft_size, endpoint=False).reshape((1, 1, fft_size))
     phase_shift = np.exp(2j * np.pi * sto_shift)
     phase_shift = np.reshape(phase_shift, (1, 1, -1, 1, fft_size))
 
