@@ -1,5 +1,5 @@
 """
-Simulation of baseline scenario with ns-3 channels
+Simulation of MU-MIMO scenario with ns-3 channels
 
 This scripts should be called from the "tests" folder
 """
