@@ -94,6 +94,9 @@ class standard_rc_pred_freq_mimo:
         # if csi_delay = 6 and self.history_len = 2, then we want to use the estimates for slots 12-6x2 = 0 and 12-6x1 = 6 for training
         # and we try to predict the unknown channel for slot 12, which is the index of the current slot
 
+        # csi_step_size = csi_delay // 2
+        # first_csi_history_idx = first_slot_idx - csi_delay - csi_step_size * (self.history_len * 2 - 1)
+        # channel_history_slots = np.arange(first_csi_history_idx, first_slot_idx - csi_delay + 1, csi_step_size)
         first_csi_history_idx = first_slot_idx - (csi_delay * self.history_len)  # TODO: currently only for self.history_len = 2
         channel_history_slots = np.arange(first_csi_history_idx, first_slot_idx, csi_delay)
 
@@ -157,11 +160,16 @@ class standard_rc_pred_freq_mimo:
             raise ValueError("\n The dimensions of h_freq_csi_history are not correct")
 
         batch_size = h_freq_csi_history.shape[1]  # TODO: Not currently used
-        num_training_slots =  h_freq_csi_history.shape[0]
+        num_training_slots = h_freq_csi_history.shape[0]
 
-        channel_train_input = h_freq_csi_history[0, ...]  # TODO: Batch-wise treatment
-        channel_train_gt = h_freq_csi_history[-1, ...]  # TODO: Batch-wise treatment
+        channel_train_input = h_freq_csi_history[:-1, ...]
+        channel_train_gt = h_freq_csi_history[1:, ...]
+        # channel_train_input = h_freq_csi_history[:num_training_slots//2, ...]  # TODO: Batch-wise treatment
+        # channel_train_gt = h_freq_csi_history[num_training_slots//2:, ...]  # TODO: Batch-wise treatment
+        # channel_train_input = channel_train_input.transpose([1, 2, 3, 4, 5, 6, 0, 7])
+        # channel_train_input = channel_train_input.reshape(channel_train_input.shape[:6] + (-1,))
 
+        # chan_pred_train = np.zeros(h_freq_csi_history[:2,...].shape, dtype=complex)
         chan_pred = np.zeros(h_freq_csi_history[0,...].shape, dtype=complex)
         for batch_idx in range(num_batches):
             for rx_node in range(num_rx_nodes):
@@ -169,20 +177,27 @@ class standard_rc_pred_freq_mimo:
                     for tx_ant in range(num_tx_antennas):
                         for rx_ant in range(num_rx_antennas):
                     
-                            channel_train_input_temp = channel_train_input[batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
-                            channel_train_input_temp = channel_train_input_temp.reshape(-1, channel_train_input_temp.shape[-1])
-                            channel_train_gt_temp = channel_train_gt[batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
-                            channel_train_gt_temp = channel_train_gt_temp.reshape(-1, channel_train_gt_temp.shape[-1])
+                            channel_train_input_temp = channel_train_input[:, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
+                            channel_train_input_temp = channel_train_input_temp.transpose([1, 0, 2]).reshape(self.nfft, -1)
+                            # channel_train_input_temp = channel_train_input_temp.reshape(-1, channel_train_input_temp.shape[-1])
+                            channel_train_gt_temp = channel_train_gt[:, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
+                            channel_train_gt_temp = channel_train_gt_temp.transpose([1, 0, 2]).reshape(self.nfft, -1)
+                            # channel_train_gt_temp = channel_train_gt_temp.reshape(-1, channel_train_gt_temp.shape[-1])
 
-                            self.fitting_time(channel_train_input_temp, channel_train_gt_temp)
+                            curr_train = self.fitting_time(channel_train_input_temp, channel_train_gt_temp)
+                            # curr_train = curr_train.reshape(channel_train_input[batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...].shape)
+                            # chan_pred_train[:, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...] = curr_train
 
-                            channel_test_input = channel_train_gt_temp
+                            # channel_test_input = channel_train_gt_temp
+                            channel_test_input = channel_train_gt[-1, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
                             channel_pred_temp = self.test_train_predict(channel_test_input)
-                            channel_pred_temp = channel_pred_temp.reshape(channel_train_input[batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...].shape)
+                            channel_pred_temp = channel_pred_temp.reshape(channel_train_input[0, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...].shape)
                             chan_pred[batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...] = channel_pred_temp
 
         chan_pred = chan_pred.transpose([0,1,2,3,4,6,5])
         chan_pred = tf.convert_to_tensor(chan_pred)
+        # train_nmse = self.cal_nmse(channel_train_gt, chan_pred_train)
+        # print(f"train nmse: {train_nmse}")
         return chan_pred
 
 
@@ -258,6 +273,7 @@ class standard_rc_pred_freq_mimo:
         self.forget_length = delay_value[indx]
         self.W_out = W_out_delay[indx]
         # print(f'Optimal delay is {self.forget_length}, min NMSE is {obj_value_delay[indx]}')
+        return pred_channel
 
     def cal_nmse(self, H, H_hat):
         mse = np.sum(np.abs(H - H_hat) ** 2)
@@ -362,6 +378,7 @@ class standard_rc_pred_freq_mimo:
         # Y_2D = self.form_window_input_signal(Y_2D_complex) # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
 
         T = Y_2D.shape[-1] # number of samples
+        # self.S_0 = np.zeros([self.N_n], dtype='complex')
         S_1D = copy.deepcopy(self.S_0)
         S_2D = []
         for t in range(T):
@@ -372,7 +389,7 @@ class standard_rc_pred_freq_mimo:
             S_2D.append(S_1D)
 
         S_2D = np.stack(S_2D, axis=1)
-        self.S_0 = S_1D
+        # self.S_0 = S_1D
         return S_2D[:, self.forget_length:]
         # return S_2D
 

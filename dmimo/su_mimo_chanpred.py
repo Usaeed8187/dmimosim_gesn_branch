@@ -152,9 +152,8 @@ def sim_su_mimo_chanpred(cfg: SimConfig, precoding_method="SVD"):
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
     elif cfg.csi_prediction:
         # Get CSI history
+        # TODO: Use channel estimation rather than ground truth channels
         h_freq_csi_history = rc_predictor.get_csi_history(cfg.first_slot_idx, cfg.csi_delay, batch_size, dmimo_chans, perfect=True)
-        # Add some noise to simulate channel estimation errors
-        # h_freq_csi_history = chest_noise([h_freq_csi_history, 2e-3])
         # Do channel prediction
         chan_pred = rc_predictor.rc_siso_predict(h_freq_csi_history)
         h_freq_csi = chan_pred
