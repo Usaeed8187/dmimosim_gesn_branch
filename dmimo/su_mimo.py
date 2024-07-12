@@ -149,7 +149,8 @@ def sim_su_mimo(cfg: SimConfig, precoding_method="SVD"):
     else:
         # LMMSE channel estimation
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
-                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay)
+                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                           cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
 
     # TODO: optimize node selection
     h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]

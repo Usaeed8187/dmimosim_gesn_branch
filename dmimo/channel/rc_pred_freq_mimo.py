@@ -3,15 +3,17 @@ import numpy as np
 import tensorflow as tf
 
 from dmimo.config import Ns3Config, RCConfig
+from dmimo.channel import lmmse_channel_estimation
 
 class standard_rc_pred_freq_mimo:
 
-    def __init__(self, architecture):
+    def __init__(self, architecture, num_rx_ant=8):
         
         ns3_config = Ns3Config()
         rc_config = RCConfig()
 
-        self.nfft = 512  # TODO: remove hardcoding
+        self.nfft = 512  # TODO: remove hardcoded param value
+        self.num_rx_ant = num_rx_ant  # TODO: use node selection mask
         
         if architecture == 'baseline':
             self.N_t = ns3_config.num_bs_ant
@@ -19,6 +21,9 @@ class standard_rc_pred_freq_mimo:
         elif architecture == 'SU_MIMO':
             self.N_t = ns3_config.num_bs_ant + ns3_config.num_ue_ant * ns3_config.num_txue
             self.N_r = ns3_config.num_bs_ant * 2
+        elif architecture == 'MU_MIMO':
+            self.N_t = ns3_config.num_bs_ant + ns3_config.num_ue_ant * ns3_config.num_txue
+            self.N_r = num_rx_ant
         else:
             raise ValueError("\n The architecture specified is not correct")
 
@@ -86,7 +91,23 @@ class standard_rc_pred_freq_mimo:
             self.RLS_lambda = rc_config.RLS_lambda
             self.RLS_w = 1
 
-    def get_csi_history(self, first_slot_idx, csi_delay, batch_size, dmimo_chans, perfect):
+    def get_csi_history(self, first_slot_idx, csi_delay, rg_csi, dmimo_chans):
+
+        first_csi_history_idx = first_slot_idx - (csi_delay * self.history_len)
+        channel_history_slots = np.arange(first_csi_history_idx, first_slot_idx, csi_delay)
+
+        h_freq_csi_list = []
+        for loop_idx, slot_idx in enumerate(channel_history_slots):
+            # h_freq_csi has shape [batch_size, num_rx, num_rx_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
+            h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi, slot_idx=slot_idx)
+            h_freq_csi = h_freq_csi[:, :, :self.num_rx_ant]  # TODO: use node selection mask
+            h_freq_csi_list.append(np.expand_dims(h_freq_csi, axis=0))
+
+        h_freq_csi_history = np.concatenate(h_freq_csi_list, axis=0)
+
+        return h_freq_csi_history
+
+    def get_ideal_csi_history(self, first_slot_idx, csi_delay, dmimo_chans, batch_size=1):
         
         # Get channel estimate history starting from (csi_delay * self.history_len) slots in the past to the most up-to-date fed back estimate
         # Here "first_slot_idx" is used as the index of the current slot. 
@@ -100,14 +121,12 @@ class standard_rc_pred_freq_mimo:
         first_csi_history_idx = first_slot_idx - (csi_delay * self.history_len)  # TODO: currently only for self.history_len = 2
         channel_history_slots = np.arange(first_csi_history_idx, first_slot_idx, csi_delay)
 
-        if perfect:
+        h_freq_csi_history_0, _ = dmimo_chans.load_channel(slot_idx=channel_history_slots[0], batch_size=batch_size)
             
-            h_freq_csi_history_0, _ = dmimo_chans.load_channel(slot_idx=channel_history_slots[0], batch_size=batch_size)
-            
-            h_freq_csi_history = np.zeros(np.concatenate((channel_history_slots.shape, np.asarray(h_freq_csi_history_0.shape))), dtype=complex)
-            h_freq_csi_history[0, ...] = h_freq_csi_history_0
-            for loop_idx, slot_idx in enumerate(channel_history_slots[1:]):
-                h_freq_csi_history[loop_idx+1, ...], _ = dmimo_chans.load_channel(slot_idx=slot_idx, batch_size=batch_size)
+        h_freq_csi_history = np.zeros(np.concatenate((channel_history_slots.shape, np.asarray(h_freq_csi_history_0.shape))), dtype=complex)
+        h_freq_csi_history[0, ...] = h_freq_csi_history_0
+        for loop_idx, slot_idx in enumerate(channel_history_slots[1:]):
+            h_freq_csi_history[loop_idx+1, ...], _ = dmimo_chans.load_channel(slot_idx=slot_idx, batch_size=batch_size)
 
         return h_freq_csi_history
 

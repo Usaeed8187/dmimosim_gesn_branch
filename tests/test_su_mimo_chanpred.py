@@ -12,7 +12,7 @@ sys.path.append(os.path.join('..'))
 import matplotlib.pyplot as plt
 import numpy as np
 
-from dmimo.config import SimConfig, RCConfig
+from dmimo.config import SimConfig
 from dmimo.su_mimo_chanpred import sim_su_mimo_chanpred
 
 
@@ -21,15 +21,13 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 100        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 60     # starting slots (must be greater than csi_delay + 5)
-    cfg.csi_delay = 6           # feedback delay in number of subframe
+    cfg.total_slots = 90        # total number of slots in ns-3 channels
+    cfg.start_slot_idx = 70     # starting slots (must be greater than csi_delay + 5)
+    cfg.csi_delay = 8           # feedback delay in number of subframe
     cfg.num_tx_streams = 6      # 4/6 equal to total number of streams
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels/"
-
-    # cfg.first_slot_idx = 12 # cfg.start_slot_idx # RCConfig().history_len * cfg.csi_delay
+    cfg.ns3_folder = "../ns3/channels_s3/"
 
     avg_ber = 0.0
     avg_ber_pred = 0.0

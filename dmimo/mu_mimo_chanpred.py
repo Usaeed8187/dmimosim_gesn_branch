@@ -16,10 +16,11 @@ from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
+from dmimo.channel import standard_rc_pred_freq_mimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
-def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
+def sim_mu_mimo_chanpred(cfg: SimConfig, precoding_method="BD"):
     """
     Simulation of MU-MIMO scenarios using different settings
 
@@ -125,6 +126,9 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
     dmimo_chans = dMIMOChannels(ns3_config, "dMIMO", add_noise=True)
     chest_noise = AWGN()
 
+    if cfg.csi_prediction:
+        rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_streams_per_tx)
+
     # Compute the noise power for a given Eb/No value.
     # This takes not only the coderate but also the overheads related pilot
     # transmissions and nulled carriers
@@ -144,6 +148,13 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
         h_freq_csi, pl_tmp = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
+    elif cfg.csi_prediction:
+        # Get CSI history
+        # TODO: optimize channel estimation and optimization procedures (currently very slow)
+        h_freq_csi_history = rc_predictor.get_csi_history(cfg.first_slot_idx, cfg.csi_delay, rg_csi, dmimo_chans)
+        # Do channel prediction
+        chan_pred = rc_predictor.rc_siso_predict(h_freq_csi_history)
+        h_freq_csi = chan_pred
     else:
         # LMMSE channel estimation
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
@@ -211,7 +222,7 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
 
-def sim_mu_mimo_all(cfg: SimConfig, precoding_method="BD"):
+def sim_mu_mimo_chanpred_all(cfg: SimConfig, precoding_method="BD"):
     """"
     Simulation of SU-MIMO transmission phases according to the frame structure
     """
@@ -221,7 +232,7 @@ def sim_mu_mimo_all(cfg: SimConfig, precoding_method="BD"):
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits, x_hat = sim_mu_mimo(cfg, precoding_method=precoding_method)
+        bers, bits, x_hat = sim_mu_mimo_chanpred(cfg, precoding_method=precoding_method)
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
         goodput += bits[0]

@@ -21,13 +21,15 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 100        # total number of slots in ns-3 channels
+    cfg.total_slots = 50        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
-    cfg.num_tx_streams = 8      # 6/8/12 equal to total number of streams
+    cfg.num_tx_streams = 12     # 6/8/12 equal to total number of streams
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.ns3_folder = "../ns3/channels/"
+
+    print("Using channels in {}".format(cfg.ns3_folder))
 
     # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
     modulation_orders = [2, 4, 6]
@@ -38,7 +40,7 @@ if __name__ == "__main__":
     throughput = np.zeros((2, num_modulations))
 
     for sto in [0, 10, 20, 30, 40, 50]:
-        for cfo in [0, 100, 200, 300, 400, 500]:
+        for cfo in [0, 100, 200, 300, 400, 500, 600, 700, 800]:
             cfg.sto_sigma = sto
             cfg.cfo_sigma = cfo
 
