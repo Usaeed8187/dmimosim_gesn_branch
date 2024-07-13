@@ -21,15 +21,17 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 50        # total number of slots in ns-3 channels
+    cfg.total_slots = 30        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.num_tx_streams = 6      # 2/4/6 equal to total number of streams
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels/"
+    cfg.ns3_folder = "../ns3/channels_s2/"
 
-    print("Using channels in {}".format(cfg.ns3_folder))
+    folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
+    os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
+    print("Using channels in {}".format(folder_name))
 
     # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
     modulation_orders = [2, 4, 6]
@@ -78,8 +80,8 @@ if __name__ == "__main__":
             ax[2].plot(modulation_orders, throughput.transpose(), 'd-')
             ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF'])
 
-            plt.savefig("../results/su_mimo_results_cfo{}_sto{}.png".format(cfo, sto))
+            plt.savefig("../results/{}/su_mimo_results_cfo{}_sto{}.png".format(folder_name, cfo, sto))
 
-            np.savez("../results/su_mimo_results_cfo{}_sto{}.npz".format(cfo, sto),
+            np.savez("../results/{}/su_mimo_results_cfo{}_sto{}.npz".format(folder_name, cfo, sto),
                      ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
 

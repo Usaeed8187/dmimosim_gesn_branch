@@ -26,9 +26,11 @@ if __name__ == "__main__":
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels_s1/"
+    cfg.ns3_folder = "../ns3/channels_s2/"
 
-    print("Using channels in {}".format(cfg.ns3_folder))
+    folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
+    os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
+    print("Using channels in {}".format(folder_name))
 
     for num_tx_streams in [4, 6, 8]:
         # 4/6/8 equal to total number of streams
@@ -76,8 +78,8 @@ if __name__ == "__main__":
         ax[2].plot(modulation_orders, throughput.transpose(), 'd-')
         ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF'])
 
-        plt.savefig("../results/su_mimo_results_s{}.png".format(cfg.num_tx_streams))
+        plt.savefig("../results/{}/su_mimo_results_s{}.png".format(folder_name, cfg.num_tx_streams))
 
-        np.savez("../results/su_mimo_results_s{}.npz".format(cfg.num_tx_streams),
+        np.savez("../results/{}/su_mimo_results_s{}.npz".format(folder_name, cfg.num_tx_streams),
                  ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
 
