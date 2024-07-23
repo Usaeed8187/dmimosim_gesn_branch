@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
 import sionna
@@ -13,7 +14,6 @@ class BDEqualizer(Layer):
     def __init__(self,
                  resource_grid,
                  stream_management,
-                 return_effective_channel=False,
                  dtype=tf.complex64,
                  **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
@@ -21,7 +21,6 @@ class BDEqualizer(Layer):
         assert isinstance(stream_management, sionna.mimo.StreamManagement)
         self._resource_grid = resource_grid
         self._stream_management = stream_management
-        self._return_effective_channel = return_effective_channel
         self._remove_nulled_scs = RemoveNulledSubcarriers(self._resource_grid)
 
     def call(self, inputs):
@@ -59,12 +58,11 @@ class BDEqualizer(Layer):
         h_eq_desired = tf.cast(h_eq_desired, self._dtype)
 
         # Rx antenna indices for MU-MIMO
-        num_streams_per_tx = h_eq_desired.shape[-2]
-        num_ue = (num_streams_per_tx - 4) // 2  # number of UE with 2 antennas each
-        rx_indices = [[0, 1], [2, 3]]  # BS node antennas indices
+        num_ue, num_ue_ant = h_eq.shape[1:3]
+        rx_indices = []
         for k in range(num_ue):
-            offset = 4 + 2 * k  # first antennas index for k-th UE
-            rx_indices.append([offset, offset+1])
+            offset = num_ue_ant * k  # first antennas index for k-th UE
+            rx_indices.append(np.arange(offset, offset+num_ue_ant))
 
         # BD equalizing
         y_equalized = sumimo_bd_equalizer(y_equalized, h_eq_desired, rx_indices)

@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 from tensorflow.keras.layers import Layer
 import sionna
@@ -94,12 +95,11 @@ class BDPrecoder(Layer):
         h_pc_desired = tf.cast(h_pc_desired, self._dtype)
 
         # Rx antenna indices for MU-MIMO
-        num_streams_per_tx = h_pc_desired.shape[-2]
-        num_ue = (num_streams_per_tx - 4) // 2  # number of UE with 2 antennas each
-        rx_indices = [[0, 1], [2, 3]]  # BS node antennas indices
+        num_ue, num_ue_ant = h_pc.shape[1:3]
+        rx_indices = []
         for k in range(num_ue):
-            offset = 4 + 2 * k  # first antennas index for k-th UE
-            rx_indices.append([offset, offset+1])
+            offset = num_ue_ant * k  # first antennas index for k-th UE
+            rx_indices.append(np.arange(offset, offset+num_ue_ant))
 
         # BD precoding
         x_precoded, g = mumimo_bd_precoder(x_precoded,
