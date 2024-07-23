@@ -84,8 +84,8 @@ def add_timing_offset(x, sto_sigma):
     sto = np.random.normal(size=(num_ue, 1, 1))
     sto = np.concatenate((np.zeros((4, 1, 1)), np.repeat(sto, repeats=2, axis=0)), axis=0)
     # maximum relative STO magnitude is 0.5
-    sto[sto > 0.5] = 0.5
-    sto[sto < -0.5] = -0.5
+    #sto[sto > 0.5] = 0.5
+    #sto[sto < -0.5] = -0.5
     # compute phase shift in frequency domain
     sto_shift = sto_sigma * sto * np.linspace(-0.5, 0.5, fft_size, endpoint=False).reshape((1, 1, fft_size))
     phase_shift = np.exp(2j * np.pi * sto_shift)

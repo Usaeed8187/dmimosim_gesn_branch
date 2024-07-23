@@ -6,7 +6,7 @@ import glob
 import numpy as np
 
 
-def read_ns3_channels(ns3_folder, num_ofdm_syms, num_bs=1, num_ue=10, num_bs_ant=4, num_ue_ant=2, fft_size=512):
+def read_ns3_channels(ns3_sim_folder, ns3_chans_folder, num_ofdm_syms, num_bs=1, num_ue=10, num_bs_ant=4, num_ue_ant=2, fft_size=512):
 
     slot_len = 14  # OFDM symbols per slot
     
@@ -22,7 +22,7 @@ def read_ns3_channels(ns3_folder, num_ofdm_syms, num_bs=1, num_ue=10, num_bs_ant
               
         for symidx in range(slot_len):
             time_idx = slotidx*slot_len + symidx
-            foldername = os.path.join(ns3_folder, "time_idx_{}/".format(time_idx))
+            foldername = os.path.join(ns3_sim_folder, "time_idx_{}/".format(time_idx))
             sys.stdout.write("\rReading folder {}".format(foldername))
             sys.stdout.flush()
             
@@ -94,33 +94,40 @@ def read_ns3_channels(ns3_folder, num_ofdm_syms, num_bs=1, num_ue=10, num_bs_ant
                 Hdm[0:num_bs_ant, txid_low:txid_high, symidx, :] = H
            
             # remove tempory time_idx_<symidx> subfolders
-            shutil.rmtree(foldername, ignore_errors=True)
+            # shutil.rmtree(foldername, ignore_errors=True)
             
         # save channel for current subframe/slot
-        output_file = os.path.join(ns3_folder, "dmimochans_{}.npz".format(slotidx))
+        output_file = os.path.join(ns3_chans_folder, "dmimochans_{}.npz".format(slotidx))
         np.savez_compressed(output_file, Hdm=Hdm, Hrs=Hrs, Hts=Hts, Ldm=Ldm, Lrs=Lrs, Lts=Lts)
 
 
 if __name__ == "__main__":
         
-    if len(sys.argv) < 2:
-        print("Usage: convert_ns3_channels <ns3_channels_folder>")
+    if len(sys.argv) < 3:
+        print("Usage: convert_ns3_channels <ns3_sim_folder> <ns3_chans_folder>")
         quit()
-        
-    ns3_folder = sys.argv[1]
-    if not os.path.isdir(ns3_folder):
-        print("Invalid ns-3 channelfolder: {}".format(ns3_folder))
+
+    ns3_sim_folder = sys.argv[1]
+    ns3_chans_folder = sys.argv[2]
+    if not os.path.isdir(ns3_sim_folder):
+        print("Invalid ns-3 simulator data folder: {}".format(ns3_sim_folder))
         quit()
-    
-    ns3_outputs = glob.glob(ns3_folder + "/time_idx_*/")
+
+    if os.path.exists(ns3_chans_folder):
+        print("Error: ns-3 channel folder exist!")
+        quit()
+    else:
+        os.makedirs(ns3_chans_folder)
+
+    ns3_outputs = glob.glob(ns3_sim_folder + "/time_idx_*/")
     if len(ns3_outputs) == 0:
-        print("No ns-3 channels found in {}".format(ns3_folder))
+        print("No ns-3 channels found in {}".format(ns3_sim_folder))
         quit()
     
     # Convert ns-3 channel for each subframe/slot
     # Each subfolder time_idx_<symidx> store channel for one OFDM symbol
     num_ofdm_syms = len(ns3_outputs)
-    read_ns3_channels(ns3_folder, num_ofdm_syms)
+    read_ns3_channels(ns3_sim_folder, ns3_chans_folder, num_ofdm_syms)
     
     print("\rFinish converting channels ({} snapshots)\n".format(num_ofdm_syms))
     
