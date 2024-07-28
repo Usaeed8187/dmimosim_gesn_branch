@@ -8,6 +8,7 @@ class SimConfig(Config):
     def __init__(self, **kwargs):
         self._name = "Simulation Configuration"
         self._fft_size = 512                # FFT size
+        self._cyclic_prefix_len = 64        # cyclic prefix length
         self._subcarrier_spacing = 15e3     # subcarrier spacing in Hz
         self._modulation_order = 2          # modulation order for non-adaptive case
         self._code_rate = 0.5               # LDPC code rate
@@ -35,6 +36,15 @@ class SimConfig(Config):
     def fft_size(self, val):
         assert 0 < val <= 4096, "Invalid FFT size"
         self._fft_size = val
+
+    @property
+    def cyclic_prefix_len(self):
+        return self._cyclic_prefix_len
+
+    @cyclic_prefix_len.setter
+    def cyclic_prefix_len(self, val):
+        assert 0 < val <= 1024, "Invalid cyclic prefix length"
+        self._cyclic_prefix_len = val
 
     @property
     def subcarrier_spacing(self):

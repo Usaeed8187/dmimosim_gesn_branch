@@ -60,29 +60,41 @@ def sim_mu_mimo_chanpred(cfg: SimConfig, precoding_method="BD"):
     # This determines which data streams are determined for which receiver.
     sm = StreamManagement(rx_tx_association, num_streams_per_tx)
 
-    # OFDM resource grid (RG) for normal transmission
-    rg = ResourceGrid(num_ofdm_symbols=14,
-                      fft_size=512,
-                      subcarrier_spacing=15e3,
-                      num_tx=1,
-                      num_streams_per_tx=num_streams_per_tx,
-                      cyclic_prefix_length=64,
-                      num_guard_carriers=[4, 4],
-                      dc_null=False,
-                      pilot_pattern="kronecker",
-                      pilot_ofdm_symbol_indices=[2, 11])
+    # Adjust guard subcarriers for channel estimation grid
+    csi_effective_subcarriers = (cfg.fft_size // num_bs_ant) * num_bs_ant
+    csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
+    csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
 
     # Resource grid for channel estimation
     rg_csi = ResourceGrid(num_ofdm_symbols=14,
-                          fft_size=512,
-                          subcarrier_spacing=15e3,
+                          fft_size=cfg.fft_size,
+                          subcarrier_spacing=cfg.subcarrier_spacing,
                           num_tx=1,
-                          num_streams_per_tx=24,
-                          cyclic_prefix_length=64,
-                          num_guard_carriers=[4, 4],
+                          num_streams_per_tx=num_bs_ant,
+                          cyclic_prefix_length=cfg.cyclic_prefix_len,
+                          num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
                           dc_null=False,
                           pilot_pattern="kronecker",
                           pilot_ofdm_symbol_indices=[2, 11])
+
+    # Adjust guard subcarriers for different number of streams
+    effective_subcarriers = (csi_effective_subcarriers // num_streams_per_tx) * num_streams_per_tx
+    guard_carriers_1 = (csi_effective_subcarriers - effective_subcarriers) // 2
+    guard_carriers_2 = (csi_effective_subcarriers - effective_subcarriers) - guard_carriers_1
+    guard_carriers_1 += csi_guard_carriers_1
+    guard_carriers_2 += csi_guard_carriers_2
+
+    # OFDM resource grid (RG) for normal transmission
+    rg = ResourceGrid(num_ofdm_symbols=14,
+                      fft_size=cfg.fft_size,
+                      subcarrier_spacing=cfg.subcarrier_spacing,
+                      num_tx=1,
+                      num_streams_per_tx=num_streams_per_tx,
+                      cyclic_prefix_length=64,
+                      num_guard_carriers=[guard_carriers_1, guard_carriers_2],
+                      dc_null=False,
+                      pilot_pattern="kronecker",
+                      pilot_ofdm_symbol_indices=[2, 11])
 
     # LDPC params
     num_codewords = cfg.modulation_order//2  # number of codewords per frame
