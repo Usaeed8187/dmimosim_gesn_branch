@@ -19,14 +19,14 @@ from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
-def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
+
+def sim_mu_mimo(cfg: SimConfig):
     """
     Simulation of MU-MIMO scenarios using different settings
 
     TODO: add link/rank adaption, UE selection
 
     :param cfg: simulation settings
-    :param precoding_method: BD or ZF
     :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
     """
 
@@ -37,7 +37,7 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
     num_ue_ant = 2
     num_ue = cfg.num_tx_streams // num_ue_ant
 
-	# Estimated EbNo
+    # Estimated EbNo
     ebno_db = 10.0  # temporary fixed for LMMSE equalization
 
     # CFO and STO settings
@@ -172,9 +172,9 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
     h_freq_csi = chest_noise([h_freq_csi, 2.5e-3])
 
     # used to simulate perfect CSI at the receiver
-    if precoding_method == "ZF":
+    if cfg.precoding_method == "ZF":
         x_precoded, g = zf_precoder([x_rg, h_freq_csi])
-    elif precoding_method == "BD":
+    elif cfg.precoding_method == "BD":
         x_precoded, g = bd_precoder([x_rg, h_freq_csi])
     else:
         ValueError("unsupported precoding method")
@@ -223,7 +223,7 @@ def sim_mu_mimo(cfg: SimConfig, precoding_method="BD"):
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
 
-def sim_mu_mimo_all(cfg: SimConfig, precoding_method="BD"):
+def sim_mu_mimo_all(cfg: SimConfig):
     """"
     Simulation of SU-MIMO transmission phases according to the frame structure
     """
@@ -233,7 +233,7 @@ def sim_mu_mimo_all(cfg: SimConfig, precoding_method="BD"):
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits, x_hat = sim_mu_mimo(cfg, precoding_method=precoding_method)
+        bers, bits, x_hat = sim_mu_mimo(cfg)
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
         goodput += bits[0]

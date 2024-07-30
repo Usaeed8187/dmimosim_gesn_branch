@@ -39,7 +39,8 @@ if __name__ == "__main__":
         print("------ Run {} -----".format(total_runs))
         cfg.first_slot_idx = first_slot_idx
         cfg.csi_prediction = False
-        bers, bits, x_hat = sim_su_mimo_chanpred(cfg, precoding_method="ZF")
+        cfg.precoding_method = "ZF"
+        bers, bits, x_hat = sim_su_mimo_chanpred(cfg)
         avg_ber += bers[0]
         avg_tput += bits[0]
         print("Channel prediction: ", cfg.csi_prediction)
@@ -47,7 +48,8 @@ if __name__ == "__main__":
         print("Goodbits: ", bits)
 
         cfg.csi_prediction = True
-        bers, bits, x_hat = sim_su_mimo_chanpred(cfg, precoding_method="ZF")
+        cfg.precoding_method = "ZF"
+        bers, bits, x_hat = sim_su_mimo_chanpred(cfg)
         avg_ber_pred += bers[0]
         avg_tput_pred += bits[0]
         print("Channel prediction: ", cfg.csi_prediction)

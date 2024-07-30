@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 30        # total number of slots in ns-3 channels
+    cfg.total_slots = 35        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.num_tx_streams = 6      # 2/4/6 equal to total number of streams
@@ -48,12 +48,16 @@ if __name__ == "__main__":
 
             for k in range(num_modulations):
                 cfg.modulation_order = modulation_orders[k]
-                rst_svd = sim_su_mimo_all(cfg, precoding_method="SVD")
+
+                cfg.precoding_method = "SVD"
+                rst_svd = sim_su_mimo_all(cfg)
                 ber[0, k] = rst_svd[0]
                 ldpc_ber[0, k] = rst_svd[1]
                 goodput[0, k] = rst_svd[2]
                 throughput[0, k] = rst_svd[3]
-                rst_zf = sim_su_mimo_all(cfg, precoding_method="ZF")
+
+                cfg.precoding_method = "ZF"
+                rst_zf = sim_su_mimo_all(cfg)
                 ber[1, k] = rst_zf[0]
                 ldpc_ber[1, k] = rst_zf[1]
                 goodput[1, k] = rst_zf[2]

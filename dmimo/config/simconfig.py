@@ -17,6 +17,7 @@ class SimConfig(CarrierConfig):
         self._num_slots_p2 = 3              # number of slots in phase 2
         self._total_slots = 20              # total slots of ns-3 channels
         self._ns3_folder = "../ns3/channels"  # data folder for ns-3 channels
+        self._precoding_method = "ZF"       # precoding method
         self._perfect_csi = False           # Use perfect CSI for debugging
         self._csi_prediction = False        # Use CSI prediction
         self._sto_sigma = 0.0               # standard deviation of STO in nanoseconds
@@ -102,6 +103,14 @@ class SimConfig(CarrierConfig):
     @ns3_folder.setter
     def ns3_folder(self, val):
         self._ns3_folder = val
+
+    @property
+    def precoding_method(self):
+        return self._precoding_method
+
+    @precoding_method.setter
+    def precoding_method(self, val):
+        self._precoding_method = val
 
     @property
     def perfect_csi(self):

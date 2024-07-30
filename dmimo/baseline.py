@@ -20,12 +20,11 @@ from dmimo.mimo import SVDPrecoder, SVDEqualizer
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 
-def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
+def sim_baseline(cfg: SimConfig):
     """
     Simulation of baseline scenarios using 4x4 MIMO channels
 
     :param cfg: simulation settings
-    :param precoding_method: SVD or ZF
     :return: [uncoded BER, LDPC BER, Goodput], demodulated QAM symbols (for debugging purpose)
     """
 
@@ -164,9 +163,9 @@ def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
     h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
 
     # apply precoding to OFDM grids
-    if precoding_method == "ZF":
+    if cfg.precoding_method == "ZF":
         x_precoded, g = zf_precoder([x_rg, h_freq_csi])
-    elif precoding_method == "SVD":
+    elif cfg.precoding_method == "SVD":
         x_precoded, g = svd_precoder([x_rg, h_freq_csi])
     else:
         ValueError("unsupported precoding method")
@@ -183,7 +182,7 @@ def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
     y = y[:, :, :num_streams_per_tx, :, :]
 
     # SVD equalization
-    if precoding_method == "SVD":
+    if cfg.precoding_method == "SVD":
         y = svd_equalizer([y, h_freq_csi])
 
     # LS channel estimation with linear interpolation
@@ -216,7 +215,7 @@ def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
 
-def sim_baseline_all(cfg: SimConfig, precoding_method="SVD"):
+def sim_baseline_all(cfg: SimConfig):
     """"
     Simulation of baseline transmission (BS-to-BS)
     """
@@ -226,7 +225,7 @@ def sim_baseline_all(cfg: SimConfig, precoding_method="SVD"):
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits, x_hat = sim_baseline(cfg, precoding_method=precoding_method)
+        bers, bits, x_hat = sim_baseline(cfg)
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
         goodput += bits[0]
