@@ -30,13 +30,18 @@ def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
     """
 
     # dMIMO configuration
-    # num_bs_ant = 4  # Tx squad BB
-    # num_ue_ant = 4  # Rx squad BB
+    num_bs_ant = 4  # Tx squad BB
+    num_ue_ant = 4  # Rx squad BB
 
     # Estimated EbNo
     ebno_db = 16.0  # temporary fixed for LMMSE equalization
 
+    # CFO and STO settings
+    sto_sigma = sto_val(cfg, cfg.sto_sigma)
+    cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
+
     # The number of transmitted streams is equal to the number of UE antennas
+    assert cfg.num_tx_streams <= num_ue_ant
     num_streams_per_tx = cfg.num_tx_streams
 
     # batch processing for all slots in phase 2
@@ -50,26 +55,38 @@ def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
     # This determines which data streams are determined for which receiver.
     sm = StreamManagement(rx_tx_association, num_streams_per_tx)
 
-    # OFDM resource grid (RG) for normal transmission
-    rg = ResourceGrid(num_ofdm_symbols=14,
-                      fft_size=512,
-                      subcarrier_spacing=15e3,
-                      num_tx=1,
-                      num_streams_per_tx=num_streams_per_tx,
-                      cyclic_prefix_length=64,
-                      num_guard_carriers=[0, 0],
-                      dc_null=False,
-                      pilot_pattern="kronecker",
-                      pilot_ofdm_symbol_indices=[2, 11])
+    # Adjust guard subcarriers for channel estimation grid
+    csi_effective_subcarriers = (cfg.fft_size // num_bs_ant) * num_bs_ant
+    csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
+    csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
 
     # Resource grid for channel estimation
     rg_csi = ResourceGrid(num_ofdm_symbols=14,
-                      fft_size=512,
-                      subcarrier_spacing=15e3,
+                          fft_size=cfg.fft_size,
+                          subcarrier_spacing=cfg.subcarrier_spacing,
+                          num_tx=1,
+                          num_streams_per_tx=num_bs_ant,
+                          cyclic_prefix_length=cfg.cyclic_prefix_len,
+                          num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
+                          dc_null=False,
+                          pilot_pattern="kronecker",
+                          pilot_ofdm_symbol_indices=[2, 11])
+
+    # Adjust guard subcarriers for different number of streams
+    effective_subcarriers = (csi_effective_subcarriers // num_streams_per_tx) * num_streams_per_tx
+    guard_carriers_1 = (csi_effective_subcarriers - effective_subcarriers) // 2
+    guard_carriers_2 = (csi_effective_subcarriers - effective_subcarriers) - guard_carriers_1
+    guard_carriers_1 += csi_guard_carriers_1
+    guard_carriers_2 += csi_guard_carriers_2
+
+    # OFDM resource grid (RG) for normal transmission
+    rg = ResourceGrid(num_ofdm_symbols=14,
+                      fft_size=cfg.fft_size,
+                      subcarrier_spacing=cfg.subcarrier_spacing,
                       num_tx=1,
-                      num_streams_per_tx=4,
+                      num_streams_per_tx=num_streams_per_tx,
                       cyclic_prefix_length=64,
-                      num_guard_carriers=[0, 0],
+                      num_guard_carriers=[guard_carriers_1, guard_carriers_2],
                       dc_null=False,
                       pilot_pattern="kronecker",
                       pilot_ofdm_symbol_indices=[2, 11])
@@ -140,7 +157,8 @@ def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
     else:
         # LMMSE channel estimation
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
-                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay)
+                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                           cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
 
     # TODO: optimize node selection
     h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
@@ -155,9 +173,9 @@ def sim_baseline(cfg: SimConfig, precoding_method="SVD"):
 
     # add CFO/STO to simulate synchronization errors
     if cfg.sto_sigma > 0:
-        x_precoded = add_timing_offset(x_precoded, sto_val(cfg, cfg.cfo_sigma))
+        x_precoded = add_timing_offset(x_precoded, sto_sigma)
     if cfg.cfo_sigma > 0:
-        x_precoded = add_frequency_offset(x_precoded, cfo_val(cfg, cfg.cfo_sigma))
+        x_precoded = add_frequency_offset(x_precoded, cfo_sigma)
 
     # apply dMIMO channels to the resource grid in the frequency domain.
     y = dmimo_chans([x_precoded, cfg.first_slot_idx])

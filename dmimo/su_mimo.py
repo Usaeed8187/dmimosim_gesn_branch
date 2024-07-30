@@ -96,7 +96,6 @@ def sim_su_mimo(cfg: SimConfig, precoding_method="SVD"):
                       pilot_pattern="kronecker",
                       pilot_ofdm_symbol_indices=[2, 11])
 
-
     # LDPC params
     num_codewords = cfg.modulation_order//2  # number of codewords per frame
     ldpc_n = int(rg.num_data_symbols*cfg.modulation_order/num_codewords)  # Number of coded bits
@@ -157,7 +156,7 @@ def sim_su_mimo(cfg: SimConfig, precoding_method="SVD"):
 
     if cfg.perfect_csi:
         # Perfect channel estimation
-        h_freq_csi, pl_tmp = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
+        h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
     else:
