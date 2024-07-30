@@ -122,7 +122,7 @@ class LoadNs3Channel:
 
             # expand according to number of Tx/Rx nodes
             tx_pwr_dbm = np.concatenate((np.repeat(tx_pwr_bs, self._cfg.num_bs),
-                                         np.repeat(tx_pwr_ue, self._cfg.num_rxue)))
+                                         np.repeat(tx_pwr_ue, self._cfg.num_txue)))
             rx_ant_gain = np.concatenate((np.repeat(self._cfg.bs_ant_gain, self._cfg.num_bs),
                                          np.repeat(self._cfg.ue_ant_gain, self._cfg.num_rxue)))
             rx_pwr_path = np.reshape(tx_pwr_dbm, (1, -1, 1)) + np.reshape(rx_ant_gain, (-1, 1, 1)) - self._Ldm  # [num_rxue+1,num_txue+1,num_ofdm_sym]
@@ -150,7 +150,7 @@ class LoadNs3Channel:
         elif channel_type == "dMIMO-Simple":  # for testing only
             # expand according to number of Tx/Rx nodes
             tx_pwr_dbm = np.concatenate((np.repeat(tx_pwr_bs, self._cfg.num_bs),
-                                         np.repeat(tx_pwr_ue, self._cfg.num_rxue)))
+                                         np.repeat(tx_pwr_ue, self._cfg.num_txue)))
             rx_ant_gain = np.concatenate((np.repeat(self._cfg.bs_ant_gain, self._cfg.num_bs),
                                           np.repeat(self._cfg.ue_ant_gain, self._cfg.num_rxue)))
             rx_pwr_path = np.reshape(tx_pwr_dbm, (1, -1, 1)) + np.reshape(rx_ant_gain, (-1, 1, 1)) - self._Ldm  # [num_rxue+1,num_txue+1,num_ofdm_sym]
