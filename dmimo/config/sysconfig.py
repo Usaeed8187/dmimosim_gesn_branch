@@ -64,8 +64,8 @@ class NetworkConfig(Config):
     @txue_mask.setter
     def txue_mask(self, val):
         assert isinstance(val, list) or isinstance(val, np.ndarray), "Invalid Tx UE selection mask"
-        assert len(val) == self._num_txue, "Invalid Tx UE selection mask"
-        self._txue_mask = val
+        val = np.reshape(val, -1)
+        self._txue_mask = (val != 0)
 
     @property
     def rxue_mask(self):
@@ -74,7 +74,50 @@ class NetworkConfig(Config):
     @rxue_mask.setter
     def rxue_mask(self, val):
         assert isinstance(val, list) or isinstance(val, np.ndarray), "Invalid Rx UE selection mask"
-        assert len(val) == self._num_rxue, "Invalid Rx UE selection mask"
-        self._rxue_mask = val
+        val = np.reshape(val, -1)
+        self._rxue_mask = (val != 0)
 
 
+class CarrierConfig(Config):
+
+    def __init__(self, **kwargs):
+        self._name = "Carrier Configuration"
+        self._fft_size = 512                # FFT size
+        self._cyclic_prefix_len = 64        # cyclic prefix length
+        self._subcarrier_spacing = 15e3     # subcarrier spacing in Hz
+        self._slot_duration = 1e-3          # slot duration in seconds
+        super().__init__(**kwargs)
+
+    @property
+    def fft_size(self):
+        return self._fft_size
+
+    @fft_size.setter
+    def fft_size(self, val):
+        assert 0 < val <= 4096, "Invalid FFT size"
+        self._fft_size = val
+
+    @property
+    def cyclic_prefix_len(self):
+        return self._cyclic_prefix_len
+
+    @cyclic_prefix_len.setter
+    def cyclic_prefix_len(self, val):
+        assert 0 < val <= 1024, "Invalid cyclic prefix length"
+        self._cyclic_prefix_len = val
+
+    @property
+    def subcarrier_spacing(self):
+        return self._subcarrier_spacing
+
+    @subcarrier_spacing.setter
+    def subcarrier_spacing(self, val):
+        self._subcarrier_spacing = val
+
+    @property
+    def slot_duration(self):
+        return self._slot_duration
+
+    @slot_duration.setter
+    def slot_duration(self, val):
+        self._slot_duration = val

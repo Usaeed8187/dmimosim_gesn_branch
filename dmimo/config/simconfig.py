@@ -1,15 +1,12 @@
 # Configuration for system simulation
 
-from .config import Config
+from .sysconfig import CarrierConfig
 
 
-class SimConfig(Config):
+class SimConfig(CarrierConfig):
 
     def __init__(self, **kwargs):
         self._name = "Simulation Configuration"
-        self._fft_size = 512                # FFT size
-        self._cyclic_prefix_len = 64        # cyclic prefix length
-        self._subcarrier_spacing = 15e3     # subcarrier spacing in Hz
         self._modulation_order = 2          # modulation order for non-adaptive case
         self._code_rate = 0.5               # LDPC code rate
         self._num_tx_streams = 2            # total number of transmitter streams
@@ -19,40 +16,12 @@ class SimConfig(Config):
         self._num_slots_p1 = 1              # number of slots in phase 1/3
         self._num_slots_p2 = 3              # number of slots in phase 2
         self._total_slots = 20              # total slots of ns-3 channels
-        self._slot_duration = 1e-3          # slot duration in seconds
         self._ns3_folder = "../ns3/channels"  # data folder for ns-3 channels
         self._perfect_csi = False           # Use perfect CSI for debugging
         self._csi_prediction = False        # Use CSI prediction
         self._sto_sigma = 0.0               # standard deviation of STO in nanoseconds
         self._cfo_sigma = 0.0               # standard deviation of CFO in Hz
-
         super().__init__(**kwargs)
-
-    @property
-    def fft_size(self):
-        return self._fft_size
-
-    @fft_size.setter
-    def fft_size(self, val):
-        assert 0 < val <= 4096, "Invalid FFT size"
-        self._fft_size = val
-
-    @property
-    def cyclic_prefix_len(self):
-        return self._cyclic_prefix_len
-
-    @cyclic_prefix_len.setter
-    def cyclic_prefix_len(self, val):
-        assert 0 < val <= 1024, "Invalid cyclic prefix length"
-        self._cyclic_prefix_len = val
-
-    @property
-    def subcarrier_spacing(self):
-        return self._subcarrier_spacing
-
-    @subcarrier_spacing.setter
-    def subcarrier_spacing(self, val):
-        self._subcarrier_spacing = val
 
     @property
     def modulation_order(self):
@@ -127,14 +96,6 @@ class SimConfig(Config):
         self._total_slots = val
 
     @property
-    def slot_duration(self):
-        return self._slot_duration
-
-    @slot_duration.setter
-    def slot_duration(self, val):
-        self._slot_duration = val
-
-    @property
     def ns3_folder(self):
         return self._ns3_folder
 
@@ -173,4 +134,3 @@ class SimConfig(Config):
     @cfo_sigma.setter
     def cfo_sigma(self, val):
         self._cfo_sigma = val
-
