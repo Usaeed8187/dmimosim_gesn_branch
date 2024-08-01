@@ -37,11 +37,14 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("\n Using channels in {}".format(folder_name))
 
-    ber = np.zeros(2)
-    ldpc_ber = np.zeros(2)
-    goodput = np.zeros(2)
-    throughput = np.zeros(2)
+    ber = np.zeros(3)
+    ldpc_ber = np.zeros(3)
+    goodput = np.zeros(3)
+    throughput = np.zeros(3)
 
+    #############################################
+    # Testing with rank and link adaptation
+    #############################################
     cfg.precoding_method = "SVD"
     rst_svd = sim_su_mimo_all(cfg)
     ber[0] = rst_svd[0]
@@ -49,35 +52,36 @@ if __name__ == "__main__":
     goodput[0] = rst_svd[2]
     throughput[0] = rst_svd[3]
 
-    # cfg.precoding_method = "ZF"
-    # rst_zf = sim_su_mimo_all(cfg)
-    # ber[1] = rst_zf[0]
-    # ldpc_ber[1] = rst_zf[1]
-    # goodput[1] = rst_zf[2]
-    # throughput[1] = rst_zf[3]
+    #############################################
+    # Testing without rank and link adaptation
+    #############################################
+    
+    cfg.rank_adapt = False
+    cfg.link_adapt = False
+    
+    # Test 1 parameters
+    cfg.num_tx_streams = 2
+    cfg.modulation_order = 2
+    cfg.code_rate = 0.5
 
-    fig, ax = plt.subplots(1, 3, figsize=(15, 4))
+    cfg.precoding_method = "SVD"
+    rst_svd = sim_su_mimo_all(cfg)
+    ber[1] = rst_svd[0]
+    ldpc_ber[1] = rst_svd[1]
+    goodput[1] = rst_svd[2]
+    throughput[1] = rst_svd[3]
 
-    ax[0].set_title("SU-MIMO")
-    ax[0].set_xlabel('Modulation (bits/symbol)')
-    ax[0].set_ylabel('BER')
-    ax[0].plot(modulation_orders, ber.transpose(), 'o-')
-    ax[0].legend(['SVD', 'ZF'])
+    # Test 2 parameters
+    cfg.num_tx_streams = 6
+    cfg.modulation_order = 6
+    cfg.code_rate = 0.5
 
-    ax[1].set_title("SU-MIMO")
-    ax[1].set_xlabel('Modulation (bits/symbol)')
-    ax[1].set_ylabel('Coded BER')
-    ax[1].plot(modulation_orders, ldpc_ber.transpose(), 'd-')
-    ax[1].legend(['SVD', 'ZF'])
-
-    ax[2].set_title("SU-MIMO")
-    ax[2].set_xlabel('Modulation (bits/symbol)')
-    ax[2].set_ylabel('Goodput/Throughput (Mbps)')
-    ax[2].plot(modulation_orders, goodput.transpose(), 's-')
-    ax[2].plot(modulation_orders, throughput.transpose(), 'd-')
-    ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF'])
-
-    plt.savefig("../results/{}/su_mimo_results_s{}.png".format(folder_name, cfg.num_tx_streams))
+    cfg.precoding_method = "SVD"
+    rst_svd = sim_su_mimo_all(cfg)
+    ber[2] = rst_svd[0]
+    ldpc_ber[2] = rst_svd[1]
+    goodput[2] = rst_svd[2]
+    throughput[2] = rst_svd[3]
 
     np.savez("../results/{}/su_mimo_results_s{}.npz".format(folder_name, cfg.num_tx_streams),
                 ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
