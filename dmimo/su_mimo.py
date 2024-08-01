@@ -224,18 +224,27 @@ def sim_su_mimo(cfg: SimConfig):
     goodbits = (1.0 - ber) * num_bits_per_frame
     userbits = (1.0 - bler) * num_bits_per_frame
 
+    if cfg.rank_adapt and cfg.link_adapt:
+        do_rank_link_adaptation(cfg, h_freq_csi, rx_snr_db, cfg.first_slot_idx)
+
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
-def do_rank_link_adaptation(cfg):
-
-    network_config = NetworkConfig()
+def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None):
 
     assert cfg.start_slot_idx >= cfg.csi_delay
 
-    cfg.first_slot_idx = cfg.start_slot_idx
-    cfg.return_estimated_channel = True
-    h_est, rx_snr_db = sim_su_mimo(cfg)
-    cfg.return_estimated_channel = False
+    if start_slot_idx == None:
+        cfg.first_slot_idx = cfg.start_slot_idx
+    else:
+        cfg.first_slot_idx = start_slot_idx
+
+    if np.any(h_est == None) or np.any(rx_snr_db == None):
+        
+        cfg.return_estimated_channel = True
+        h_est, rx_snr_db = sim_su_mimo(cfg)
+        cfg.return_estimated_channel = False
+
+    network_config = NetworkConfig()
 
     # Rank adaptation test
     rank_adaptation = rankAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, architecture='SU-MIMO',
@@ -246,6 +255,8 @@ def do_rank_link_adaptation(cfg):
     if rank_adaptation.use_mmse_eesm_method:
         rank = rank_feedback_report[0]
         rate = rank_feedback_report[1]
+
+        cfg.num_tx_streams = int(rank)
         
         print("\n", "rank (SU-MIMO) = ", rank, "\n")
         print("\n", "rate (SU-MIMO) = ", rate, "\n")
@@ -253,6 +264,8 @@ def do_rank_link_adaptation(cfg):
     else:
         rank = rank_feedback_report
         rate = []
+
+        cfg.num_tx_streams = int(rank)
 
         print("\n", "rank (SU-MIMO) = ", rank, "\n")
 
@@ -267,12 +280,19 @@ def do_rank_link_adaptation(cfg):
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = mcs_feedback_report[1]
 
-        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
-        print("\n", "Code-rate per stream (SU-MIMO) = ", code_rate_arr, "\n")
+        cfg.modulation_order = int(np.min(qam_order_arr))
+        cfg.code_rate = np.min(code_rate_arr)
+
+        print("\n", "Bits per stream (SU-MIMO) = ", cfg.modulation_order, "\n")
+        print("\n", "Code-rate per stream (SU-MIMO) = ", cfg.code_rate, "\n")
     else:
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = []
-        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
+
+        cfg.modulation_order = int(np.min(qam_order_arr))
+
+
+        print("\n", "Bits per stream (SU-MIMO) = ", cfg.modulation_order, "\n")
     
     return rank, rate, qam_order_arr, code_rate_arr
 
@@ -285,12 +305,8 @@ def sim_su_mimo_all(cfg: SimConfig):
     Simulation of SU-MIMO transmission phases according to the frame structure
     """
 
-    if cfg.rank_adapt or cfg.link_adapt:
-        cfg.num_tx_streams, rate, qam_order_arr, code_rate_arr = do_rank_link_adaptation(cfg)
-        cfg.num_tx_streams = int(cfg.num_tx_streams)
-        cfg.modulation_order = int(np.min(qam_order_arr))
-        cfg.code_rate = np.min(code_rate_arr)
-        
+    if cfg.rank_adapt and cfg.link_adapt:
+        do_rank_link_adaptation(cfg)
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput = 0, 0, 0, 0

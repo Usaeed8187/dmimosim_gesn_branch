@@ -49,12 +49,12 @@ if __name__ == "__main__":
     goodput[0] = rst_svd[2]
     throughput[0] = rst_svd[3]
 
-    cfg.precoding_method = "ZF"
-    rst_zf = sim_su_mimo_all(cfg)
-    ber[1] = rst_zf[0]
-    ldpc_ber[1] = rst_zf[1]
-    goodput[1] = rst_zf[2]
-    throughput[1] = rst_zf[3]
+    # cfg.precoding_method = "ZF"
+    # rst_zf = sim_su_mimo_all(cfg)
+    # ber[1] = rst_zf[0]
+    # ldpc_ber[1] = rst_zf[1]
+    # goodput[1] = rst_zf[2]
+    # throughput[1] = rst_zf[3]
 
     fig, ax = plt.subplots(1, 3, figsize=(15, 4))
 

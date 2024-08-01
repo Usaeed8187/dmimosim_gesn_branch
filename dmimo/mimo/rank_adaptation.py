@@ -65,7 +65,7 @@ class rankAdaptation(Layer):
 
             if self.use_mmse_eesm_method:
 
-                max_rank = min(N_t, self.num_BS_Ant * 2)
+                max_rank = min(N_t, N_r)
                 per_rank_rate = np.zeros((max_rank))
 
                 for rank_idx in range(1, max_rank+1):
