@@ -14,9 +14,9 @@ from sionna.mapping import Mapper, Demapper
 from sionna.utils import BinarySource, ebnodb2no
 from sionna.utils.metrics import compute_ber, compute_bler
 
-from dmimo.config import Ns3Config, SimConfig
+from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
-from dmimo.mimo import SVDPrecoder, SVDEqualizer
+from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 
@@ -158,9 +158,14 @@ def sim_baseline(cfg: SimConfig):
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
                                                            slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                            cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
+        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
+
+    if cfg.return_estimated_channel:
+        return h_freq_csi, rx_snr_db
 
     # TODO: optimize node selection
-    h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
+    if cfg.precoding_method == "ZF":
+        h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
 
     # apply precoding to OFDM grids
     if cfg.precoding_method == "ZF":
@@ -212,13 +217,85 @@ def sim_baseline(cfg: SimConfig):
     goodbits = (1.0 - ber) * num_bits_per_frame
     userbits = (1.0 - bler) * num_bits_per_frame
 
+    if cfg.rank_adapt and cfg.link_adapt:
+        do_rank_link_adaptation(cfg, h_freq_csi, rx_snr_db, cfg.first_slot_idx)
+
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
+
+def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None):
+
+    assert cfg.start_slot_idx >= cfg.csi_delay
+
+    if start_slot_idx == None:
+        cfg.first_slot_idx = cfg.start_slot_idx
+    else:
+        cfg.first_slot_idx = start_slot_idx
+
+    if np.any(h_est == None) or np.any(rx_snr_db == None):
+        
+        cfg.return_estimated_channel = True
+        h_est, rx_snr_db = sim_baseline(cfg)
+        cfg.return_estimated_channel = False
+
+    network_config = NetworkConfig()
+
+    # Rank adaptation test
+    rank_adaptation = rankAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, architecture='SU-MIMO',
+                                        snrdb=rx_snr_db, fft_size=cfg.fft_size, precoder='SVD')
+
+    rank_feedback_report = rank_adaptation(h_est, channel_type='dMIMO')
+
+    if rank_adaptation.use_mmse_eesm_method:
+        rank = rank_feedback_report[0]
+        rate = rank_feedback_report[1]
+
+        cfg.num_tx_streams = int(rank)
+        
+        print("\n", "rank (baseline) = ", rank, "\n")
+        print("\n", "rate (baseline) = ", rate, "\n")
+
+    else:
+        rank = rank_feedback_report
+        rate = []
+
+        cfg.num_tx_streams = int(rank)
+
+        print("\n", "rank (baseline) = ", rank, "\n")
+
+    # Link adaptation test
+    data_sym_position = np.arange(0, 14)
+    link_adaptation = linkAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, architecture='SU-MIMO',
+                                        snrdb=rx_snr_db, nfft=cfg.fft_size, N_s=rank, data_sym_position=data_sym_position, lookup_table_size='long')
+    
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO', architecture='SU-MIMO')
+
+    if link_adaptation.use_mmse_eesm_method:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = mcs_feedback_report[1]
+
+        cfg.modulation_order = int(np.min(qam_order_arr))
+        cfg.code_rate = np.min(code_rate_arr)
+
+        print("\n", "Bits per stream (baseline) = ", cfg.modulation_order, "\n")
+        print("\n", "Code-rate per stream (baseline) = ", cfg.code_rate, "\n")
+    else:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = []
+
+        cfg.modulation_order = int(np.min(qam_order_arr))
+
+
+        print("\n", "Bits per stream (SU-MIMO) = ", cfg.modulation_order, "\n")
+    
+    return rank, rate, qam_order_arr, code_rate_arr
 
 def sim_baseline_all(cfg: SimConfig):
     """"
     Simulation of baseline transmission (BS-to-BS)
     """
+    if cfg.rank_adapt and cfg.link_adapt:
+        do_rank_link_adaptation(cfg)
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput = 0, 0, 0, 0
