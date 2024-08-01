@@ -11,10 +11,9 @@ class linkAdaptation(Layer):
     def __init__(self,
                 num_bs_ant,
                 num_ue_ant,
-                nfft,
+                architecture,
                 snrdb,
-                resource_grid, 
-                stream_management,
+                nfft,
                 N_s,
                 data_sym_position,
                 lookup_table_size,
@@ -35,8 +34,8 @@ class linkAdaptation(Layer):
         self.lookup_table_size = lookup_table_size
 
         self.N_s = N_s
-
-        self.rank_adaptation = rankAdaptation(num_bs_ant, num_ue_ant, nfft, snrdb, resource_grid, stream_management, return_effective_channel=False, precoder='SVD')
+        
+        self.rank_adaptation = rankAdaptation(num_bs_ant, num_ue_ant, architecture, snrdb, nfft, precoder='SVD')
 
 
     def call(self, h_est, channel_type, architecture):

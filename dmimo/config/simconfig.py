@@ -7,21 +7,24 @@ class SimConfig(CarrierConfig):
 
     def __init__(self, **kwargs):
         self._name = "Simulation Configuration"
-        self._modulation_order = 2          # modulation order for non-adaptive case
-        self._code_rate = 0.5               # LDPC code rate
-        self._num_tx_streams = 2            # total number of transmitter streams
-        self._start_slot_idx = 15           # start slot index for simulation
-        self._csi_delay = 2                 # CSI estimation delay
-        self._first_slot_idx = 0            # first slot index for phase 2 in simulation
-        self._num_slots_p1 = 1              # number of slots in phase 1/3
-        self._num_slots_p2 = 3              # number of slots in phase 2
-        self._total_slots = 20              # total slots of ns-3 channels
-        self._ns3_folder = "../ns3/channels"  # data folder for ns-3 channels
-        self._precoding_method = "ZF"       # precoding method
-        self._perfect_csi = False           # Use perfect CSI for debugging
-        self._csi_prediction = False        # Use CSI prediction
-        self._sto_sigma = 0.0               # standard deviation of STO in nanoseconds
-        self._cfo_sigma = 0.0               # standard deviation of CFO in Hz
+        self._modulation_order = 2              # modulation order for non-adaptive case
+        self._code_rate = 0.5                   # LDPC code rate
+        self._num_tx_streams = 2                # total number of transmitter streams
+        self._start_slot_idx = 15               # start slot index for simulation
+        self._csi_delay = 2                     # CSI estimation delay
+        self._first_slot_idx = 0                # first slot index for phase 2 in simulation
+        self._num_slots_p1 = 1                  # number of slots in phase 1/3
+        self._num_slots_p2 = 3                  # number of slots in phase 2
+        self._total_slots = 20                  # total slots of ns-3 channels
+        self._ns3_folder = "../ns3/channels"    # data folder for ns-3 channels
+        self._precoding_method = "ZF"           # precoding method
+        self._perfect_csi = False               # Use perfect CSI for debugging
+        self._csi_prediction = False            # Use CSI prediction
+        self._sto_sigma = 0.0                   # standard deviation of STO in nanoseconds
+        self._cfo_sigma = 0.0                   # standard deviation of CFO in Hz
+        self._rank_adapt = True                 # turn on rank adaptation
+        self._link_adapt = True                 # turn on link adaptation
+        self._return_estimated_channel = False  # return estimated channel without doing any symbol detection
         super().__init__(**kwargs)
 
     @property
@@ -143,3 +146,27 @@ class SimConfig(CarrierConfig):
     @cfo_sigma.setter
     def cfo_sigma(self, val):
         self._cfo_sigma = val
+    
+    @property
+    def rank_adapt(self):
+        return self._rank_adapt
+
+    @rank_adapt.setter
+    def rank_adapt(self, val):
+        self._rank_adapt = val
+    
+    @property
+    def link_adapt(self):
+        return self._link_adapt
+
+    @link_adapt.setter
+    def link_adapt(self, val):
+        self._link_adapt = val
+
+    @property
+    def return_estimated_channel(self):
+        return self._return_estimated_channel
+
+    @return_estimated_channel.setter
+    def return_estimated_channel(self, val):
+        self._return_estimated_channel = val

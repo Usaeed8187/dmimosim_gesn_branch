@@ -33,10 +33,6 @@ def sim_su_mimo(cfg: SimConfig):
     :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
     """
 
-    network_config = NetworkConfig()
-    sim_config = SimConfig()
-
-
     # dMIMO configuration
     num_bs_ant = 24  # total number of Tx squad antennas
     num_ue_ant = 8   # total number of Rx antennas for effective channel
@@ -169,41 +165,8 @@ def sim_su_mimo(cfg: SimConfig):
                                                            cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
         _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
 
-    # Rank adaptation test
-    rank_adaptation = rankAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, sim_config.fft_size, 
-                                        snrdb=rx_snr_db, resource_grid=rg, stream_management=sm, return_effective_channel=True, precoder='SVD')
-
-    rank_feedback_report = rank_adaptation(h_freq_csi, channel_type='dMIMO', architecture='SU-MIMO')
-
-    if rank_adaptation.use_mmse_eesm_method:
-        rank = rank_feedback_report[0]
-        rate = rank_feedback_report[1]
-        
-        print("\n", "rank (SU-MIMO) = ", rank, "\n")
-        print("\n", "rate (SU-MIMO) = ", rate, "\n")
-
-    else:
-        rank = rank_feedback_report
-
-        print("\n", "rank (SU-MIMO) = ", rank, "\n")
-
-    # Link adaptation test
-    data_sym_position = np.arange(0, 14)
-    link_adaptation = linkAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, sim_config.fft_size, 
-                                        snrdb=rx_snr_db, resource_grid=rg, stream_management=sm, N_s=rank, 
-                                        data_sym_position=data_sym_position, lookup_table_size='long')
-    
-    mcs_feedback_report = link_adaptation(h_freq_csi, channel_type='dMIMO', architecture='SU-MIMO')
-
-    if link_adaptation.use_mmse_eesm_method:
-        qam_order_arr = mcs_feedback_report[0]
-        code_rate_arr = mcs_feedback_report[1]
-
-        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
-        print("\n", "Code-rate per stream (SU-MIMO) = ", code_rate_arr, "\n")
-    else:
-        qam_order_arr = mcs_feedback_report[0]
-        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
+    if cfg.return_estimated_channel:
+        return h_freq_csi, rx_snr_db
 
     # TODO: optimize node selection
     h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
@@ -260,11 +223,68 @@ def sim_su_mimo(cfg: SimConfig):
 
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
+def do_rank_link_adaptation(cfg):
+
+    network_config = NetworkConfig()
+
+    assert cfg.start_slot_idx >= cfg.csi_delay
+
+    cfg.first_slot_idx = cfg.start_slot_idx
+    cfg.return_estimated_channel = True
+    h_est, rx_snr_db = sim_su_mimo(cfg)
+    cfg.return_estimated_channel = False
+
+    # Rank adaptation test
+    rank_adaptation = rankAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, architecture='SU-MIMO',
+                                        snrdb=rx_snr_db, fft_size=cfg.fft_size, precoder='SVD')
+
+    rank_feedback_report = rank_adaptation(h_est, channel_type='dMIMO')
+
+    if rank_adaptation.use_mmse_eesm_method:
+        rank = rank_feedback_report[0]
+        rate = rank_feedback_report[1]
+        
+        print("\n", "rank (SU-MIMO) = ", rank, "\n")
+        print("\n", "rate (SU-MIMO) = ", rate, "\n")
+
+    else:
+        rank = rank_feedback_report
+        rate = []
+
+        print("\n", "rank (SU-MIMO) = ", rank, "\n")
+
+    # Link adaptation test
+    data_sym_position = np.arange(0, 14)
+    link_adaptation = linkAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, architecture='SU-MIMO',
+                                        snrdb=rx_snr_db, nfft=cfg.fft_size, N_s=rank, data_sym_position=data_sym_position, lookup_table_size='long')
+    
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO', architecture='SU-MIMO')
+
+    if link_adaptation.use_mmse_eesm_method:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = mcs_feedback_report[1]
+
+        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
+        print("\n", "Code-rate per stream (SU-MIMO) = ", code_rate_arr, "\n")
+    else:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = []
+        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
+    
+    return rank, rate, qam_order_arr, code_rate_arr
+
+
+
+
 
 def sim_su_mimo_all(cfg: SimConfig):
     """"
     Simulation of SU-MIMO transmission phases according to the frame structure
     """
+
+    if cfg.rank_adapt or cfg.link_adapt:
+        cfg.num_tx_streams, rate, qam_order_arr, code_rate_arr = do_rank_link_adaptation(cfg)
+        
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput = 0, 0, 0, 0

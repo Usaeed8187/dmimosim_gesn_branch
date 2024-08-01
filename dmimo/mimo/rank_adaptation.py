@@ -19,53 +19,36 @@ class rankAdaptation(Layer):
     def __init__(self,
                 num_bs_ant,
                 num_ue_ant,
-                nfft,
+                architecture,
                 snrdb,
-                resource_grid, 
-                stream_management,
-                return_effective_channel,
+                fft_size,
                 precoder,
                 dtype=tf.complex64,
                 **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
 
-        assert isinstance(resource_grid, sionna.ofdm.ResourceGrid)
-        assert isinstance(stream_management, sionna.mimo.StreamManagement)
-        
         self.num_BS_Ant = num_bs_ant
         self.num_UE_Ant = num_ue_ant
-        self.nfft = nfft
+        self.nfft = fft_size
+
+        self.architecture = architecture
         
         snrdb = np.min(snrdb)
         self.snr_linear = 10**(snrdb/10)
 
-        self.sm = stream_management
-        
-        self.zf_precoder = ZFPrecoder(resource_grid, stream_management, return_effective_channel=return_effective_channel)
-        
-        self.svd_precoder = SVDPrecoder(resource_grid, stream_management, return_effective_channel=return_effective_channel)
-
-        self.rg = resource_grid
-
         self.use_mmse_eesm_method = True
-        if self.use_mmse_eesm_method:
-            self.num_sc_modelled = 256 # number of subcarriers evaluated per ofdm symbol for rank adaptation purposes
-            self.modelled_sc_indices = np.linspace(0, 512, self.num_sc_modelled)
-
         self.mod = 4 # the modulation order assumed
-
         self.precoder = precoder
-
         self.A_info = 0.83
         self.B_info = 0.73
 
         self.threshold = 0.1
 
-    def call(self, h_est, channel_type, architecture):
+    def call(self, h_est, channel_type):
 
-        if architecture == "SU-MIMO":
+        if self.architecture == "SU-MIMO":
             feedback_report  = self.generate_rank_SU_MIMO(h_est, channel_type)
-        elif architecture == "MU-MIMO":
+        elif self.architecture == "MU-MIMO":
             feedback_report = self.generate_rank_MU_MIMO(h_est, channel_type)
 
         return feedback_report
