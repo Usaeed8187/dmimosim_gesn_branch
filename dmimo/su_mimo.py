@@ -284,6 +284,9 @@ def sim_su_mimo_all(cfg: SimConfig):
 
     if cfg.rank_adapt or cfg.link_adapt:
         cfg.num_tx_streams, rate, qam_order_arr, code_rate_arr = do_rank_link_adaptation(cfg)
+        cfg.num_tx_streams = int(cfg.num_tx_streams)
+        cfg.modulation_order = int(np.min(qam_order_arr))
+        cfg.code_rate = np.min(code_rate_arr)
         
 
     total_cycles = 0

@@ -37,19 +37,24 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("\n Using channels in {}".format(folder_name))
 
+    ber = np.zeros(2)
+    ldpc_ber = np.zeros(2)
+    goodput = np.zeros(2)
+    throughput = np.zeros(2)
+
     cfg.precoding_method = "SVD"
     rst_svd = sim_su_mimo_all(cfg)
-    ber[0, k] = rst_svd[0]
-    ldpc_ber[0, k] = rst_svd[1]
-    goodput[0, k] = rst_svd[2]
-    throughput[0, k] = rst_svd[3]
+    ber[0] = rst_svd[0]
+    ldpc_ber[0] = rst_svd[1]
+    goodput[0] = rst_svd[2]
+    throughput[0] = rst_svd[3]
 
     cfg.precoding_method = "ZF"
     rst_zf = sim_su_mimo_all(cfg)
-    ber[1, k] = rst_zf[0]
-    ldpc_ber[1, k] = rst_zf[1]
-    goodput[1, k] = rst_zf[2]
-    throughput[1, k] = rst_zf[3]
+    ber[1] = rst_zf[0]
+    ldpc_ber[1] = rst_zf[1]
+    goodput[1] = rst_zf[2]
+    throughput[1] = rst_zf[3]
 
     fig, ax = plt.subplots(1, 3, figsize=(15, 4))
 
