@@ -15,6 +15,9 @@ import numpy as np
 from dmimo.config import SimConfig
 from dmimo.su_mimo import sim_su_mimo_all
 
+gpu_num = 1  # Use "" to use the CPU, Use 0 to select first GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # Main function
 if __name__ == "__main__":

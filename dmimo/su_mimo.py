@@ -14,9 +14,9 @@ from sionna.mapping import Mapper, Demapper
 from sionna.utils import BinarySource, ebnodb2no
 from sionna.utils.metrics import compute_ber, compute_bler
 
-from dmimo.config import Ns3Config, SimConfig
+from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
-from dmimo.mimo import SVDPrecoder, SVDEqualizer
+from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 
@@ -32,6 +32,10 @@ def sim_su_mimo(cfg: SimConfig):
     :param cfg: simulation settings
     :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
     """
+
+    network_config = NetworkConfig()
+    sim_config = SimConfig()
+
 
     # dMIMO configuration
     num_bs_ant = 24  # total number of Tx squad antennas
@@ -163,6 +167,43 @@ def sim_su_mimo(cfg: SimConfig):
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
                                                            slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                            cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
+        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
+
+    # Rank adaptation test
+    rank_adaptation = rankAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, sim_config.fft_size, 
+                                        snrdb=rx_snr_db, resource_grid=rg, stream_management=sm, return_effective_channel=True, precoder='SVD')
+
+    rank_feedback_report = rank_adaptation(h_freq_csi, channel_type='dMIMO', architecture='SU-MIMO')
+
+    if rank_adaptation.use_mmse_eesm_method:
+        rank = rank_feedback_report[0]
+        rate = rank_feedback_report[1]
+        
+        print("\n", "rank (SU-MIMO) = ", rank, "\n")
+        print("\n", "rate (SU-MIMO) = ", rate, "\n")
+
+    else:
+        rank = rank_feedback_report
+
+        print("\n", "rank (SU-MIMO) = ", rank, "\n")
+
+    # Link adaptation test
+    data_sym_position = np.arange(0, 14)
+    link_adaptation = linkAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, sim_config.fft_size, 
+                                        snrdb=rx_snr_db, resource_grid=rg, stream_management=sm, N_s=rank, 
+                                        data_sym_position=data_sym_position, lookup_table_size='long')
+    
+    mcs_feedback_report = link_adaptation(h_freq_csi, channel_type='dMIMO', architecture='SU-MIMO')
+
+    if link_adaptation.use_mmse_eesm_method:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = mcs_feedback_report[1]
+
+        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
+        print("\n", "Code-rate per stream (SU-MIMO) = ", code_rate_arr, "\n")
+    else:
+        qam_order_arr = mcs_feedback_report[0]
+        print("\n", "Bits per stream (SU-MIMO) = ", qam_order_arr, "\n")
 
     # TODO: optimize node selection
     h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
