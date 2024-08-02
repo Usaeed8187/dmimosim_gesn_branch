@@ -96,7 +96,6 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
                       pilot_pattern="kronecker",
                       pilot_ofdm_symbol_indices=[2, 11])
 
-
     # LDPC params
     num_codewords = cfg.modulation_order//2  # number of codewords per frame
     ldpc_n = int(rg.num_data_symbols*cfg.modulation_order/num_codewords)  # Number of coded bits
@@ -160,7 +159,7 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
 
     if cfg.perfect_csi:
         # Perfect channel estimation
-        h_freq_csi, pl_tmp = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
+        h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
     elif cfg.csi_prediction:
@@ -176,8 +175,9 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
                                                            slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                            cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
 
-    # TODO: optimize node selection
-    h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
+    # ZF assume num_rx_ant = num_stream_per_tx
+    if cfg.precoding_method == "ZF":
+        h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
 
     # apply precoding to OFDM grids
     if cfg.precoding_method == "ZF":
@@ -195,12 +195,14 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
 
     # apply dMIMO channels to the resource grid in the frequency domain.
     y = dmimo_chans([x_precoded, cfg.first_slot_idx])
-    # [batch_size, 1, num_streams_per_tx, num_ofdm_sym, fft_size]
-    y = y[:, :, :num_streams_per_tx, :, :]
 
     # SVD equalization
     if cfg.precoding_method == "SVD":
         y = svd_equalizer([y, h_freq_csi])
+
+    # Rank adaptation support (extract only relevant streams)
+    # [batch_size, 1, num_streams_per_tx, num_ofdm_sym, fft_size]
+    y = y[:, :, :num_streams_per_tx, :, :]
 
     # LS channel estimation with linear interpolation
     h_hat, err_var = ls_estimator([y, no])

@@ -8,20 +8,25 @@ def sumimo_svd_precoder(x, h, return_precoding_matrix=False):
     :param x: data stream symbols
     :param h: channel coefficients
     :param return_precoding_matrix: return precoding matrix
-    :return: precoded data symbols
+    :return: precoded data symbols and (optional) precoding matrix
     """
 
     # Input dimensions:
     # x: [batch_size, num_tx, num_ofdm_sym, fft_size, num_streams_per_tx]
-    # h: [batch_size, num_tx, num_ofdm_sym, fft_size, num_streams_per_tx, num_tx_ant]
-    num_streams, num_tx_ant = h.shape[-2:]
-    assert num_streams <= num_tx_ant, "Number of stream should not exceed number of antennas"
+    # h: [batch_size, num_tx, num_ofdm_sym, fft_size, num_rx_ant, num_tx_ant]
+    num_streams = x.shape[-1]
+    num_rx_ant, num_tx_ant = h.shape[-2:]
+    assert (num_streams <= num_tx_ant) and (num_streams <= num_rx_ant), \
+        "Number of stream should not exceed number of antennas"
 
     # Compute SVD of channel matrix for precoding
     s, u, v = tf.linalg.svd(h, compute_uv=True)
 
     # Make the signs of eigen vectors consistent
     v = tf.sign(v[..., :1, :]) * v
+
+    # support for rank adaptation
+    v = v[..., :num_streams]
 
     # Expand last dim of `x` for precoding
     x_precoded = tf.expand_dims(x, -1)
@@ -45,9 +50,9 @@ def sumimo_svd_equalizer(y, h):
 
     # Input dimensions:
     # y: [batch_size, num_rx, num_ofdm_sym, fft_size, num_rx_ant]
-    # h: [batch_size, num_tx, num_ofdm_sym, fft_size, num_streams_per_tx, num_tx_ant]
-    num_streams, num_tx_ant = h.shape[-2:]
-    assert num_streams <= num_tx_ant, "Number of stream should not exceed number of antennas"
+    # h: [batch_size, num_tx, num_ofdm_sym, fft_size, num_rx_ant, num_tx_ant]
+    num_rx_ant, num_tx_ant = h.shape[-2:]
+    assert (num_rx_ant <= num_tx_ant), "Number of Rx antennas should not exceed number of Tx antennas"
 
     # Compute SVD of channel matrix for precoding
     s, u, v = tf.linalg.svd(h, compute_uv=True)

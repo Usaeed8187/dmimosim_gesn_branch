@@ -169,7 +169,8 @@ def sim_su_mimo(cfg: SimConfig):
         return h_freq_csi, rx_snr_db
 
     # TODO: optimize node selection
-    h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
+    if cfg.precoding_method == "ZF":
+        h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
 
     # apply precoding to OFDM grids
     if cfg.precoding_method == "ZF":
@@ -187,12 +188,14 @@ def sim_su_mimo(cfg: SimConfig):
 
     # apply dMIMO channels to the resource grid in the frequency domain.
     y = dmimo_chans([x_precoded, cfg.first_slot_idx])
-    # [batch_size, 1, num_streams_per_tx, num_ofdm_sym, fft_size]
-    y = y[:, :, :num_streams_per_tx, :, :]
 
     # SVD equalization
     if cfg.precoding_method == "SVD":
         y = svd_equalizer([y, h_freq_csi])
+
+    # Rank adaptation support (extract only relevant streams)
+    # [batch_size, 1, num_streams_per_tx, num_ofdm_sym, fft_size]
+    y = y[:, :, :num_streams_per_tx, :, :]
 
     # LS channel estimation with linear interpolation
     h_hat, err_var = ls_estimator([y, no])

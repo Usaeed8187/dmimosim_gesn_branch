@@ -67,6 +67,9 @@ class ZFPrecoder(Layer):
         #
         # h has shape
         # [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
+        num_tx, num_streams_per_tx = x.shape[1:3]
+        num_rx, num_rx_ant = h.shape[1:3]
+        assert num_tx * num_streams_per_tx <= num_rx * num_rx_ant, "Invalid number of transmitted streams"
 
         # Transformations to bring h and x in the desired shapes
 
