@@ -26,7 +26,7 @@ class SVDEqualizer(Layer):
 
     def call(self, inputs):
 
-        y, h = inputs
+        y, h, num_streams = inputs
         # y has shape
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]
         #
@@ -59,7 +59,7 @@ class SVDEqualizer(Layer):
         h_eq_desired = tf.cast(h_eq_desired, self._dtype)
 
         # SVD equalizing
-        y_equalized = sumimo_svd_equalizer(y_equalized, h_eq_desired)
+        y_equalized = sumimo_svd_equalizer(y_equalized, h_eq_desired, num_streams)
 
         # Transpose output to desired shape:
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]

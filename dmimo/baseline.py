@@ -131,7 +131,7 @@ def sim_baseline(cfg: SimConfig):
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
     # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=21)
+    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3_config, "Baseline", add_noise=True)
     chest_noise = AWGN()
 
@@ -150,7 +150,7 @@ def sim_baseline(cfg: SimConfig):
 
     if cfg.perfect_csi:
         # Perfect channel estimation
-        h_freq_csi, pl_tmp = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
+        h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
     else:
@@ -183,12 +183,10 @@ def sim_baseline(cfg: SimConfig):
 
     # apply dMIMO channels to the resource grid in the frequency domain.
     y = dmimo_chans([x_precoded, cfg.first_slot_idx])
-    # [batch_size, 1, num_streams_per_tx, num_ofdm_sym, fft_size]
-    y = y[:, :, :num_streams_per_tx, :, :]
 
     # SVD equalization
     if cfg.precoding_method == "SVD":
-        y = svd_equalizer([y, h_freq_csi])
+        y = svd_equalizer([y, h_freq_csi, num_streams_per_tx])
 
     # LS channel estimation with linear interpolation
     h_hat, err_var = ls_estimator([y, no])

@@ -136,7 +136,7 @@ def sim_su_mimo(cfg: SimConfig):
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
     # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=21)
+    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3_config, "dMIMO-Forward", add_noise=True)
     chest_noise = AWGN()
 
@@ -191,11 +191,7 @@ def sim_su_mimo(cfg: SimConfig):
 
     # SVD equalization
     if cfg.precoding_method == "SVD":
-        y = svd_equalizer([y, h_freq_csi])
-
-    # Rank adaptation support (extract only relevant streams)
-    # [batch_size, 1, num_streams_per_tx, num_ofdm_sym, fft_size]
-    y = y[:, :, :num_streams_per_tx, :, :]
+        y = svd_equalizer([y, h_freq_csi, num_streams_per_tx])
 
     # LS channel estimation with linear interpolation
     h_hat, err_var = ls_estimator([y, no])
