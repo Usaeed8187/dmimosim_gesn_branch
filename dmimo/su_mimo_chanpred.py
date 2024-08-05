@@ -18,24 +18,24 @@ from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.channel import standard_rc_pred_freq_mimo
 from dmimo.mimo import SVDPrecoder, SVDEqualizer
+from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 
-def sim_su_mimo_chanpred(cfg: SimConfig):
+def su_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     """
-    Simulation of SU-MIMO scenarios using different settings
+    Signal processing for one SU-MIMO transmission cycle (P1/P2/P3)
 
     Effective channel models for phase 2 (P2) and phase 3 (P3) are used, phase 1 (P1) transmission
     is simulated separately and assumed to always provide enough data bandwidth for P2.
 
-    TODO: add link/rank adaption, UE selection
-
     :param cfg: simulation settings
+    :param dmimo_chans: dMIMO channels
     :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
     """
 
     # dMIMO configuration
-    num_bs_ant = 24  # total number of Tx squad antennas
+    num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
     num_ue_ant = 8   # total number of Rx antennas for effective channel
 
     # Estimated EbNo
@@ -61,7 +61,7 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
     sm = StreamManagement(rx_tx_association, num_streams_per_tx)
 
     # Adjust guard subcarriers for channel estimation grid
-    csi_effective_subcarriers = (cfg.fft_size // num_bs_ant) * num_bs_ant
+    csi_effective_subcarriers = (cfg.fft_size // num_txs_ant) * num_txs_ant
     csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
     csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
 
@@ -70,7 +70,7 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
                           fft_size=cfg.fft_size,
                           subcarrier_spacing=cfg.subcarrier_spacing,
                           num_tx=1,
-                          num_streams_per_tx=num_bs_ant,
+                          num_streams_per_tx=num_txs_ant,
                           cyclic_prefix_length=cfg.cyclic_prefix_len,
                           num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
                           dc_null=False,
@@ -136,11 +136,6 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
     # The decoder provides hard-decisions on the information bits
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
-    # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
-    dmimo_chans = dMIMOChannels(ns3_config, "dMIMO-Forward", add_noise=True)
-    chest_noise = AWGN()
-
     if cfg.csi_prediction:
         rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
 
@@ -161,6 +156,7 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
         # Perfect channel estimation
         h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
+        chest_noise = AWGN()
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
     elif cfg.csi_prediction:
         # Get CSI history
@@ -228,6 +224,30 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
     userbits = (1.0 - bler) * num_bits_per_frame
 
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
+
+
+def sim_su_mimo_chanpred(cfg: SimConfig):
+    """
+    Simulation of SU-MIMO scenarios using different settings
+
+    :param cfg: simulation settings
+    :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
+    """
+
+    # dMIMO channels from ns-3 simulator
+    ns3cfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
+    dmimo_chans = dMIMOChannels(ns3cfg, "dMIMO-Forward", add_noise=True)
+
+    # UE selection
+    tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
+    ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
+
+    # Link/rank adaption
+    if cfg.rank_adapt and cfg.link_adapt:
+        do_rank_link_adaptation(cfg, h_freq_csi, rx_snr_db, cfg.first_slot_idx)
+
+    # SU-MIMO transmission
+    return su_mimo_transmission(cfg, dmimo_chans)
 
 
 def sim_su_mimo_chanpred_all(cfg: SimConfig):

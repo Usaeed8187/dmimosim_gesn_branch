@@ -4,7 +4,7 @@ import sionna
 from sionna.utils import flatten_dims
 from sionna.ofdm import RemoveNulledSubcarriers
 
-from .precoding import sumimo_svd_equalizer
+from .svd_precoding import sumimo_svd_equalizer
 
 
 class SVDEqualizer(Layer):
