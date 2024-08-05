@@ -64,8 +64,6 @@ class dMIMOChannels(Layer):
         # snrdb shape: [batch_size, num_rx/num_tx, num_ofdm_sym]
         h_freq, snrdb = self._load_channel(self._channel_type, slot_idx=sidx, batch_size=batch_size)
 
-        # TODO: Tx/Rx UE selection, Resource Grid handling
-
         # prune channel coefficients if necessary
         if self._rg and x.shape[-1] != h_freq.shape[-1]:
             scidx = self._rg.effective_subcarrier_ind

@@ -7,6 +7,8 @@ class SimConfig(CarrierConfig):
 
     def __init__(self, **kwargs):
         self._name = "Simulation Configuration"
+        self._num_tx_ue_sel = 8                 # number of Tx UE selected
+        self._num_rx_ue_sel = 8                 # number of Rx UE selected
         self._modulation_order = 2              # modulation order for non-adaptive case
         self._code_rate = 0.5                   # LDPC code rate
         self._num_tx_streams = 2                # total number of transmitter streams
@@ -26,6 +28,22 @@ class SimConfig(CarrierConfig):
         self._link_adapt = True                 # turn on link adaptation
         self._return_estimated_channel = False  # return estimated channel without doing any symbol detection
         super().__init__(**kwargs)
+
+    @property
+    def num_tx_ue_sel(self):
+        return self._num_tx_ue_sel
+
+    @num_tx_ue_sel.setter
+    def num_tx_ue_sel(self, val):
+        self._num_tx_ue_sel = val
+
+    @property
+    def num_rx_ue_sel(self):
+        return self._num_rx_ue_sel
+
+    @num_rx_ue_sel.setter
+    def num_rx_ue_sel(self, val):
+        self._num_rx_ue_sel = val
 
     @property
     def modulation_order(self):

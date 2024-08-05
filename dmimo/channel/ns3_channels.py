@@ -36,6 +36,34 @@ class LoadNs3Channel:
                     self._Lts = data['Lts']
                     self._Lrs = data['Lrs']
                     self._Ldm = data['Ldm']
+
+                # Apply UE selection masks
+                # Note that the TxBS and RxBS are always selected
+                if self._cfg.txue_mask is not None:
+                    assert self._cfg.num_txue == np.count_nonzero(self._cfg.txue_mask)
+                    tx_ue_mask = self._cfg.txue_mask
+                    tx_ant_mask = np.repeat(self._cfg.txue_mask, self._cfg.num_ue_ant)
+                    txs_mask = np.concatenate(([True], tx_ue_mask), axis=0)
+                    txs_ant_mask = np.concatenate((np.repeat([True], self._cfg.num_bs_ant),
+                                                   np.repeat(tx_ue_mask, self._cfg.num_ue_ant)), axis=0)
+
+                    self._Hts = self._Hts[tx_ant_mask]
+                    self._Hdm = self._Hdm[:, txs_ant_mask]
+                    self._Lts = self._Lts[tx_ue_mask]
+                    self._Ldm = self._Ldm[:, txs_mask]
+
+                if self._cfg.rxue_mask is not None:
+                    assert self._cfg.num_rxue == np.count_nonzero(self._cfg.rxue_mask)
+                    rx_ue_mask = self._cfg.rxue_mask
+                    rx_ant_mask = np.repeat(self._cfg.rxue_mask, self._cfg.num_ue_ant)
+                    rxs_mask = np.concatenate(([True], rx_ue_mask), axis=0)
+                    rxs_ant_mask = np.concatenate((np.repeat([True], self._cfg.num_bs_ant),
+                                                   np.repeat(rx_ue_mask, self._cfg.num_ue_ant)), axis=0)
+                    self._Hrs = self._Hrs[:, rx_ant_mask]
+                    self._Hdm = self._Hdm[rxs_ant_mask]
+                    self._Lrs = self._Lrs[rx_ue_mask]
+                    self._Ldm = self._Ldm[rxs_mask]
+
             slot_idx = (slot_idx + 1) % self._cfg.total_slots
 
             h_freq, rx_snr = self.convert_channel(channel_type)

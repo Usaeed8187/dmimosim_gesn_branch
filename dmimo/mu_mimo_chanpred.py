@@ -134,7 +134,7 @@ def sim_mu_mimo_chanpred(cfg: SimConfig):
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
     # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=21)
+    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3_config, "dMIMO", add_noise=True)
     chest_noise = AWGN()
 

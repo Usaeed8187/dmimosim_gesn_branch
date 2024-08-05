@@ -1,4 +1,5 @@
 # Configuration for the ns3 simulation
+import numpy as np
 
 from .sysconfig import NetworkConfig
 
@@ -18,6 +19,12 @@ class Ns3Config(NetworkConfig):
         self._thermal_noise = -105  # thermal noise power (dBm) for specified RF bandwidth (default 7.68MHz)
         self._ue_txpwr_ctrl = True  # enable RxSquad UE transmit power control
         super().__init__(**kwargs)
+
+    def update_ue_mask(self, tx_ue_mask, rx_ue_mask):
+        self.num_txue = np.count_nonzero(tx_ue_mask)
+        self.num_rxue = np.count_nonzero(rx_ue_mask)
+        self.txue_mask = tx_ue_mask
+        self.rxue_mask = rx_ue_mask
 
     @property
     def total_slots(self):
