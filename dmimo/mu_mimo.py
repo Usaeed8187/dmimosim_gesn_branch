@@ -23,7 +23,7 @@ from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_va
 
 def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     """
-    Signal processing for one M-MIMO transmission cycle (P2)
+    Signal processing for one MU-MIMO transmission cycle (P2)
 
     :param cfg: simulation settings
     :param dmimo_chans: dMIMO channels

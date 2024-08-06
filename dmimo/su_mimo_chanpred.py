@@ -242,9 +242,7 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
     tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
     ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
-    # Link/rank adaption
-    if cfg.rank_adapt and cfg.link_adapt:
-        do_rank_link_adaptation(cfg, h_freq_csi, rx_snr_db, cfg.first_slot_idx)
+    # TODO: add link/rank adaption
 
     # SU-MIMO transmission
     return su_mimo_transmission(cfg, dmimo_chans)
