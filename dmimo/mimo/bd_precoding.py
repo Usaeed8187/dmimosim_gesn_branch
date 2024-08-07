@@ -40,7 +40,7 @@ def mumimo_zf_precoder(x, h, return_precoding_matrix=False):
         return x_precoded
 
 
-def mumimo_bd_precoder(x, h, rx_indices, return_precoding_matrix=False, use_zero_forcing=True):
+def mumimo_bd_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False, use_zero_forcing=False):
     """
     MU-MIMO precoding using BD method, assuming all receiving UE has equal number of antennas/number data streams
             gNobeB as twice the number of antennas if enabled.
@@ -58,13 +58,13 @@ def mumimo_bd_precoder(x, h, rx_indices, return_precoding_matrix=False, use_zero
     # total_rx_ant = num_streams_per_tx
 
     total_rx_ant, total_tx_ant = h.shape[-2:]
-    num_user = len(rx_indices)
+    num_user = len(ue_indices)
 
     v_all = []
     for k in range(num_user):
         # Step 1: block diagonalization to minimize MUI
-        num_rx_ant = len(rx_indices[k])  # number of antennas for user k
-        rx_indices_comp = np.delete(np.arange(0, total_rx_ant, 1), rx_indices[k], axis=0)
+        num_rx_ant = len(ue_indices[k])  # number of antennas for user k
+        rx_indices_comp = np.delete(np.arange(0, total_rx_ant, 1), ue_indices[k], axis=0)
         H_t = tf.gather(h, indices=rx_indices_comp, axis=-2)  # [..., total_rx_ant-num_rx_ant, num_tx_ant]
         s, u, v = tf.linalg.svd(H_t, compute_uv=True, full_matrices=True)
         # Make the signs of eigen vectors consistent
@@ -72,7 +72,7 @@ def mumimo_bd_precoder(x, h, rx_indices, return_precoding_matrix=False, use_zero
         # null space bases for use k
         v_c = v[..., -num_rx_ant:]  # [..., num_tx_ant, num_rx_ant]
         # effective channel for user k
-        H_k = tf.gather(h, indices=rx_indices[k], axis=-2)  # [..., num_rx_ant, num_tx_ant]
+        H_k = tf.gather(h, indices=ue_indices[k], axis=-2)  # [..., num_rx_ant, num_tx_ant]
         H_eff = tf.linalg.matmul(H_k, v_c)  # [..., num_rx_ant, num_rx_ant]
 
         if use_zero_forcing:
@@ -87,7 +87,9 @@ def mumimo_bd_precoder(x, h, rx_indices, return_precoding_matrix=False, use_zero
             s2, u2, v2 = tf.linalg.svd(H_eff, compute_uv=True, full_matrices=True)
             # Make the signs of eigen vectors consistent
             v2 = tf.sign(v2[..., :1, :]) * v2
-            ss = tf.linalg.diag(tf.cast(1.0 / s2, tf.complex64))
+            # rank adaptation
+            v2 = v2[..., :ue_ranks[k]]
+            ss = tf.linalg.diag(tf.cast(1.0 / s2[..., :ue_ranks[k]], tf.complex64))
             v2 = tf.linalg.matmul(v2, ss)
             v_eff = tf.linalg.matmul(v_c, v2)  # [..., num_tx_ant, num_rx_ant]
             v_all.append(v_eff)
@@ -105,7 +107,7 @@ def mumimo_bd_precoder(x, h, rx_indices, return_precoding_matrix=False, use_zero
         return x_precoded
 
 
-def sumimo_bd_equalizer(y, h, rx_indices):
+def sumimo_bd_equalizer(y, h, ue_indices, ue_ranks):
     """
     MU-MIMO equalizer for BD precoder
     :param y: received signals
@@ -121,14 +123,14 @@ def sumimo_bd_equalizer(y, h, rx_indices):
     assert num_streams <= num_tx_ant, "Number of stream should not exceed number of antennas"
 
     total_rx_ant, total_tx_ant = h.shape[-2:]
-    num_user = len(rx_indices)
+    num_user = len(ue_indices)
 
     # v_all = []
     w_all = []
     for k in range(num_user):
         # Step 1: block diagonalization to minimize MUI
-        num_rx_ant = len(rx_indices[k])  # number of antennas for user k
-        rx_indices_comp = np.delete(np.arange(0, total_rx_ant, 1), rx_indices[k], axis=0)
+        num_rx_ant = len(ue_indices[k])  # number of antennas for user k
+        rx_indices_comp = np.delete(np.arange(0, total_rx_ant, 1), ue_indices[k], axis=0)
         H_t = tf.gather(h, indices=rx_indices_comp, axis=-2)  # [..., total_rx_ant-num_rx_ant, num_tx_ant]
         s, u, v = tf.linalg.svd(H_t, compute_uv=True, full_matrices=True)
         # Make the signs of eigen vectors consistent
@@ -136,12 +138,15 @@ def sumimo_bd_equalizer(y, h, rx_indices):
         # null space bases for use k
         v_c = v[..., -num_rx_ant:]
         # effective channel for user k
-        H_k = tf.gather(h, indices=rx_indices[k], axis=-2)  # [..., num_rx_ant, num_tx_ant]
+        H_k = tf.gather(h, indices=ue_indices[k], axis=-2)  # [..., num_rx_ant, num_tx_ant]
         H_eff = tf.linalg.matmul(H_k, v_c)  # [..., num_rx_ant, num_rx_ant]
 
         # Step 2: compute SVD for individual user
         s2, u2, v2 = tf.linalg.svd(H_eff, compute_uv=True, full_matrices=True)
         w = tf.linalg.adjoint(tf.sign(v2[..., :1, :]) * u2)
+
+        # Rank adaptation support (extract only relevant streams)
+        w = w[..., :ue_ranks[k], :]
         w_all.append(w)
 
     # Expand last dim of `y` for equalization

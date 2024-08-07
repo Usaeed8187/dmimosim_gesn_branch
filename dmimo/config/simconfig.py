@@ -20,6 +20,8 @@ class SimConfig(CarrierConfig):
         self._total_slots = 20                  # total slots of ns-3 channels
         self._ns3_folder = "../ns3/channels"    # data folder for ns-3 channels
         self._precoding_method = "ZF"           # precoding method
+        self._ue_indices = None                 # UE antennas indices for precoding
+        self._ue_ranks = None                   # UE ranks for precoding
         self._perfect_csi = False               # Use perfect CSI for debugging
         self._csi_prediction = False            # Use CSI prediction
         self._sto_sigma = 0.0                   # standard deviation of STO in nanoseconds
@@ -132,6 +134,22 @@ class SimConfig(CarrierConfig):
     @precoding_method.setter
     def precoding_method(self, val):
         self._precoding_method = val
+
+    @property
+    def ue_indices(self):
+        return self._ue_indices
+
+    @ue_indices.setter
+    def ue_indices(self, val):
+        self._ue_indices = val
+
+    @property
+    def ue_ranks(self):
+        return self._ue_ranks
+
+    @ue_ranks.setter
+    def ue_ranks(self, val):
+        self._ue_ranks = val
 
     @property
     def perfect_csi(self):

@@ -25,7 +25,20 @@ class BDEqualizer(Layer):
 
     def call(self, inputs):
 
-        y, h = inputs
+        ue_rank_adapt = False
+        if len(inputs) == 2:
+            # all user has the same number of streams/antennas
+            y, h = inputs
+        elif len(inputs) == 4:
+            # specify user Rx antennas indices and streams (rank)
+            y, h, ue_indices, ue_ranks = inputs
+            if ue_indices is not None and ue_ranks is not None:
+                ue_rank_adapt = True
+                if np.size(np.array(ue_ranks)) == 1:
+                    ue_ranks = np.repeat(ue_ranks, len(ue_indices), axis=0)
+        else:
+            ValueError("calling BD precoder with incorrect params")
+
         # y has shape
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]
         #
@@ -58,14 +71,24 @@ class BDEqualizer(Layer):
         h_eq_desired = tf.cast(h_eq_desired, self._dtype)
 
         # Rx antenna indices for MU-MIMO
-        num_ue, num_ue_ant = h_eq.shape[1:3]
-        rx_indices = []
-        for k in range(num_ue):
-            offset = num_ue_ant * k  # first antennas index for k-th UE
-            rx_indices.append(np.arange(offset, offset+num_ue_ant))
+        if ue_rank_adapt is False:
+            # all user has the same number of antennas
+            # no rank adaptation for all users
+            num_ue, num_ue_ant = h_eq.shape[1:3]
+            ue_ranks = np.repeat([num_ue_ant], num_ue, axis=0)
+            ue_indices = []
+            for k in range(num_ue):
+                offset = num_ue_ant * k  # first antennas index for k-th UE
+                ue_indices.append(np.arange(offset, offset + num_ue_ant))
+        else:
+            # check rx_indices and rx_ranks
+            num_rx_ant = [len(val) for val in ue_indices]
+            total_rx_ant = np.sum(num_rx_ant)
+            assert total_rx_ant == h_eq_desired.shape[4], "total number of UE antennas must match channel coefficients"
+            assert all(ue_ranks <= num_rx_ant), "UE rank should not exceed number of antennas"
 
         # BD equalizing
-        y_equalized = sumimo_bd_equalizer(y_equalized, h_eq_desired, rx_indices)
+        y_equalized = sumimo_bd_equalizer(y_equalized, h_eq_desired, ue_indices, ue_ranks)
 
         # Transpose output to desired shape:
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]

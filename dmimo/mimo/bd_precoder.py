@@ -15,7 +15,7 @@ class BDPrecoder(Layer):
                  resource_grid,
                  stream_management,
                  return_effective_channel=False,
-                 use_zero_forcing=True,
+                 use_zero_forcing=False,
                  dtype=tf.complex64,
                  **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
@@ -63,7 +63,20 @@ class BDPrecoder(Layer):
 
     def call(self, inputs):
 
-        x, h = inputs
+        ue_rank_adapt = False
+        if len(inputs) == 2:
+            # all user has the same number of streams/antennas
+            x, h = inputs
+        elif len(inputs) == 4:
+            # specify user Rx antennas indices and streams (rank)
+            x, h, ue_indices, ue_ranks = inputs
+            if ue_indices is not None and ue_ranks is not None:
+                ue_rank_adapt = True
+                if np.size(np.array(ue_ranks)) == 1:
+                    ue_ranks = np.repeat(ue_ranks, len(ue_indices), axis=0)
+        else:
+            ValueError("calling BD precoder with incorrect params")
+
         # x has shape
         # [batch_size, num_tx, num_streams_per_tx, num_ofdm_symbols, fft_size]
         #
@@ -90,21 +103,32 @@ class BDPrecoder(Layer):
         h_pc_desired = flatten_dims(h_pc_desired, 2, axis=1)
 
         # Transpose:
-        # [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx, num_tx_ant]
+        # [batch_size, num_tx, num_ofdm_symbols, fft_size, num_rx_per_tx * num_rx_ant, num_tx_ant]
         h_pc_desired = tf.transpose(h_pc_desired, [5, 0, 3, 4, 1, 2])
         h_pc_desired = tf.cast(h_pc_desired, self._dtype)
 
         # Rx antenna indices for MU-MIMO
-        num_ue, num_ue_ant = h_pc.shape[1:3]
-        rx_indices = []
-        for k in range(num_ue):
-            offset = num_ue_ant * k  # first antennas index for k-th UE
-            rx_indices.append(np.arange(offset, offset+num_ue_ant))
+        if ue_rank_adapt is False:
+            # by default, all user has the same number of antennas
+            # no rank adaptation for all users
+            num_ue, num_ue_ant = h_pc.shape[1:3]
+            ue_ranks = np.repeat([num_ue_ant], num_ue, axis=0)
+            ue_indices = []
+            for k in range(num_ue):
+                offset = num_ue_ant * k  # first antennas index for k-th UE
+                ue_indices.append(np.arange(offset, offset+num_ue_ant))
+        else:
+            # check rx_indices and rx_ranks
+            num_rx_ant = [len(val) for val in ue_indices]
+            total_rx_ant = np.sum(num_rx_ant)
+            assert total_rx_ant == h_pc_desired.shape[4], "total number of UE antennas must match channel coefficients"
+            assert all(ue_ranks <= num_rx_ant), "UE rank should not exceed number of antennas"
 
         # BD precoding
         x_precoded, g = mumimo_bd_precoder(x_precoded,
                                            h_pc_desired,
-                                           rx_indices,
+                                           ue_indices,
+                                           ue_ranks,
                                            return_precoding_matrix=self._return_effective_channel,
                                            use_zero_forcing=self._use_zero_forcing)
 
