@@ -40,7 +40,7 @@ def sumimo_svd_precoder(x, h, return_precoding_matrix=False):
         return x_precoded
 
 
-def sumimo_svd_equalizer(y, h, num_streams):
+def sumimo_svd_equalizer(y, h, num_streams, normalize=True):
     """
     SU-MIMO equalizer for SVD precoder
     :param y: received signals
@@ -60,6 +60,11 @@ def sumimo_svd_equalizer(y, h, num_streams):
     # Make the signs of eigen vectors consistent
     # Compute equalizing weight
     w = tf.linalg.adjoint(tf.sign(v[..., :1, :]) * u)
+
+    # Normalize stream power
+    if normalize is True:
+        ss = tf.linalg.diag(tf.cast(1.0 / s, tf.complex64))
+        w = tf.linalg.matmul(ss, w)
 
     # Rank adaptation support (extract only relevant streams)
     w = w[..., :num_streams, :]
