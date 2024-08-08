@@ -32,7 +32,7 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_tx_streams in [6, 7, 8, 10, 12]:
+    for num_tx_streams in [6, 8, 10, 12]:
         # 6/7/8/10/12 equal to total number of streams
         # manual rank adaptation (assuming 2 antennas per UE)
         cfg.num_tx_streams = num_tx_streams

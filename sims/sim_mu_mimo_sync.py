@@ -33,7 +33,7 @@ if __name__ == "__main__":
     print("Using channels in {}".format(folder_name))
 
     cfg.num_tx_streams = 8     # 6/8/12 equal to total number of streams
-    cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+    cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2  # TODO consolidate params
     cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
     cfg.ue_ranks = [2]  # same rank for all UEs
 
