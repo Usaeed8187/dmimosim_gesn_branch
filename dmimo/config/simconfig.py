@@ -7,6 +7,7 @@ class SimConfig(CarrierConfig):
 
     def __init__(self, **kwargs):
         self._name = "Simulation Configuration"
+        self._enable_ue_selection = True        # Enable Tx/Rx UE selection
         self._num_tx_ue_sel = 8                 # number of Tx UE selected
         self._num_rx_ue_sel = 8                 # number of Rx UE selected
         self._modulation_order = 2              # modulation order for non-adaptive case

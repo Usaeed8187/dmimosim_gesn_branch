@@ -238,8 +238,9 @@ def sim_mu_mimo(cfg: SimConfig):
     dmimo_chans = dMIMOChannels(ns3cfg, "dMIMO", add_noise=True)
 
     # UE selection
-    tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
-    ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
+    if cfg.enable_ue_selection:
+        tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
+        ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
     # TODO: add link/rank adaption
 
