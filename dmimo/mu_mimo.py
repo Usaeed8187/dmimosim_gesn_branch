@@ -155,7 +155,6 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
 
     if cfg.perfect_csi:
         # Perfect channel estimation
-        # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
         h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
         chest_noise = AWGN()
@@ -172,7 +171,7 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
     h_freq_csi = tf.reshape(h_freq_csi, (-1, num_ue, num_ue_ant, *h_freq_csi.shape[3:]))
 
-    # apply precoding
+    # apply precoding to OFDM grids
     if cfg.precoding_method == "ZF":
         x_precoded, g = zf_precoder([x_rg, h_freq_csi])
     elif cfg.precoding_method == "BD":

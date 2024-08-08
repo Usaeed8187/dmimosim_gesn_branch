@@ -26,13 +26,13 @@ if __name__ == "__main__":
     cfg.csi_delay = 8           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels_s3/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_tx_streams in [4, 6, 8]:
+    for num_tx_streams in [4, 5, 6, 7, 8]:
         # 4/6/8 equal to total number of streams
         cfg.num_tx_streams = num_tx_streams
 
@@ -47,8 +47,8 @@ if __name__ == "__main__":
         for k in range(num_modulations):
             cfg.modulation_order = modulation_orders[k]
 
-            cfg.csi_prediction = False
-            cfg.precoding_method = "ZF"
+            cfg.csi_prediction = True
+            cfg.precoding_method = "SVD"
             rst_svd = sim_su_mimo_chanpred_all(cfg)
             ber[0, k] = rst_svd[0]
             ldpc_ber[0, k] = rst_svd[1]
@@ -69,20 +69,20 @@ if __name__ == "__main__":
         ax[0].set_xlabel('Modulation (bits/symbol)')
         ax[0].set_ylabel('BER')
         ax[0].plot(modulation_orders, ber.transpose(), 'o-')
-        ax[0].legend(['Estimation', 'Prediction'])
+        ax[0].legend(['SVD', 'ZF'])
 
         ax[1].set_title("SU-MIMO")
         ax[1].set_xlabel('Modulation (bits/symbol)')
         ax[1].set_ylabel('Coded BER')
         ax[1].plot(modulation_orders, ldpc_ber.transpose(), 'd-')
-        ax[1].legend(['Estimation', 'Prediction'])
+        ax[1].legend(['SVD', 'ZF'])
 
         ax[2].set_title("SU-MIMO")
         ax[2].set_xlabel('Modulation (bits/symbol)')
         ax[2].set_ylabel('Goodput/Throughput (Mbps)')
         ax[2].plot(modulation_orders, goodput.transpose(), 's-')
         ax[2].plot(modulation_orders, throughput.transpose(), 'd-')
-        ax[2].legend(['Goodput', 'Goodput-Pred', 'Throughput', 'Throughput-Pred'])
+        ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF'])
 
         plt.savefig("../results/{}/su_mimo_results_chanpred_s{}.png".format(folder_name, cfg.num_tx_streams))
 

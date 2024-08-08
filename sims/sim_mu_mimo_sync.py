@@ -24,14 +24,18 @@ if __name__ == "__main__":
     cfg.total_slots = 35        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
-    cfg.num_tx_streams = 8     # 6/8/12 equal to total number of streams
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels_s2/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
+
+    cfg.num_tx_streams = 8     # 6/8/12 equal to total number of streams
+    cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+    cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+    cfg.ue_ranks = [2]  # same rank for all UEs
 
     # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
     modulation_orders = [2, 4, 6]
@@ -41,7 +45,7 @@ if __name__ == "__main__":
     goodput = np.zeros((2, num_modulations))
     throughput = np.zeros((2, num_modulations))
 
-    for sto in [0, 10, 20, 30, 40, 50]:
+    for sto in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
         for cfo in [0, 100, 200, 300, 400, 500, 600, 700, 800]:
             cfg.sto_sigma = sto
             cfg.cfo_sigma = cfo

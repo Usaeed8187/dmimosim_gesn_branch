@@ -26,15 +26,19 @@ if __name__ == "__main__":
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels_s3/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_tx_streams in [4, 6, 8, 12]:
-        # 4/6/8/12 equal to total number of streams
+    for num_tx_streams in [6, 7, 8, 10, 12]:
+        # 6/7/8/10/12 equal to total number of streams
+        # manual rank adaptation (assuming 2 antennas per UE)
         cfg.num_tx_streams = num_tx_streams
+        cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+        cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+        cfg.ue_ranks = [2]  # same rank for all UEs
 
         # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
         modulation_orders = [2, 4, 6]

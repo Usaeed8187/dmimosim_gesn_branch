@@ -23,11 +23,11 @@ if __name__ == "__main__":
     cfg = SimConfig()
     cfg.total_slots = 35        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
-    cfg.csi_delay = 9           # feedback delay in number of subframe
+    cfg.csi_delay = 8           # feedback delay in number of subframe
     cfg.num_tx_streams = 6      # 2/4/6 equal to total number of streams
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels_s2/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     goodput = np.zeros((2, num_modulations))
     throughput = np.zeros((2, num_modulations))
 
-    for sto in [0, 10, 20, 30, 40, 50]:
+    for sto in [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]:
         for cfo in [0, 100, 200, 300, 400, 500, 600, 700, 800]:
             cfg.sto_sigma = sto
             cfg.cfo_sigma = cfo

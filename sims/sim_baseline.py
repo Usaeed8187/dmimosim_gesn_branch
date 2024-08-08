@@ -26,14 +26,14 @@ if __name__ == "__main__":
     cfg.csi_delay = 2           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels_s3/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_tx_streams in [2, 4]:
-        # 2/4 equal to total number of streams
+    for num_tx_streams in [2, 3, 4]:
+        # 2/3/4 equal to total number of streams
         cfg.num_tx_streams = num_tx_streams
 
         # Modulation order: 2/4/6 for QPSK/16QAM/64QAM

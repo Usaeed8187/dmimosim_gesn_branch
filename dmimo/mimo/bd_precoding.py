@@ -47,7 +47,8 @@ def mumimo_bd_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
 
     :param x: data stream symbols
     :param h: channel coefficients
-    :param rx_indices: receiver antenna indices for all users
+    :param ue_indices: receiver antenna indices for all users
+    :param ue_ranks: number of streams (ranks) for all users
     :param return_precoding_matrix: return precoding matrix
     :return: precoded data symbols
     """
@@ -112,7 +113,8 @@ def sumimo_bd_equalizer(y, h, ue_indices, ue_ranks):
     MU-MIMO equalizer for BD precoder
     :param y: received signals
     :param h: effective channel coefficients
-    :param rx_indices: receiver antenna indices for all users
+    :param ue_indices: receiver antenna indices for all users
+    :param ue_ranks: number of streams (ranks) for all users
     :return: equalized signals
     """
 
@@ -125,7 +127,6 @@ def sumimo_bd_equalizer(y, h, ue_indices, ue_ranks):
     total_rx_ant, total_tx_ant = h.shape[-2:]
     num_user = len(ue_indices)
 
-    # v_all = []
     w_all = []
     for k in range(num_user):
         # Step 1: block diagonalization to minimize MUI

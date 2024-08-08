@@ -26,15 +26,19 @@ if __name__ == "__main__":
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "../ns3/channels_s3/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_tx_streams in [4, 6, 8, 12]:
-        # 4/6/8/12 equal to total number of streams
+    for num_tx_streams in [6, 7, 8, 10, 12]:
+        # 6/7/8/10/12 equal to total number of streams
+        # manual rank adaptation (assuming 2 antennas per UE)
         cfg.num_tx_streams = num_tx_streams
+        cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+        cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+        cfg.ue_ranks = [2]  # same rank for all UEs
 
         # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
         modulation_orders = [2, 4, 6]
@@ -47,8 +51,8 @@ if __name__ == "__main__":
         for k in range(num_modulations):
             cfg.modulation_order = modulation_orders[k]
 
-            cfg.csi_prediction = False
-            cfg.precoding_method = "ZF"
+            cfg.csi_prediction = True
+            cfg.precoding_method = "BD"
             rst_bd = sim_mu_mimo_chanpred_all(cfg)
             ber[0, k] = rst_bd[0]
             ldpc_ber[0, k] = rst_bd[1]
@@ -69,20 +73,20 @@ if __name__ == "__main__":
         ax[0].set_xlabel('Modulation (bits/symbol)')
         ax[0].set_ylabel('BER')
         ax[0].plot(modulation_orders, ber.transpose(), 'o-')
-        ax[0].legend(['Estimation', 'Prediction'])
+        ax[0].legend(['BD', 'ZF'])
 
         ax[1].set_title("MU-MIMO")
         ax[1].set_xlabel('Modulation (bits/symbol)')
         ax[1].set_ylabel('Coded BER')
         ax[1].plot(modulation_orders, ldpc_ber.transpose(), 'd-')
-        ax[1].legend(['Estimation', 'Prediction'])
+        ax[1].legend(['BD', 'ZF'])
 
         ax[2].set_title("MU-MIMO")
         ax[2].set_xlabel('Modulation (bits/symbol)')
         ax[2].set_ylabel('Goodput/Throughput (Mbps)')
         ax[2].plot(modulation_orders, goodput.transpose(), 's-')
         ax[2].plot(modulation_orders, throughput.transpose(), 'd-')
-        ax[2].legend(['Goodput', 'Goodput-Pred', 'Throughput', 'Throughput-Pred'])
+        ax[2].legend(['Goodput-BD', 'Goodput-ZF', 'Throughput-BD', 'Throughput-ZF'])
 
         plt.savefig("../results/{}/mu_mimo_results_chanpred_s{}.png".format(folder_name, cfg.num_tx_streams))
 
