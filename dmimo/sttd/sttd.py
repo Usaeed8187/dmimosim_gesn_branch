@@ -2,6 +2,7 @@
 Space-Time Transmit Diversity (STTD) for dMIMO scenarios
 """
 
+import numpy as np
 import tensorflow as tf
 
 from sionna.utils import BinarySource
@@ -20,7 +21,7 @@ from sionna.utils.metrics import compute_ber
 from dmimo.channel import LoadNs3Channel
 from dmimo.config import Ns3Config
 
-from .stbc import stbc_encode, stbc_decode
+from dmimo.sttd import stbc_encode, stbc_decode
 
 
 def extract_sttd_channel(slot_idx, batch_size, num_tx_ue=4, num_rx_ue=4):
@@ -40,19 +41,90 @@ def extract_sttd_channel(slot_idx, batch_size, num_tx_ue=4, num_rx_ue=4):
 
     # Perfect channel estimation or LMMSE channel estimation
     # h_freq_ns3 has shape [batch_size, 1, num_rxs_ant, 1, num_txs_ant, num_ofdm_sym, fft_size]
-    h_freq_ns3, snr_ns3 = ns3_channel("dMIMO", slot_idx=slot_idx, batch_size=batch_size)
+    h_freq_ns3, pl_ns3 = ns3_channel("dMIMO-Raw", slot_idx=slot_idx, batch_size=batch_size)
     h_freq_ns3 = tf.reshape(h_freq_ns3, (batch_size, max_num_rx, 2, max_num_tx, 2, num_ofdm_sym, fft_size))
 
+    # account for BB-UE power difference
+    pl_ns3 = np.squeeze(pl_ns3, axis=1)  # [batch_size, num_rx, num_tx, num_ofdm_sym]
+    pl_ns3[:, :, 0:2, :] = pl_ns3[:, :, 0:2, :] - 8.0  # BS Tx power is 8dB greater than UE
+    pl_ns3 = np.concatenate((pl_ns3[:, 0:1, :, :], pl_ns3), axis=1)
+    pl_ns3 = np.concatenate((pl_ns3[:, :, 0:1, :], pl_ns3), axis=2)
+
     # simulate channel estimation errors
-    h_freq_ns3 = chest_noise([h_freq_ns3, 5e-3])
+    # h_freq_ns3 = chest_noise([h_freq_ns3, 5e-3])
 
     # extract channels for STTD
     data_symbol_indices = [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13]
     tx_indices = tf.repeat(tf.range(0, num_tx), max_num_tx // num_tx)
-    h_selected = [h_freq_ns3[:, :, :, tx_indices[k], :, data_symbol_indices[k]:data_symbol_indices[k]+1, :] for k in range(12)]
+    h_selected = [h_freq_ns3[:, :, :, tx_indices[k], :, data_symbol_indices[k]:data_symbol_indices[k]+1, :]
+                  for k in range(12)]
 
     # h_freq_all has shape [batch_size, num_rx, num_rxue_ant, num_txue_ant, num_ofm_sym, fft_size]
     h_freq_all = tf.concat(h_selected, axis=-2)  # assemble all symbols as for only one transmitting node
+
+    # extract pathloss
+    pl_selected = [pl_ns3[:, :, tx_indices[k], data_symbol_indices[k]:data_symbol_indices[k]+1] for k in range(12)]
+    pl_all = np.concatenate(pl_selected, axis=2)  # [num_batch, num_rx, num_ofdm_sym]
+    pl_all = pl_all - 135  # use a common reference
+
+    pl_all = np.expand_dims(pl_all, axis=(2, -1))  # [num_batch, num_rx, 1, num_ofdm_sym, 1]
+    pl_all = np.expand_dims(pl_all, axis=2)  # [num_batch, num_rx, 1, 1, num_ofdm_sym, 1]
+
+    # apply path loss to channel coefficients
+    path_gains = np.sqrt(np.power(10.0, -pl_all/10.0))
+
+    h_freq_all = h_freq_all * tf.cast(path_gains, tf.complex64)
+
+    # select Rx UE
+    h_freq_all = h_freq_all[:, 0:num_rx]  # [batch_size, num_rx, num_ue_ant, num_ue_ant, num_ofm_sym, fft_size]
+
+    return h_freq_all
+
+
+def extract_sttd_channel2(slot_idx, batch_size, num_tx_ue=4, num_rx_ue=4):
+
+    assert num_tx_ue in [4, 0], "Invalid number of TxSquad UE"
+
+    ns3_config = Ns3Config(total_slots=11)
+    ns3_channel = LoadNs3Channel(ns3_config)
+    chest_noise = AWGN()
+
+    num_tx = num_tx_ue + 2  # BS counts as 2 Tx node
+    num_rx = num_rx_ue + 2  # BS count as 2 Tx node
+    max_num_tx = 12
+    max_num_rx = 12
+    num_ofdm_sym = 14
+    fft_size = 512
+
+    # Perfect channel estimation or LMMSE channel estimation
+    # h_freq_ns3 has shape [batch_size, 1, num_rxs_ant, 1, num_txs_ant, num_ofdm_sym, fft_size]
+    # pl_ns3 has shape [batch_size, 1, num_rx, num_tx, num_ofdm_sym]
+    h_freq_ns3, pl_ns3 = ns3_channel("dMIMO", slot_idx=slot_idx, batch_size=batch_size)
+    h_freq_ns3 = tf.reshape(h_freq_ns3, (batch_size, max_num_rx, 2, max_num_tx, 2, num_ofdm_sym, fft_size))
+
+    # account for BB-UE power difference
+    pl_ns3 = tf.squeeze(pl_ns3, axis=1)  # [batch_size, num_rx, num_tx, num_ofdm_sym]
+    pl_ns3[:, :, 0:2, :] = pl_ns3[:, :, 0:2, :] - tf.cast(8.0, tf.float32)  # BS Tx power is 8dB greater than UE
+
+    # simulate channel estimation errors
+    # h_freq_ns3 = chest_noise([h_freq_ns3, 1e-3])
+
+    # extract channels for STTD
+    data_symbol_indices = [0, 1, 3, 4, 5, 6, 7, 8, 9, 10, 12, 13]
+    tx_indices = tf.repeat(tf.range(0, num_tx), max_num_tx // num_tx)
+    h_selected = [h_freq_ns3[:, :, :, tx_indices[k], :, data_symbol_indices[k]:data_symbol_indices[k]+1, :]
+                  for k in range(12)]
+
+    # h_freq_all has shape [batch_size, num_rx, num_rxue_ant, num_txue_ant, num_ofm_sym, fft_size]
+    h_freq_all = tf.concat(h_selected, axis=-2)  # assemble all symbols as for only one transmitting node
+
+    # extract pathloss
+    pl_selected = [pl_ns3[:, :, tx_indices[k],data_symbol_indices[k]:data_symbol_indices[k]+1] for k in range(12)]
+    pl_all = tf.concat(pl_selected, axis=2)
+    pl_all = pl_all - 135  # use a common reference
+
+    # apply path loss to channel coefficients
+    h_freq_all = h_freq_all * tf.sqrt(tf.math.pow(10.0, -pl_all/10.0))
 
     # select Rx UE
     h_freq_all = h_freq_all[:, 0:num_rx]  # [batch_size, num_rx, num_ue_ant, num_ue_ant, num_ofm_sym, fft_size]
