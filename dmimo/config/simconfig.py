@@ -33,6 +33,14 @@ class SimConfig(CarrierConfig):
         super().__init__(**kwargs)
 
     @property
+    def enable_ue_selection(self):
+        return self._enable_ue_selection
+
+    @enable_ue_selection.setter
+    def enable_ue_selection(self, val):
+        self._enable_ue_selection = val
+
+    @property
     def num_tx_ue_sel(self):
         return self._num_tx_ue_sel
 
