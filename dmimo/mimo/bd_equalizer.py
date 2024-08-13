@@ -5,7 +5,7 @@ import sionna
 from sionna.utils import flatten_dims
 from sionna.ofdm import RemoveNulledSubcarriers
 
-from .bd_precoding import sumimo_bd_equalizer
+from .bd_precoding import mumimo_bd_equalizer
 
 
 class BDEqualizer(Layer):
@@ -88,7 +88,7 @@ class BDEqualizer(Layer):
             assert all(ue_ranks <= num_rx_ant), "UE rank should not exceed number of antennas"
 
         # BD equalizing
-        y_equalized = sumimo_bd_equalizer(y_equalized, h_eq_desired, ue_indices, ue_ranks)
+        y_equalized = mumimo_bd_equalizer(y_equalized, h_eq_desired, ue_indices, ue_ranks)
 
         # Transpose output to desired shape:
         # [batch_size, num_rx, num_rx_ant, num_ofdm_symbols, fft_size]

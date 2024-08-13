@@ -5,11 +5,14 @@ import sionna
 from sionna.utils import flatten_dims
 from sionna.ofdm import RemoveNulledSubcarriers
 
-from .bd_precoding import mumimo_bd_precoder, mumimo_zf_precoder
+from .bd_precoding import mumimo_bd_precoder
 
 
 class BDPrecoder(Layer):
-    """BD Precoder for MU-MIMO"""
+    """BD Precoder for MU-MIMO
+
+    By default, assuming all receiving UE has equal number of antennas/number data streams.
+    """
 
     def __init__(self,
                  resource_grid,

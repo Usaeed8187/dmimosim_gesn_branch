@@ -5,45 +5,9 @@ import tensorflow as tf
 from sionna.utils import matrix_inv
 
 
-def mumimo_zf_precoder(x, h, return_precoding_matrix=False):
-    """
-    MU-MIMO precoding using ZF method (for testing purpose),
-    treating all receiving antennas as independent ones.
-
-    :param x: data stream symbols
-    :param h: channel coefficients
-    :param return_precoding_matrix: return precoding matrix
-    :return: precoded data symbols
-    """
-
-    # Input dimensions:
-    # x has shape: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx]
-    # h has shape: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx, num_tx_ant]
-
-    # Compute pseudo inverse for precoding
-    g = tf.matmul(h, h, adjoint_b=True)
-    g = tf.matmul(h, matrix_inv(g), adjoint_a=True)
-
-    # Normalize each column to unit power
-    norm = tf.sqrt(tf.reduce_sum(tf.abs(g)**2, axis=-2, keepdims=True))
-    g = g/tf.cast(norm, g.dtype)
-
-    # Expand last dim of `x` for precoding
-    x_precoded = tf.expand_dims(x, -1)
-
-    # Precode
-    x_precoded = tf.squeeze(tf.matmul(g, x_precoded), -1)
-
-    if return_precoding_matrix:
-        return x_precoded, g
-    else:
-        return x_precoded
-
-
 def mumimo_bd_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False, use_zero_forcing=False):
     """
-    MU-MIMO precoding using BD method, assuming all receiving UE has equal number of antennas/number data streams
-            gNobeB as twice the number of antennas if enabled.
+    MU-MIMO precoding using BD method.
 
     :param x: data stream symbols
     :param h: channel coefficients
@@ -108,7 +72,7 @@ def mumimo_bd_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
         return x_precoded
 
 
-def sumimo_bd_equalizer(y, h, ue_indices, ue_ranks):
+def mumimo_bd_equalizer(y, h, ue_indices, ue_ranks):
     """
     MU-MIMO equalizer for BD precoder
     :param y: received signals
