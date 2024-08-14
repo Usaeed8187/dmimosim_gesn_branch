@@ -2,7 +2,6 @@ import numpy as np
 import tensorflow as tf
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
-from sionna.ofdm import ZFPrecoder
 from sionna.mimo import StreamManagement
 from sionna.channel import AWGN
 
@@ -18,6 +17,7 @@ from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.channel import standard_rc_pred_freq_mimo
 from dmimo.mimo import SVDPrecoder, SVDEqualizer
+from dmimo.mimo import ZFPrecoder
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
@@ -36,17 +36,14 @@ def su_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
 
     # dMIMO configuration
     num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
-    num_ue_ant = 8   # total number of Rx antennas for effective channel
-
-    # Estimated EbNo
-    ebno_db = 16.0  # temporary fixed for LMMSE equalization
+    num_rx_ant = 8   # total number of Rx antennas for effective channel
 
     # CFO and STO settings
     sto_sigma = sto_val(cfg, cfg.sto_sigma)
     cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
 
     # The number of transmitted streams is equal to the number of UE antennas
-    assert cfg.num_tx_streams <= num_ue_ant
+    assert cfg.num_tx_streams <= num_rx_ant
     num_streams_per_tx = cfg.num_tx_streams
 
     # batch processing for all slots in phase 2
@@ -139,11 +136,6 @@ def su_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     if cfg.csi_prediction:
         rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
 
-    # Compute the noise power for a given Eb/No value.
-    # This takes not only the coderate but also the overheads related pilot
-    # transmissions and nulled carriers
-    no = ebnodb2no(ebno_db, cfg.modulation_order, cfg.code_rate, rg)
-
     # Transmitter processing
     b = binary_source([batch_size, 1, rg.num_streams_per_tx, num_codewords, encoder.k])
     c = encoder(b)
@@ -171,10 +163,6 @@ def su_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
                                                            slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                            cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
 
-    # ZF assume num_rx_ant = num_stream_per_tx
-    if cfg.precoding_method == "ZF":
-        h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
-
     # apply precoding to OFDM grids
     if cfg.precoding_method == "ZF":
         x_precoded, g = zf_precoder([x_rg, h_freq_csi])
@@ -197,6 +185,7 @@ def su_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
         y = svd_equalizer([y, h_freq_csi, num_streams_per_tx])
 
     # LS channel estimation with linear interpolation
+    no = 0.1  # initial noise estimation (tunable param)
     h_hat, err_var = ls_estimator([y, no])
 
     # LMMSE equalization

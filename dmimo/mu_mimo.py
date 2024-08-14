@@ -44,9 +44,6 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
             # by default no rank adaptation
             cfg.ue_ranks = num_ue_ant
 
-    # Estimated EbNo
-    ebno_db = 16.0  # temporary fixed for LMMSE equalization
-
     # CFO and STO settings
     sto_sigma = sto_val(cfg, cfg.sto_sigma)
     cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
@@ -140,11 +137,6 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     # The decoder provides hard-decisions on the information bits
     decoder = LDPC5GDecoder(encoder, hard_out=True)
 
-    # Compute the noise power for a given Eb/No value.
-    # This takes not only the coderate but also the overheads related pilot
-    # transmissions and nulled carriers
-    no = ebnodb2no(ebno_db, cfg.modulation_order, cfg.code_rate, rg)
-
     # Transmitter processing
     b = binary_source([batch_size, 1, rg.num_streams_per_tx, num_codewords, encoder.k])
     c = encoder(b)
@@ -196,6 +188,7 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
         y = bd_equalizer([y, h_freq_csi, cfg.ue_indices, cfg.ue_ranks])
 
     # LS channel estimation with linear interpolation
+    no = 0.1  # initial noise estimation (tunable param)
     h_hat, err_var = ls_estimator([y, no])
 
     # LMMSE equalization

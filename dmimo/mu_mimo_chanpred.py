@@ -24,7 +24,7 @@ from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_va
 
 def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     """
-    Signal processing for one M-MIMO transmission cycle (P2)
+    Signal processing for one MU-MIMO transmission cycle (P2)
 
     :param cfg: simulation settings
     :param dmimo_chans: dMIMO channels
@@ -34,11 +34,16 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     # dMIMO configuration for MU-MIMO
     # To use sionna-compatible interface, regard TxSquad as one BS transmitter,
     num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
-    num_ue_ant = 2
-    num_ue = cfg.num_tx_streams // num_ue_ant
-
-    # Estimated EbNo
-    ebno_db = 16.0  # temporary fixed for LMMSE equalization
+    num_ue_ant = dmimo_chans.ns3_config.num_ue_ant
+    if cfg.ue_indices is None:
+        num_ue = cfg.num_tx_streams // num_ue_ant
+        num_rxs_ant = cfg.num_tx_streams
+    else:
+        num_rxs_ant = np.sum([len(val) for val in cfg.ue_indices])
+        num_ue = num_rxs_ant // num_ue_ant
+        if cfg.ue_ranks is None:
+            # by default no rank adaptation
+            cfg.ue_ranks = num_ue_ant
 
     # CFO and STO settings
     sto_sigma = sto_val(cfg, cfg.sto_sigma)
@@ -119,6 +124,7 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     # The zero forcing and block diagonalization precoder
     bd_precoder = BDPrecoder(rg, sm, return_effective_channel=True)
     zf_precoder = ZFPrecoder(rg, sm, return_effective_channel=True)
+    bd_equalizer = BDEqualizer(rg, sm)
 
     # The LS channel estimator will provide channel estimates and error variances
     ls_estimator = LSChannelEstimator(rg, interpolation_type="lin")
@@ -134,11 +140,6 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
 
     if cfg.csi_prediction:
         rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_streams_per_tx)
-
-    # Compute the noise power for a given Eb/No value.
-    # This takes not only the coderate but also the overheads related pilot
-    # transmissions and nulled carriers
-    no = ebnodb2no(ebno_db, cfg.modulation_order, cfg.code_rate, rg)
 
     # Transmitter processing
     b = binary_source([batch_size, 1, rg.num_streams_per_tx, num_codewords, encoder.k])
@@ -169,7 +170,7 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
                                                            cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
 
     # [batch_size, num_rx, num_tx_streams, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-    h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx, :, :, :, :]
+    h_freq_csi = h_freq_csi[:, :, :num_rxs_ant, :, :, :, :]
 
     # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
     h_freq_csi = tf.reshape(h_freq_csi, (-1, num_ue, num_ue_ant, *h_freq_csi.shape[3:]))
@@ -178,7 +179,7 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     if cfg.precoding_method == "ZF":
         x_precoded, g = zf_precoder([x_rg, h_freq_csi])
     elif cfg.precoding_method == "BD":
-        x_precoded, g = bd_precoder([x_rg, h_freq_csi])
+        x_precoded, g = bd_precoder([x_rg, h_freq_csi, cfg.ue_indices, cfg.ue_ranks])
     else:
         ValueError("unsupported precoding method")
 
@@ -190,13 +191,16 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
 
     # apply dMIMO channels to the resource grid in the frequency domain.
     y = dmimo_chans([x_precoded, cfg.first_slot_idx])
-    # Extract only relevant outputs
-    y = y[:, :, :num_streams_per_tx, :, :]
 
     # make proper shape
+    y = y[:, :, :num_rxs_ant, :, :]
     y = tf.reshape(y, (batch_size, num_ue, num_ue_ant, 14, -1))
 
+    if cfg.precoding_method == "BD":
+        y = bd_equalizer([y, h_freq_csi, cfg.ue_indices, cfg.ue_ranks])
+
     # LS channel estimation with linear interpolation
+    no = 0.1  # initial noise estimation (tunable param)
     h_hat, err_var = ls_estimator([y, no])
 
     # LMMSE equalization

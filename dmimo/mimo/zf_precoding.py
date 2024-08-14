@@ -85,7 +85,7 @@ def mumimo_zf_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
             h_ue = tf.gather(h, indices=ue_indices[k], axis=-2)
             if ue_ranks[k] == num_rx_ant:
                 h_all.append(h_ue)
-            else:
+            else:  # assuming rank==1
                 # Calculate MRC weights
                 g = tf.math.conj(tf.math.reduce_sum(h_ue, axis=-1, keepdims=True))
                 # g = tf.matmul(g, tf.cast(1.0, tf.complex64)/tf.matmul(g, g, adjoint_a=True))

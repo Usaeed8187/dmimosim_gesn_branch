@@ -2,7 +2,6 @@ import numpy as np
 import tensorflow as tf
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
-from sionna.ofdm import ZFPrecoder
 from sionna.mimo import StreamManagement
 from sionna.channel import AWGN
 
@@ -17,6 +16,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation
+from dmimo.mimo import ZFPrecoder
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 
@@ -31,9 +31,6 @@ def sim_baseline(cfg: SimConfig):
     # dMIMO configuration
     num_bs_ant = 4  # Tx squad BB
     num_ue_ant = 4  # Rx squad BB
-
-    # Estimated EbNo
-    ebno_db = 16.0  # temporary fixed for LMMSE equalization
 
     # CFO and STO settings
     sto_sigma = sto_val(cfg, cfg.sto_sigma)
@@ -133,12 +130,6 @@ def sim_baseline(cfg: SimConfig):
     # dMIMO channels from ns-3 simulator
     ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3_config, "Baseline", add_noise=True)
-    chest_noise = AWGN()
-
-    # Compute the noise power for a given Eb/No value.
-    # This takes not only the coderate but also the overheads related pilot
-    # transmissions and nulled carriers
-    no = ebnodb2no(ebno_db, cfg.modulation_order, cfg.code_rate, rg)
 
     # Transmitter processing
     b = binary_source([batch_size, 1, rg.num_streams_per_tx, num_codewords, encoder.k])
@@ -152,6 +143,7 @@ def sim_baseline(cfg: SimConfig):
         # Perfect channel estimation
         h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors
+        chest_noise = AWGN()
         h_freq_csi = chest_noise([h_freq_csi, 2e-3])
     else:
         # LMMSE channel estimation
@@ -162,10 +154,6 @@ def sim_baseline(cfg: SimConfig):
 
     if cfg.return_estimated_channel:
         return h_freq_csi, rx_snr_db
-
-    # TODO: optimize node selection
-    if cfg.precoding_method == "ZF":
-        h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
 
     # apply precoding to OFDM grids
     if cfg.precoding_method == "ZF":
@@ -189,6 +177,7 @@ def sim_baseline(cfg: SimConfig):
         y = svd_equalizer([y, h_freq_csi, num_streams_per_tx])
 
     # LS channel estimation with linear interpolation
+    no = 0.1  # initial noise estimation (tunable param)
     h_hat, err_var = ls_estimator([y, no])
 
     # LMMSE equalization

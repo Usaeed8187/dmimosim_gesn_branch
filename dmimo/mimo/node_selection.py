@@ -7,15 +7,18 @@ from dmimo.channel import dMIMOChannels
 def update_node_selection(cfg: SimConfig):
     """
     Select TxSquad and RxSquad UEs using ns-3 channel statistics
+
+    :param cfg: simulation configuration
+    :return: Tx/Rx squad UE selection masks
     """
 
     # Instantiate dMIMO channel
     ns3cfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3cfg, "dMIMO", add_noise=False)
 
-    # load ns-3 channels
+    # load statistics for previous ns-3 channels
     # shape: [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
-    h_freq, snr_db = dmimo_chans.load_channel(slot_idx=cfg.start_slot_idx,
+    h_freq, snr_db = dmimo_chans.load_channel(slot_idx=cfg.start_slot_idx - cfg.csi_delay,
                                               batch_size=cfg.num_slots_p1 + cfg.num_slots_p2)
 
     # average over symbols and subcarrier in all subframes
