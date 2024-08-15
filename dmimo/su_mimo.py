@@ -268,16 +268,22 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
     # Link adaptation test
     data_sym_position = np.arange(0, 14)
     link_adaptation = linkAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, architecture='SU-MIMO',
-                                        snrdb=rx_snr_db, nfft=cfg.fft_size, N_s=rank, data_sym_position=data_sym_position, lookup_table_size='long')
+                                        snrdb=rx_snr_db, nfft=cfg.fft_size, N_s=rank, data_sym_position=data_sym_position, lookup_table_size='short')
     
-    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO', architecture='SU-MIMO')
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO')
 
     if link_adaptation.use_mmse_eesm_method:
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = mcs_feedback_report[1]
 
-        cfg.modulation_order = int(np.min(qam_order_arr))
-        cfg.code_rate = np.min(code_rate_arr)
+        # Majority vote for MCS selection for now
+        values, counts = np.unique(qam_order_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        cfg.modulation_order = int(most_frequent_value)
+
+        values, counts = np.unique(code_rate_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        cfg.code_rate = most_frequent_value
 
         print("\n", "Bits per stream (SU-MIMO) = ", cfg.modulation_order, "\n")
         print("\n", "Code-rate per stream (SU-MIMO) = ", cfg.code_rate, "\n")

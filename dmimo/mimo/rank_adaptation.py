@@ -23,6 +23,7 @@ class rankAdaptation(Layer):
                 snrdb,
                 fft_size,
                 precoder,
+                ue_indices=None,
                 dtype=tf.complex64,
                 **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
@@ -30,11 +31,19 @@ class rankAdaptation(Layer):
         self.num_BS_Ant = num_bs_ant
         self.num_UE_Ant = num_ue_ant
         self.nfft = fft_size
+        self.ue_indices = ue_indices
 
         self.architecture = architecture
         
-        snrdb = np.min(snrdb)
-        self.snr_linear = 10**(snrdb/10)
+        if self.architecture == 'SU-MIMO':
+            snr_linear = 10**(snrdb/10)
+            snr_linear = np.sum(snr_linear, axis=(2))
+            self.snr_linear = np.mean(snr_linear)
+        elif self.architecture == 'MU-MIMO':
+            snr_linear = 10**(snrdb/10)
+            self.snr_linear = np.mean(snr_linear, axis =   (0,1,3))
+        else:
+            raise Exception(f"Rank adaptation for {self.architecture} has not been implemented.")
 
         self.use_mmse_eesm_method = True
         self.mod = 4 # the modulation order assumed
@@ -76,7 +85,7 @@ class rankAdaptation(Layer):
 
                         h_eff = self.calculate_effective_channel(rank_idx, h_est)
 
-                        n_var = self.cal_n_var(h_eff)
+                        n_var = self.cal_n_var(h_eff, self.snr_linear)
 
                         mmse_inv = tf.matmul(h_eff, h_eff, adjoint_b=True)/rank_idx + n_var
                         # mmse_inv = tf.matmul(h_eff, matrix_inv(mmse_inv), adjoint_a=True)
@@ -141,47 +150,93 @@ class rankAdaptation(Layer):
         
         N_t = h_est.shape[4]
         N_r = h_est.shape[2]
+        num_rx_nodes = int((N_r - self.num_BS_Ant)/self.num_UE_Ant) + 1
         total_num_symbols = h_est.shape[5]
-        snr_linear = self.snr_linear
 
         if channel_type == 'Tx_squad':
             max_rank = min(N_t, N_r) # Assumes that Tx Squad channel can always achieve max rank
         else:
-            max_rank = min(N_t, self.num_UE_Ant)
-            rank = max_rank
-            rank_capacity = np.zeros([total_num_symbols, self.nfft, max_rank])
-            H_freq = tf.squeeze(h_est)
-            H_freq = tf.transpose(H_freq, perm=[3,0,1,2])
 
-            num_UEs = int((N_r - self.num_BS_Ant) / self.num_UE_Ant)
-            num_rx_nodes = num_UEs + 1
+            if self.use_mmse_eesm_method:
 
-            for rx_node_id in range(num_rx_nodes):
+                max_rank = min(N_t, self.num_UE_Ant, self.num_BS_Ant)
+                per_rank_rate = np.zeros((max_rank, num_rx_nodes))
 
-                if rx_node_id == 0:
-                    H_freq_temp = H_freq[:,:self.num_BS_Ant, ...]
-                    ant_idx = tf.range(0, self.num_BS_Ant)
-                else:
-                    ant_idx = tf.range(self.num_BS_Ant + (rx_node_id-1)*self.num_UE_Ant, self.num_BS_Ant + rx_node_id * self.num_UE_Ant)
-                    H_freq_temp = tf.gather(H_freq, ant_idx, axis=1)
-                
-                snr_linear_nodewise = snr_linear[:,:,ant_idx,:]
+                for rank_idx in range(1, max_rank+1):
 
-                for sym_idx in range(total_num_symbols):
-                    
-                    u, s, vh = np.linalg.svd(H_freq_temp[..., sym_idx]) # vh: (nfft, rank, Nt)
-                    
-                    for rank in range(1, max_rank + 1):
+                    h_eff = self.calculate_effective_channel(rank_idx, h_est)
+
+                    for rx_node_idx in range(num_rx_nodes):
                         
-                        for i in range(rank):
-                            snr_per_stream = snr_linear_nodewise / rank
-                            snr_per_stream_eff = np.min(np.mean(snr_per_stream, axis=(0,1,3)))
-                            rank_capacity[sym_idx, :, rank - 1] += np.log2(1 + snr_per_stream_eff * s[:, i]**2)               
-                max_rank_temp = np.argmax(np.mean(rank_capacity, axis=1), axis=1) + 1
-                if np.min(max_rank_temp) < rank:
-                    rank = np.min(max_rank_temp)
+                        if rx_node_idx == 0:
+                            ant_indices = np.arange(self.num_BS_Ant)
+                        else:
+                            ant_indices = np.arange((rx_node_idx-1)*self.num_UE_Ant  + self.num_BS_Ant, rx_node_idx*self.num_UE_Ant + self.num_BS_Ant)
+                        
+                        h_eff_per_node = tf.gather(h_eff, ant_indices, axis=-2)
 
-            return rank
+                        snr_linear = np.sum(self.snr_linear[ant_indices])
+                        n_var = self.cal_n_var(h_eff_per_node, snr_linear)
+
+                        mmse_inv = tf.matmul(h_eff_per_node, h_eff_per_node, adjoint_b=True)/rank_idx + n_var
+
+                        per_stream_sinr = self.compute_sinr(h_eff_per_node, mmse_inv, n_var)
+                        if rank_idx == 1:
+                            per_stream_sinr = tf.gather(per_stream_sinr, rx_node_idx, axis=-1)
+                        elif rank_idx == 2:
+                            per_stream_sinr = per_stream_sinr
+
+                        avg_sinr = self.eesm_average(per_stream_sinr, 0.25, 4)
+
+                        curr_streams_rate = self.A_info * np.log2(1 + self.B_info * avg_sinr)
+
+                        per_rank_rate[rank_idx - 1, rx_node_idx] = np.sum(curr_streams_rate)
+                
+                # TODO: Add per-user rank selection
+                min_per_rank_rate = np.min(per_rank_rate, axis=1)
+                
+                selected_rank = np.where(min_per_rank_rate == np.max(min_per_rank_rate))[0][0] + 1
+                rate_for_selected_rank = min_per_rank_rate[selected_rank - 1]
+
+                return [selected_rank, rate_for_selected_rank]
+            
+            else:
+
+                max_rank = min(N_t, self.num_UE_Ant)
+                rank = max_rank
+                rank_capacity = np.zeros([total_num_symbols, self.nfft, max_rank])
+                H_freq = tf.squeeze(h_est)
+                H_freq = tf.transpose(H_freq, perm=[3,0,1,2])
+
+                num_UEs = int((N_r - self.num_BS_Ant) / self.num_UE_Ant)
+                num_rx_nodes = num_UEs + 1
+
+                for rx_node_id in range(num_rx_nodes):
+
+                    if rx_node_id == 0:
+                        H_freq_temp = H_freq[:,:self.num_BS_Ant, ...]
+                        ant_idx = tf.range(0, self.num_BS_Ant)
+                    else:
+                        ant_idx = tf.range(self.num_BS_Ant + (rx_node_id-1)*self.num_UE_Ant, self.num_BS_Ant + rx_node_id * self.num_UE_Ant)
+                        H_freq_temp = tf.gather(H_freq, ant_idx, axis=1)
+                    
+                    snr_linear_nodewise = snr_linear[:,:,ant_idx,:]
+
+                    for sym_idx in range(total_num_symbols):
+                        
+                        u, s, vh = np.linalg.svd(H_freq_temp[..., sym_idx]) # vh: (nfft, rank, Nt)
+                        
+                        for rank in range(1, max_rank + 1):
+                            
+                            for i in range(rank):
+                                snr_per_stream = snr_linear_nodewise / rank
+                                snr_per_stream_eff = np.min(np.mean(snr_per_stream, axis=(0,1,3)))
+                                rank_capacity[sym_idx, :, rank - 1] += np.log2(1 + snr_per_stream_eff * s[:, i]**2)               
+                    max_rank_temp = np.argmax(np.mean(rank_capacity, axis=1), axis=1) + 1
+                    if np.min(max_rank_temp) < rank:
+                        rank = np.min(max_rank_temp)
+
+                return rank
 
     
     def calculate_effective_channel(self, stream_idx, h_est):
@@ -190,12 +245,16 @@ class rankAdaptation(Layer):
             v, u_h = self.generate_svd_precoding(stream_idx, h_est) # calculating the svd precoder
             # Select the columns of v according to number of spatial streams
             u_h = tf.gather(u_h, np.arange(stream_idx), axis=4)
+        elif self.precoder == 'BD':
+            v, u_h = self.generate_bd_precoding(stream_idx, h_est) # calculating the svd precoder
 
         h_est_reshaped = tf.transpose(h_est, [0, 1, 3, 5, 6, 2, 4])
         h_eff = tf.matmul(h_est_reshaped, v)
 
         if self.precoder == 'SVD':
             h_eff = tf.matmul(u_h, h_eff)
+        elif self.precoder == 'BD':
+            h_eff = h_eff
 
         return h_eff
 
@@ -240,6 +299,76 @@ class rankAdaptation(Layer):
 
         return v, u_h
     
+    def generate_bd_precoding(self, num_streams, h):
+
+        num_tx_ant = h.shape[-3]
+        num_streams = num_streams
+        assert num_streams <= num_tx_ant, "Number of stream should not exceed number of antennas"
+
+        # h has shape
+        # [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
+
+        # Transformations to bring h in the desired shapes
+
+        # Transpose h:
+        # [num_tx, num_rx, num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size, batch_size]
+        h_pc = tf.transpose(h, [3, 1, 2, 4, 5, 6, 0])
+
+        # Flatten dims 2,3:
+        # [num_tx, num_rx_per_tx * num_rx_ant, num_tx_ant, num_ofdm_symbols, fft_size, batch_size]
+        h_pc_desired = flatten_dims(h_pc, 2, axis=1)
+
+        # Transpose:
+        # [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx, num_tx_ant]
+        h_pc_desired = tf.transpose(h_pc_desired, [5, 0, 3, 4, 1, 2])
+        h_pc_desired = tf.cast(h_pc_desired, self._dtype)
+
+        num_user = int((h_pc_desired.shape[-2] - self.num_BS_Ant)  / self.num_UE_Ant) + 1
+        # num_user = num_user 
+
+        v_all = []
+        u_all = []
+        for k in range(num_user):
+            # Step 1: block diagonalization to minimize MUI
+            if k == 0:
+                ue_indices = np.arange(self.num_BS_Ant)
+                ue_indices_comp = [np.arange(h_pc_desired.shape[-2])[i] for i in range(h_pc_desired.shape[-2]) if i not in ue_indices]
+                num_rx_ant = ue_indices.shape[0]
+            else:
+                ue_indices = np.arange((k-1)*self.num_UE_Ant  + self.num_BS_Ant, k*self.num_UE_Ant + self.num_BS_Ant)
+                ue_indices_comp = [np.arange(h_pc_desired.shape[-2])[i] for i in range(h_pc_desired.shape[-2]) if i not in ue_indices]
+                num_rx_ant = ue_indices.shape[0]
+            H_t = tf.gather(h_pc_desired, indices=ue_indices_comp, axis=-2)  # [..., total_rx_ant-num_rx_ant, num_tx_ant]
+            s, u, v = tf.linalg.svd(H_t, compute_uv=True, full_matrices=True)
+            # Make the signs of eigen vectors consistent
+            v = tf.sign(v[..., :1, :]) * v
+            # null space bases for use k
+            v_c = v[..., -num_rx_ant:]  # [..., num_tx_ant, num_rx_ant]
+            # effective channel for user k
+            H_k = tf.gather(h_pc_desired, indices=ue_indices, axis=-2)  # [..., num_rx_ant, num_tx_ant]
+            H_eff = tf.linalg.matmul(H_k, v_c)  # [..., num_rx_ant, num_rx_ant]
+
+            # Step 2: compute SVD for individual user
+            s2, u2, v2 = tf.linalg.svd(H_eff, compute_uv=True, full_matrices=True)
+            
+            w = tf.linalg.adjoint(tf.sign(v2[..., :1, :]) * u2)
+            w = w[..., :num_streams, :]
+            u_all.append(w)
+            
+            # Make the signs of eigen vectors consistent
+            v2 = tf.sign(v2[..., :1, :]) * v2
+            # rank adaptation
+            v2 = v2[..., :num_streams]
+            ss = tf.linalg.diag(tf.cast(1.0 / s2[..., :num_streams], tf.complex64))
+            v2 = tf.linalg.matmul(v2, ss)
+            v_eff = tf.linalg.matmul(v_c, v2)  # [..., num_tx_ant, num_rx_ant]
+            v_all.append(v_eff)
+
+        # combine v_eff for all users
+        v_bd = tf.concat(v_all, axis=-1)  # [..., num_tx_ant, num_streams_per_tx]
+        u_bd = tf.concat(u_all, axis=-1)  # [..., num_tx_ant, num_streams_per_tx]
+        return v_bd, u_bd
+
     def compute_sinr(self, h_eff, mmse_inv, n_var):
         N_s = h_eff.shape[-1]
         sinr_list = []
@@ -294,12 +423,11 @@ class rankAdaptation(Layer):
 
         return eesm_avg_sinr
 
-    def cal_n_var(self, h_eff):
+    def cal_n_var(self, h_eff, snr_linear):
         
         prod = tf.matmul(h_eff, h_eff, adjoint_b=True)
         sig_pow = np.abs(np.mean(np.trace(prod, axis1=-2, axis2=-1)))
 
-
-        n_var = self.snr_linear / sig_pow
+        n_var = sig_pow / snr_linear
 
         return n_var

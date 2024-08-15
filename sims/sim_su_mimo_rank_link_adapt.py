@@ -29,7 +29,7 @@ if __name__ == "__main__":
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "ns3/channels/"
+    cfg.ns3_folder = "ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
@@ -47,7 +47,7 @@ if __name__ == "__main__":
     cfg.rank_adapt = True
     cfg.link_adapt = True
     
-    cfg.precoding_method = "SVD"
+    cfg.precoding_method = "ZF"
     rst_svd = sim_su_mimo_all(cfg)
     ber[0] = rst_svd[0]
     ldpc_ber[0] = rst_svd[1]
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     cfg.modulation_order = 2
     cfg.code_rate = 0.5
 
-    cfg.precoding_method = "SVD"
+    cfg.precoding_method = "ZF"
     rst_svd = sim_su_mimo_all(cfg)
     ber[1] = rst_svd[0]
     ldpc_ber[1] = rst_svd[1]
@@ -78,7 +78,7 @@ if __name__ == "__main__":
     cfg.modulation_order = 6
     cfg.code_rate = 0.5
 
-    cfg.precoding_method = "SVD"
+    cfg.precoding_method = "ZF"
     rst_svd = sim_su_mimo_all(cfg)
     ber[2] = rst_svd[0]
     ldpc_ber[2] = rst_svd[1]

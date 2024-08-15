@@ -14,9 +14,9 @@ from sionna.mapping import Mapper, Demapper
 from sionna.utils import BinarySource, ebnodb2no
 from sionna.utils.metrics import compute_ber, compute_bler
 
-from dmimo.config import Ns3Config, SimConfig
+from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
-from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder
+from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
@@ -35,8 +35,8 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
     num_ue_ant = dmimo_chans.ns3_config.num_ue_ant
     if cfg.ue_indices is None:
-        num_ue = cfg.num_tx_streams // num_ue_ant
-        num_rxs_ant = cfg.num_tx_streams
+        num_ue = cfg.num_tx_ue_sel + 2 # counting the BS as 2 UEs
+        num_rxs_ant = num_ue * num_ue_ant
     else:
         num_rxs_ant = np.sum([len(val) for val in cfg.ue_indices])
         num_ue = num_rxs_ant // num_ue_ant
@@ -50,7 +50,7 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
 
     # Use 4 UEs with BS (12 antennas)
     # A 4-antennas basestation is regarded as the combination of two 2-antenna UEs
-    num_streams_per_tx = cfg.num_tx_streams  # num_ue * num_ue_ant
+    num_streams_per_tx = num_ue * cfg.ue_ranks  # num_ue * num_ue_ant
 
     # batch processing for all slots in phase 2
     batch_size = cfg.num_slots_p2
@@ -156,6 +156,11 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
                                                            slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                            cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
+        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
+
+    if cfg.return_estimated_channel:
+        return h_freq_csi, rx_snr_db
+    shape_tmp = h_freq_csi.shape
 
     # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
     h_freq_csi = h_freq_csi[:, :, :num_rxs_ant, :, :, :, :]
@@ -215,6 +220,10 @@ def mu_mimo_transmission(cfg: SimConfig, dmimo_chans: dMIMOChannels):
     goodbits = (1.0 - ber) * num_bits_per_frame
     userbits = (1.0 - bler) * num_bits_per_frame
 
+    if cfg.rank_adapt and cfg.link_adapt:
+        h_freq_csi_reshaped = tf.reshape(h_freq_csi, shape_tmp)
+        do_rank_link_adaptation(cfg, dmimo_chans, h_freq_csi_reshaped, rx_snr_db, cfg.first_slot_idx)
+
     return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
 
@@ -235,10 +244,86 @@ def sim_mu_mimo(cfg: SimConfig):
         tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
         ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
-    # TODO: add link/rank adaption
+    if cfg.rank_adapt and cfg.link_adapt:
+        do_rank_link_adaptation(cfg, dmimo_chans)
 
     # SU-MIMO transmission
     return mu_mimo_transmission(cfg, dmimo_chans)
+
+
+
+def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_slot_idx=None):
+
+    assert cfg.start_slot_idx >= cfg.csi_delay
+
+    if start_slot_idx == None:
+        cfg.first_slot_idx = cfg.start_slot_idx
+    else:
+        cfg.first_slot_idx = start_slot_idx
+
+    if np.any(h_est == None) or np.any(rx_snr_db == None):
+        
+        cfg.return_estimated_channel = True
+        h_est, rx_snr_db = mu_mimo_transmission(cfg, dmimo_chans)
+        cfg.return_estimated_channel = False
+
+    # Rank adaptation
+    rank_adaptation = rankAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant, architecture='MU-MIMO',
+                                        snrdb=rx_snr_db, fft_size=cfg.fft_size, precoder='BD', ue_indices=cfg.ue_indices)
+
+    rank_feedback_report = rank_adaptation(h_est, channel_type='dMIMO')
+
+    if rank_adaptation.use_mmse_eesm_method:
+        rank = rank_feedback_report[0]
+        rate = rank_feedback_report[1]
+
+        cfg.num_tx_streams = int(rank)*(cfg.num_rx_ue_sel+1)
+        cfg.ue_ranks = rank
+        
+        print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
+        print("\n", "rate per user (MU-MIMO) = ", rate, "\n")
+
+    else:
+        rank = rank_feedback_report
+        rate = []
+
+        cfg.num_tx_streams = int(rank)
+
+        print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
+
+    # Link adaptation
+    data_sym_position = np.arange(0, 14)
+    link_adaptation = linkAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant, architecture='MU-MIMO',
+                                        snrdb=rx_snr_db, nfft=cfg.fft_size, N_s=rank, data_sym_position=data_sym_position, lookup_table_size='short')
+    
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO')
+
+    if link_adaptation.use_mmse_eesm_method:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = mcs_feedback_report[1]
+
+        # Majority vote for MCS selection for now
+        values, counts = np.unique(qam_order_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        cfg.modulation_order = int(most_frequent_value)
+
+        values, counts = np.unique(code_rate_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        cfg.code_rate = most_frequent_value
+
+        print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
+        print("\n", "Code-rate per stream per user (MU-MIMO) = ", cfg.code_rate, "\n")
+    else:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = []
+
+        cfg.modulation_order = int(np.min(qam_order_arr))
+
+        print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
+    
+    return rank, rate, qam_order_arr, code_rate_arr
+
+
 
 
 def sim_mu_mimo_all(cfg: SimConfig):
