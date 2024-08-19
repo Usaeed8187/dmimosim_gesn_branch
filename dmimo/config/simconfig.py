@@ -1,34 +1,33 @@
 # Configuration for system simulation
 
-from .sysconfig import CarrierConfig
+from .sysconfig import CarrierConfig, MCSConfig
 
 
-class SimConfig(CarrierConfig):
+class SimConfig(CarrierConfig, MCSConfig):
 
     def __init__(self, **kwargs):
         self._name = "Simulation Configuration"
         self._enable_ue_selection = True        # Enable Tx/Rx UE selection
         self._num_tx_ue_sel = 8                 # number of Tx UE selected
         self._num_rx_ue_sel = 8                 # number of Rx UE selected
-        self._modulation_order = 2              # modulation order for non-adaptive case
-        self._code_rate = 0.5                   # LDPC code rate
-        self._num_tx_streams = 2                # total number of transmitter streams
         self._start_slot_idx = 15               # start slot index for simulation
         self._csi_delay = 2                     # CSI estimation delay
         self._first_slot_idx = 0                # first slot index for phase 2 in simulation
         self._num_slots_p1 = 1                  # number of slots in phase 1/3
         self._num_slots_p2 = 3                  # number of slots in phase 2
-        self._total_slots = 20                  # total slots of ns-3 channels
+        self._total_slots = 50                  # total slots of ns-3 channels
         self._ns3_folder = "../ns3/channels"    # data folder for ns-3 channels
         self._precoding_method = "ZF"           # precoding method
-        self._ue_indices = None                 # UE antennas indices for precoding
-        self._ue_ranks = None                   # UE ranks for precoding
+        self._ue_indices = None                 # UE antennas indices for MU-MIMO precoding
+        self._ue_ranks = None                   # UE ranks for MU-MIMO precoding
         self._perfect_csi = False               # Use perfect CSI for debugging
         self._csi_prediction = False            # Use CSI prediction
         self._sto_sigma = 0.0                   # standard deviation of STO in nanoseconds
         self._cfo_sigma = 0.0                   # standard deviation of CFO in Hz
         self._rank_adapt = True                 # turn on rank adaptation
         self._link_adapt = True                 # turn on link adaptation
+        self._enable_txsquad = False            # enable simulation of TxSquad transmission
+        self._enable_rxsquad = False            # enable simulation of TxSquad transmission
         self._return_estimated_channel = False  # return estimated channel without doing any symbol detection
         super().__init__(**kwargs)
 
@@ -55,30 +54,6 @@ class SimConfig(CarrierConfig):
     @num_rx_ue_sel.setter
     def num_rx_ue_sel(self, val):
         self._num_rx_ue_sel = val
-
-    @property
-    def modulation_order(self):
-        return self._modulation_order
-
-    @modulation_order.setter
-    def modulation_order(self, val):
-        self._modulation_order = val
-
-    @property
-    def code_rate(self):
-        return self._code_rate
-
-    @code_rate.setter
-    def code_rate(self, val):
-        self._code_rate = val
-
-    @property
-    def num_tx_streams(self):
-        return self._num_tx_streams
-
-    @num_tx_streams.setter
-    def num_tx_streams(self, val):
-        self._num_tx_streams = val
 
     @property
     def start_slot_idx(self):
@@ -207,6 +182,22 @@ class SimConfig(CarrierConfig):
     @link_adapt.setter
     def link_adapt(self, val):
         self._link_adapt = val
+
+    @property
+    def enable_txsquad(self):
+        return self._enable_txsquad
+
+    @enable_txsquad.setter
+    def enable_txsquad(self, val):
+        self._enable_txsquad = val
+
+    @property
+    def enable_rxsquad(self):
+        return self._enable_rxsquad
+
+    @enable_rxsquad.setter
+    def enable_rxsquad(self, val):
+        self._enable_rxsquad = val
 
     @property
     def return_estimated_channel(self):

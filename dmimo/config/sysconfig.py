@@ -86,6 +86,7 @@ class CarrierConfig(Config):
         self._cyclic_prefix_len = 64        # cyclic prefix length
         self._subcarrier_spacing = 15e3     # subcarrier spacing in Hz
         self._slot_duration = 1e-3          # slot duration in seconds
+        self._symbols_per_slot = 14         # number of OFDM symbols per slot
         super().__init__(**kwargs)
 
     @property
@@ -121,3 +122,63 @@ class CarrierConfig(Config):
     @slot_duration.setter
     def slot_duration(self, val):
         self._slot_duration = val
+
+    @property
+    def symbols_per_slot(self):
+        return self._symbols_per_slot
+
+    @symbols_per_slot.setter
+    def symbols_per_slot(self, val):
+        self._symbols_per_slot = val
+
+
+class MCSConfig(Config):
+
+    def __init__(self, **kwargs):
+        self._name = "MCS Configuration"
+        self._num_tx_streams = 2        # total number of transmitter streams
+        self._modulation_order = 2      # modulation order(s) for non-adaptive case
+        self._code_rate = 0.5           # LDPC code rate
+        self._ldpc_k = 0                # LDPC info length
+        self._ldpc_n = 0                # LDPC codeword length
+        super().__init__(**kwargs)
+
+    @property
+    def num_tx_streams(self):
+        return self._num_tx_streams
+
+    @num_tx_streams.setter
+    def num_tx_streams(self, val):
+        self._num_tx_streams = val
+
+    @property
+    def modulation_order(self):
+        return self._modulation_order
+
+    @modulation_order.setter
+    def modulation_order(self, val):
+        self._modulation_order = val
+
+    @property
+    def code_rate(self):
+        return self._code_rate
+
+    @code_rate.setter
+    def code_rate(self, val):
+        self._code_rate = val
+
+    @property
+    def ldpc_k(self):
+        return self._ldpc_k
+
+    @ldpc_k.setter
+    def ldpc_k(self, val):
+        self._ldpc_k = val
+
+    @property
+    def ldpc_n(self):
+        return self._ldpc_n
+
+    @ldpc_n.setter
+    def ldpc_n(self, val):
+        self._ldpc_n = val

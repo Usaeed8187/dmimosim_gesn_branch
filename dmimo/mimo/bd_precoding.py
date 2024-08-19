@@ -1,4 +1,4 @@
-# Precoder for dMIMO channels
+# Block-diagonal (BD) Precoder for dMIMO channels
 import numpy as np
 import tensorflow as tf
 
