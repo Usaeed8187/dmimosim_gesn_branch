@@ -92,8 +92,8 @@ class SVDPrecoder(Layer):
 
         # SVD precoding
         x_precoded, g = sumimo_svd_precoder(x_precoded,
-                                           h_pc_desired,
-                                           return_precoding_matrix=True)
+                                            h_pc_desired,
+                                            return_precoding_matrix=True)
 
         # Transpose output to desired shape:
         # [batch_size, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]

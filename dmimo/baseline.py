@@ -139,7 +139,7 @@ def sim_baseline(cfg: SimConfig):
     x = mapper(d)
     x_rg = rg_mapper(x)
 
-    if cfg.perfect_csi:
+    if cfg.perfect_csi is True:
         # Perfect channel estimation
         h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
         # add some noise to simulate channel estimation errors

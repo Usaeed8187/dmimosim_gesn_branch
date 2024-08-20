@@ -45,6 +45,8 @@ def sumimo_svd_equalizer(y, h, num_streams, normalize=True):
     SU-MIMO equalizer for SVD precoder
     :param y: received signals
     :param h: channel coefficients
+    :param num_streams: total number of data streams
+    :param normalize: normalize stream power
     :return: equalized signals
     """
 
