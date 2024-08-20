@@ -5,44 +5,47 @@ System simulator for the dMIMO project, using generated channels
 from [ns-3 simulator](https://www.nsnam.org/) 
 and components from [Sionna](https://nvlabs.github.io/sionna/). 
 
-The core simulator library is located in the "dmimo" folder,
-the "sims" folder contains the top-level simulation scripts 
+The core simulator library is located in the "**dmimo**" folder,
+the "**sims**" folder contains the top-level simulation scripts 
 for baseline and SU-MIMO scenarios. Channel coefficients generated
-from ns-3 simulator are stored in the "ns3" folder, and simulation 
-results are saved in the "results" folder.
+from ns-3 simulator are stored in the "**ns3**" folder, and simulation 
+results are saved in the "**results**" folder.
 
-Additional documentation can be found in the "docs" folder, including
+Additional documentation can be found in the "**docs**" folder, including
 description of core component modules and instruction for setting up
 the Sionna simulator on Linux systems.
 
 ## Getting started
 
-Setup Git SSH command from Linux terminal (see https://code.vt.edu/help/user/ssh)
+Setup Git SSH command from Linux terminal (see https://code.vt.edu/help/user/ssh).
 ```
 export GIT_SSH_COMMAND="ssh -i ~/.ssh/id_ed25519"
 ```
-Clone the **main** branch of this repository
+Clone the **main** branch of this repository.
 ```
 cd <workspace_dir>
 git clone git@code.vt.edu:yiliang/dmimosim
 cd dmimosim
 ```
-Convert the ns-3 channel data to the optimized format.
-See the section below for generating the ns-3 channel data.
+Convert the ns-3 channel data to the optimized format (See the section below 
+for generating the ns-3 channel data). The conversion step is needed only once 
+for each generated channel folder.  
 ```
 cd ns3
-python convert_ns3_channels.py <ns3_output_folder> channels
+python convert_ns3_channels.py <ns3_output_folder> <channels_folder>
 ```
-Activate the Conda environment
+Activate the Anaconda environment.
 ```
 conda activate sionna
 ```
-Run the simulation scripts
+Run the simulation scripts.
 ```
 cd ../sims
 python sim_baseline.py
 python sim_mu_mimo.py
 ```
+Finally, check the simulation results in the "results/" folder.
+
 
 
 ## Channel data generation
