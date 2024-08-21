@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from dmimo.config import SimConfig
-from dmimo.su_mimo import sim_su_mimo_all
+from dmimo.su_mimo_adapt import sim_su_mimo_all
 
 gpu_num = 1  # Use "" to use the CPU, Use 0 to select first GPU
 os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
@@ -29,7 +29,7 @@ if __name__ == "__main__":
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "ns3/channels_medium_mobility/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)

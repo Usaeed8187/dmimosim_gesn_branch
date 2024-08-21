@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from dmimo.config import SimConfig
-from dmimo.mu_mimo import sim_mu_mimo_all
+from dmimo.mu_mimo_adapt import sim_mu_mimo_all
 
 
 # Main function
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.ns3_folder = "ns3/channels_medium_mobility/"
+    cfg.ns3_folder = "../ns3/channels_medium_mobility/"
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
