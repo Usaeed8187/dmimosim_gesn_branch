@@ -1,16 +1,31 @@
 """
 Simulation of baseline scenario with ns-3 channels
 
-This scripts should be called from the "tests" folder
+This scripts should be called from the "sims" folder
 """
 
-# add system folder for the dmimo library
 import sys
 import os
-sys.path.append(os.path.join('..'))
-
-import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+gpu_num = 0  # Use "" to use the CPU, Use 0 to select first GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['DRJIT_LIBLLVM_PATH'] = '/usr/lib/llvm/16/lib64/libLLVM.so'
+
+# Configure to use only a single GPU and allocate only as much memory as needed
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        tf.config.experimental.set_memory_growth(gpus[0], True)
+    except RuntimeError as e:
+        print(e)
+tf.get_logger().setLevel('ERROR')
+
+# add system folder for the dmimo library
+sys.path.append(os.path.join('..'))
 
 from dmimo.config import SimConfig
 from dmimo.baseline import sim_baseline_all
@@ -21,7 +36,7 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 30        # total number of slots in ns-3 channels
+    cfg.total_slots = 35        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 2           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz

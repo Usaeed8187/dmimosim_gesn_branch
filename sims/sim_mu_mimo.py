@@ -1,16 +1,31 @@
 """
 Simulation of MU-MIMO scenario with ns-3 channels
 
-This scripts should be called from the "tests" folder
+This scripts should be called from the "sims" folder
 """
 
-# add system folder for the dmimo library
 import sys
 import os
-sys.path.append(os.path.join('..'))
-
-import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+gpu_num = 0  # Use "" to use the CPU, Use 0 to select first GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['DRJIT_LIBLLVM_PATH'] = '/usr/lib/llvm/16/lib64/libLLVM.so'
+
+# Configure to use only a single GPU and allocate only as much memory as needed
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        tf.config.experimental.set_memory_growth(gpus[0], True)
+    except RuntimeError as e:
+        print(e)
+tf.get_logger().setLevel('ERROR')
+
+# add system folder for the dmimo library
+sys.path.append(os.path.join('..'))
 
 from dmimo.config import SimConfig
 from dmimo.mu_mimo import sim_mu_mimo_all
@@ -33,7 +48,6 @@ if __name__ == "__main__":
     print("Using channels in {}".format(folder_name))
 
     for num_tx_streams in [6, 8, 10, 12]:
-        # 6/7/8/10/12 equal to total number of streams
         # manual rank adaptation (assuming 2 antennas per UE)
         cfg.num_tx_streams = num_tx_streams
         cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params

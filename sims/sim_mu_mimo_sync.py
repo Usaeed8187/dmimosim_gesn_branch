@@ -1,16 +1,31 @@
 """
 Simulation of MU-MIMO scenario with ns-3 channels
 
-This scripts should be called from the "tests" folder
+This scripts should be called from the "sims" folder
 """
 
-# add system folder for the dmimo library
 import sys
 import os
-sys.path.append(os.path.join('..'))
-
-import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
+import matplotlib.pyplot as plt
+
+gpu_num = 0  # Use "" to use the CPU, Use 0 to select first GPU
+os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['DRJIT_LIBLLVM_PATH'] = '/usr/lib/llvm/16/lib64/libLLVM.so'
+
+# Configure to use only a single GPU and allocate only as much memory as needed
+gpus = tf.config.list_physical_devices('GPU')
+if gpus:
+    try:
+        tf.config.experimental.set_memory_growth(gpus[0], True)
+    except RuntimeError as e:
+        print(e)
+tf.get_logger().setLevel('ERROR')
+
+# add system folder for the dmimo library
+sys.path.append(os.path.join('..'))
 
 from dmimo.config import SimConfig
 from dmimo.mu_mimo import sim_mu_mimo_all
@@ -21,6 +36,7 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
+    cfg.num_tx_streams = 6      # total number of streams
     cfg.total_slots = 35        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
@@ -32,8 +48,8 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    cfg.num_tx_streams = 8     # 6/8/12 equal to total number of streams
-    cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2  # TODO consolidate params
+    # manual rank adaptation (assuming 2 antennas per UE)
+    cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2
     cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
     cfg.ue_ranks = [2]  # same rank for all UEs
 
