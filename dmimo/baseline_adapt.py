@@ -255,7 +255,7 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
     link_adaptation = linkAdaptation(network_config.num_bs_ant, network_config.num_ue_ant, architecture='SU-MIMO',
                                         snrdb=rx_snr_db, nfft=cfg.fft_size, N_s=rank, data_sym_position=data_sym_position, lookup_table_size='long')
     
-    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO', architecture='SU-MIMO')
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO')
 
     if link_adaptation.use_mmse_eesm_method:
         qam_order_arr = mcs_feedback_report[0]
