@@ -2,7 +2,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import Model
 
-from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
+from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator
+from sionna.ofdm import LMMSEEqualizer, MMSEPICDetector
 from sionna.mimo import StreamManagement
 
 from sionna.fec.ldpc.encoding import LDPC5GEncoder
@@ -13,33 +14,33 @@ from sionna.mapping import Mapper, Demapper
 from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import SimConfig
-from dmimo.channel import lmmse_channel_estimation
-from dmimo.mimo import ZFPrecoder
 
 
-class TxSquad(Model):
+class RxSquad(Model):
     """
-    Implement Tx Squad data transmission in phase 1 (P1)
+    Implement Rx Squad data transmission in phase 3 (P3)
+
+    For the Rx squad uplink, OFDMA is required for more than 2 UEs. Here we simulate
+    the average performance for each pair of UEs uplink across all subcarriers, i.e.,
+    two UEs are transmitting simultaneously to the BS with 4x4 MIMO channels.
+
     """
 
-    def __init__(self, cfg: SimConfig, txs_bits_per_frame: int, **kwargs):
+    def __init__(self, cfg: SimConfig, rxs_bits_per_frame: int, **kwargs):
         """
-        Initialize TxSquad simulation
+        Initialize RxSquad simulation
 
         :param cfg: simulation settings
-        :param txs_bits_per_frame: number of bits per subframe/slot for SU-MIMO operation
+        :param rxs_bits_per_frame: total number of bits per subframe/slot for all UEs
         """
         super().__init__(kwargs)
 
         self.cfg = cfg
         self.batch_size = cfg.num_slots_p1  # batch processing for all slots in phase 1
 
-        # Define the number of UE and BS antennas.
+        # The number of transmitted streams is equal to the number of BS antennas
         num_bs_ant = 4
-        num_ue_ant = 2
-
-        # The number of transmitted streams is equal to the number of UE antennas
-        self.num_streams_per_tx = num_ue_ant
+        self.num_streams_per_tx = num_bs_ant
 
         # Create an RX-TX association matrix
         # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
@@ -81,8 +82,8 @@ class TxSquad(Model):
                           pilot_pattern="kronecker",
                           pilot_ofdm_symbol_indices=[2, 11])
 
-        self.coderate = 11/12  # fixed code rate for current design
-        num_bits_per_stream = np.ceil(txs_bits_per_frame * (cfg.num_slots_p2 / cfg.num_slots_p1) / self.num_streams_per_tx)
+        self.coderate = 5/6  # fixed code rate for current design
+        num_bits_per_stream = np.ceil(rxs_bits_per_frame * (cfg.num_slots_p2 / cfg.num_slots_p1) / self.num_streams_per_tx)
         bits_per_symbol = int(np.ceil(num_bits_per_stream / self.coderate / rg.num_data_symbols.numpy()))
         self.num_bits_per_symbol = max(2, bits_per_symbol)
         if self.num_bits_per_symbol % 2 != 0:
@@ -93,7 +94,7 @@ class TxSquad(Model):
         self.num_codewords = self.num_bits_per_symbol  # number of codewords per frame
         self.ldpc_n = rg.num_data_symbols.numpy()      # Number of coded bits
         self.ldpc_k = int(self.ldpc_n * self.coderate)  # Number of information bits
-        self.ldpc_padding = self.num_bits_per_frame * cfg.num_slots_p1 - txs_bits_per_frame * cfg.num_slots_p2
+        self.ldpc_padding = self.num_bits_per_frame * cfg.num_slots_p1 - rxs_bits_per_frame * cfg.num_slots_p2
 
         # The encoder maps information bits to coded bits
         self.encoder = LDPC5GEncoder(self.ldpc_k, self.ldpc_n)
@@ -109,9 +110,6 @@ class TxSquad(Model):
         self.rg_mapper = ResourceGridMapper(rg)
         self.rg_csi_mapper = ResourceGridMapper(self.rg_csi)
 
-        # The zero forcing precoder precodes the transmitter stream towards the intended antennas
-        self.zf_precoder = ZFPrecoder(rg, sm, return_effective_channel=True)
-
         # The LS channel estimator will provide channel estimates and error variances
         self.ls_estimator = LSChannelEstimator(rg, interpolation_type="lin")
 
@@ -121,14 +119,19 @@ class TxSquad(Model):
         # The demapper produces LLR for all coded bits
         self.demapper = Demapper("maxlog", "qam", self.num_bits_per_symbol)
 
+        # The detector produces soft-decision output for all coded bits
+        self.detector = MMSEPICDetector("bit", rg, sm, constellation_type="qam",
+                                        num_bits_per_symbol=self.num_bits_per_symbol,
+                                        num_iter=2, hard_out=False)
+
         # The decoder provides hard-decisions on the information bits
         self.decoder = LDPC5GDecoder(self.encoder, hard_out=True)
 
-    def call(self, txs_chans, info_bits):
+    def call(self, rxs_chans, info_bits):
         """
-        Signal processing for TxSquad downlink transmission (P1)
+        Signal processing for RxSquad downlink transmission (P1)
 
-        :param txs_chans: TxSquad channels
+        :param rxs_chans: RxSquad channels
         :param info_bits: information bits
         :return: decoded bits, LDPC BER, LDPC BLER
         """
@@ -145,38 +148,29 @@ class TxSquad(Model):
 
         # QAM mapping on OFDM grid
         x = self.mapper(d)
+        # x_rg has shape [batch_size, num_tx, num_tx_streams, num_ofdm_syms, fft_size)
         x_rg = self.rg_mapper(x)
-
-        # Perfect channel estimation or LMMSE channel estimation for precoding
-        if self.cfg.perfect_csi:
-            h_freq_csi, rx_snr_db = txs_chans.load_channel(slot_idx=self.cfg.first_slot_idx, batch_size=self.batch_size)
-        else:
-            # LMMSE channel estimation
-            h_freq_csi, err_var_csi = lmmse_channel_estimation(txs_chans, self.rg_csi, slot_idx=self.cfg.first_slot_idx)
-
-        # Apply basic ZF precoder (optimized precoder will be added later)
-        x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
-
-        # apply dMIMO channels to the resource grid in the frequency domain.
-        y = txs_chans([x_precoded, self.cfg.first_slot_idx])
 
         # check all UEs
         ue_data = []
-        ue_ber = 1.0
-        ue_bler = 1.0
-        for ue_idx in range(self.cfg.num_tx_ue_sel):
-            # Received signal for current UE
-            y1 = y[:, :, 2*ue_idx:2*ue_idx+self.num_streams_per_tx]
+        ue_ber_avg, ue_bler_avg = 0.0, 0.0
+        ue_ber_max, ue_bler_max = 0.0, 0.0
+        for rx_ue_idx in range(0, self.cfg.num_rx_ue_sel, 2):
+
+            # apply dMIMO channels to the resource grid in the frequency domain
+            # only using the channel for the current UEs
+            tx_ant_mask = np.arange(2 * rx_ue_idx, 2 * rx_ue_idx + self.num_streams_per_tx)
+            y_rg = rxs_chans([x_rg, self.cfg.first_slot_idx, tx_ant_mask, None])
 
             # LS channel estimation with linear interpolation
             no = 1e-5  # tunable param
-            h_hat, err_var = self.ls_estimator([y1, no])
+            h_hat, err_var = self.ls_estimator([y_rg, no])
 
-            # LMMSE equalization and demapping
-            x_hat, no_eff = self.lmmse_equ([y1, h_hat, err_var, no])
-            llr = self.demapper([x_hat, no_eff])
+            prior = tf.zeros(d.shape)
+            det_out = self.detector((y_rg, h_hat, prior, err_var, no))
 
             # LLR interleaving
+            llr = tf.reshape(det_out, d.shape)
             llr = self.dintlvr(llr)
 
             # LDPC decoder
@@ -186,10 +180,13 @@ class TxSquad(Model):
             # Error statistics
             ber = compute_ber(b, dec_bits).numpy()
             bler = compute_bler(b, dec_bits).numpy()
-            if ber < ue_ber:
-                ue_ber = ber
-                ue_bler = bler
-                ue_data = dec_bits
+            ue_ber_avg += ber/self.cfg.num_rx_ue_sel
+            ue_bler_avg += bler/self.cfg.num_rx_ue_sel
+            if ber > ue_ber_max:
+                ue_ber_max = ber
+            if bler > ue_bler_max:
+                ue_bler_max = bler
+            ue_data = dec_bits
 
         # Remove padding bits
         if self.ldpc_padding > 0:
@@ -198,6 +195,4 @@ class TxSquad(Model):
         # restore original shape
         ue_data = tf.reshape(ue_data, (self.cfg.num_slots_p2, -1))
 
-        # To simplify simulation, we only return the results for the best case UE,
-        # we can return results for all UEs if more accurate error modeling is needed.
-        return ue_data, ue_ber, ue_bler
+        return ue_data, ue_ber_avg, ue_bler_avg, ue_ber_max, ue_bler_max

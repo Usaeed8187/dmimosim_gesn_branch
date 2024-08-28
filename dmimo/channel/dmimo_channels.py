@@ -15,6 +15,9 @@ from .ns3_channels import LoadNs3Channel
 
 
 class dMIMOChannels(Layer):
+    """
+    dMIMOChannels apply inputs the specific type of channels and generate received output signals.
+    """
 
     def __init__(self, config: Ns3Config, channel_type, resource_grid: ResourceGrid=None,
                  add_noise=True, normalize_channel=False, return_channel=False,
@@ -51,7 +54,11 @@ class dMIMOChannels(Layer):
     def call(self, inputs):
 
         # x: channel input samples, sidx: current slot index
-        x, sidx = inputs
+        if len(inputs) == 2:
+            x, sidx = inputs
+            tx_mask, rx_mask = None, None
+        else:
+            x, sidx, tx_mask, rx_mask = inputs
 
         # x has shape [batch_size, num_tx, num_tx_ant, num_ofdm_sym, fft_size]
         batch_size = tf.shape(x)[0]
@@ -59,21 +66,30 @@ class dMIMOChannels(Layer):
         # num_txs_ant = self._config.num_bs * self._config.num_bs_ant + self._config.num_txue * self._config.num_ue_ant
         # assert num_txs_ant == total_tx_ant, "Total number of transmit antennas of input and channel must match"
 
-        # load pre-generated channel
-        # h_freq shape: [batch_size, num_rx_ant, num_tx_ant, num_ofdm_sym, fft_size]
-        # snrdb shape: [batch_size, num_rx/num_tx, num_ofdm_sym]
+        # load pre-generated ns-3 channels
+        # h_freq shape: [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_sym, fft_size]
+        # snrdb shape: [batch_size, 1, num_rx/num_tx, num_ofdm_sym]
         h_freq, snrdb = self._load_channel(self._channel_type, slot_idx=sidx, batch_size=batch_size)
 
-        # prune channel coefficients if necessary
+        # Prune data and channel subcarriers according to the resource grid
         if self._rg and x.shape[-1] != h_freq.shape[-1]:
+            assert self._rg.num_effective_subcarriers <= x.shape[-1]
+            assert self._rg.num_effective_subcarriers <= h_freq.shape[-1]
             scidx = self._rg.effective_subcarrier_ind
             if x.shape[-1] != self._rg.num_effective_subcarriers:
                 x = tf.gather(x, scidx, axis=-1)
             if h_freq.shape[-1] != self._rg.num_effective_subcarriers:
                 h_freq = tf.gather(h_freq, scidx, axis=-1)
 
-        # apply channel to inputs
-        y = self._apply_channel([x, h_freq])  # [batch_size, num_rx, num_rx_ant, num_ofdm_sym, fft_size]
+        # Apply channel to inputs
+        if tx_mask is None and rx_mask is None:
+            y = self._apply_channel([x, h_freq])  # [batch_size, num_rx, num_rx_ant, num_ofdm_sym, fft_size]
+        else:
+            if tx_mask is not None:
+                h_freq = tf.gather(h_freq, tx_mask, axis=4)
+                y = self._apply_channel([x, h_freq])
+            if rx_mask is not None:
+                y = tf.gather(y, rx_mask, axis=1)
 
         # Add thermal noise
         if self._add_noise:

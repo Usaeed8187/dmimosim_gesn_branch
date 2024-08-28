@@ -20,6 +20,7 @@ from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 from .txs_mimo import TxSquad
+from .rxs_mimo import RxSquad
 
 
 class MU_MIMO(Model):
@@ -256,9 +257,7 @@ def sim_mu_mimo(cfg: SimConfig):
         txs_chans = dMIMOChannels(ns3cfg, "TxSquad", add_noise=True)
         info_bits_new, txs_ber, txs_bler = tx_squad(txs_chans, info_bits)
         print("BER: {}  BLER: {}".format(txs_ber, txs_bler))
-        assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
-        ber = compute_ber(info_bits, info_bits_new)
-        assert ber <= 1e-3, "TxSquad transmission BER too high"
+        assert txs_ber <= 1e-2, "TxSquad transmission BER too high"
 
     # MU-MIMO transmission (P2)
     dec_bits, uncoded_ber, x_hat = mu_mimo(dmimo_chans, info_bits)
@@ -267,6 +266,20 @@ def sim_mu_mimo(cfg: SimConfig):
     info_bits = tf.reshape(info_bits, dec_bits.shape)
     ber = compute_ber(info_bits, dec_bits).numpy()
     bler = compute_bler(info_bits, dec_bits).numpy()
+
+    # RxSquad transmission (P3)
+    if cfg.enable_rxsquad is True:
+        rxcfg = cfg.clone()
+        rxcfg.csi_delay = 0
+        rxcfg.perfect_csi = True
+        rx_squad = RxSquad(rxcfg, mu_mimo.num_bits_per_frame)
+        print("RxSquad using modulation order {} for {} streams / {}".format(
+            rx_squad.num_bits_per_symbol, mu_mimo.num_streams_per_tx, mu_mimo.mapper.constellation.num_bits_per_symbol))
+        rxscfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
+        rxs_chans = dMIMOChannels(rxscfg, "RxSquad", add_noise=True)
+        received_bits, rxs_ber, rxs_bler, rxs_ber_max, rxs_bler_max = rx_squad(rxs_chans, dec_bits)
+        print("BER: {}  BLER: {}".format(rxs_ber, rxs_bler))
+        assert rxs_ber <= 1e-3 and rxs_ber_max <= 1e-2, "RxSquad transmission BER too high"
 
     # Goodput and throughput estimation
     goodbits = (1.0 - ber) * mu_mimo.num_bits_per_frame

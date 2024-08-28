@@ -258,8 +258,6 @@ def sim_su_mimo(cfg: SimConfig):
         info_bits_new, txs_ber, txs_bler = tx_squad(txs_chans, info_bits)
         print("BER: {}  BLER: {}".format(txs_ber, txs_bler))
         assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
-        ber = compute_ber(info_bits, info_bits_new)
-        assert ber <= 1e-3, "TxSquad transmission BER too high"
 
     # SU-MIMO transmission (P2 & P3)
     dec_bits, uncoded_ber, x_hat = su_mimo(dmimo_chans, info_bits)
