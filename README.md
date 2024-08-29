@@ -73,11 +73,11 @@ python main.py --seed 3007 --scenario V2V-Urban --small_scale_fading --num_subfr
  --intra_sq2_rw_speed_km_h=0.3 --buildings_file 1narrow.txt
 ```
 
-## Development status
+## Development
 
-The codes are currently unstable in the initial development phase.
+The "**main**" branch is the latest development branch, while the "**release**" branches will be 
+the latest stable version.
 
-
-
+Python modules should follow the [PEP 8 Style Guide for Python Code](https://peps.python.org/pep-0008/). 
 
 
