@@ -3,6 +3,7 @@
 from .sysconfig import CarrierConfig
 
 
+# TODO: Merge and use SimConfig instead
 class NcjtSimConfig(CarrierConfig):
 
     def __init__(self, **kwargs):
@@ -92,14 +93,6 @@ class NcjtSimConfig(CarrierConfig):
         self._BsTxPwrdB = val
 
     @property
-    def BsTxPower(self):
-        return self._BsTxPower
-
-    @BsTxPower.setter
-    def BsTxPower(self, val):
-        self._BsTxPower = val
-
-    @property
     def num_subframes(self):
         return self._num_subframes
 
@@ -175,7 +168,7 @@ class NcjtSimConfig(CarrierConfig):
     def num_RxUe(self):
         return self._num_RxUe
 
-    @num_RxBs.setter
+    @num_RxUe.setter
     def num_RxUe(self, val):
         self._num_RxUe = val
 
@@ -242,4 +235,3 @@ class NcjtSimConfig(CarrierConfig):
     @perSC_SNR.setter
     def perSC_SNR(self, val):
         self._perSC_SNR = val
-

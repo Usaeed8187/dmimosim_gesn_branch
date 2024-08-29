@@ -1,7 +1,7 @@
 """
-Simulation of SU-MIMO scenario with ns-3 channels
+Simulation of NCJT scenario with ns-3 channels
 
-This scripts should be called from the "tests" folder
+This scripts should be called from the "sims" folder
 """
 
 # add system folder for the dmimo library
@@ -49,7 +49,7 @@ if __name__ == "__main__":
     BER_list = np.zeros((len(num_TxUes_list),len(num_RxUes_list),num_trials))
     for i_num_TxUes , num_TxUes in enumerate(num_TxUes_list):
         cfg.num_TxUe = num_TxUes
-        for i_num_RxUes , num_RxUes in enumerate(num_RxUes_list):
+        for i_num_RxUes, num_RxUes in enumerate(num_RxUes_list):
             cfg.num_RxUe = num_RxUes
             print(f'Simulating {num_TxUes} Tx UEs and {num_RxUes} Rx UEs')
 
