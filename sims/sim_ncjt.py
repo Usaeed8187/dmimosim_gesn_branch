@@ -53,14 +53,12 @@ if __name__ == "__main__":
             cfg.num_RxUe = num_RxUes
             print(f'Simulating {num_TxUes} Tx UEs and {num_RxUes} Rx UEs')
 
-            h_dmimo = None
             for i_trial in range(num_trials):
-                avg_ber, h_dmimo = ncjt_sim_all_phases(cfg,h_dmimo)
+                avg_ber = ncjt_sim_all_phases(cfg)
                 BER_list[i_num_TxUes,i_num_RxUes,i_trial] = avg_ber
             pass
     BER_list = np.mean(BER_list, axis=-1)
-    # if BsTxPwrDiffdB != 0: folder = f'results/moreTxUesBsPwr{BsTxPwrDiffdB}dB/'
-    # else:  
+
     folder = '../results/NCJT_Alamouti_QTR3/'
     child = 'QPSK/' if cfg.num_bits_per_symbol_phase2==2 else f'{2**cfg.num_bits_per_symbol_phase2}QAM/'
     child = child + ('ExactSNR/' if cfg.perSC_SNR else 'noSNR/')

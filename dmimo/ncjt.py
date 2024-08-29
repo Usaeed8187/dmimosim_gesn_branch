@@ -13,7 +13,7 @@ from dmimo.stbc import alamouti_decode, alamouti_encode
 from dmimo.stbc import hard_log_likelihood
 
 
-def adjust_channel(h:tf.Tensor, pathloss_dB:tf.Tensor, nAntTxList, nAntRxList, cfg:NcjtSimConfig):
+def adjust_channel(h: tf.Tensor, pathloss_dB: tf.Tensor, nAntTxList, nAntRxList, cfg:NcjtSimConfig):
     """
     A function that adjusts the channel gains based on the transmit power of the transmitters and
     the pathlosses.
@@ -25,10 +25,10 @@ def adjust_channel(h:tf.Tensor, pathloss_dB:tf.Tensor, nAntTxList, nAntRxList, c
     :param NcjtSimConfig cfg: a ``NcjtSimConfig`` configuration file.
     :return: Channel gains with transmit power and pathloss applied
     """
-    assert len(nAntTxList) == pathloss_dB.shape[3]
-    assert len(nAntRxList) == pathloss_dB.shape[2]
+
     num_tx = pathloss_dB.shape[3]
     num_rx = pathloss_dB.shape[2]
+    assert len(nAntTxList) == num_tx and len(nAntRxList) == num_rx
 
     transmit_pwr = tf.reshape(tf.convert_to_tensor([cfg.BsTxPwrdB] + [cfg.UeTxPwrdB for _ in range(num_tx-1)]),[1,1,1,num_tx,1])
     rx_pwr_raw = transmit_pwr + cfg.ANTENNA_GAIN - pathloss_dB + cfg.EQUALIZER # (num_subframes, 1, num_rx, num_tx, num_ofdm_symbols)
@@ -153,15 +153,12 @@ def ncjt_third_phase():
     """
 
 
-def ncjt_sim_all_phases(cfg:NcjtSimConfig, h_dmimo:tf.Tensor = None, perfect_phase1 = True, perfect_phase3 = True):
+def ncjt_sim_all_phases(cfg:NcjtSimConfig, perfect_phase1 = True, perfect_phase3 = True):
     """
     This function simulates all the 3 phases of the dMIMO setup and returns the average BER.
 
     :param NcjtSimConfig cfg: 
         NcjtSimConfig configuration settings for the simulation
-    :param tf.Tensor h_dmimo: 
-        the adjusted dMIMO channel. If None, this function will extract the channel from NS3.
-        This argument is embedded to avoid repeated NS3 channel extraction.
     :param bool perfect_phase1: 
         Whether the transmission of bits from Tx BS to Tx UEs is perfectly done without any errors
     :param bool perfect_phase3: 
@@ -175,16 +172,16 @@ def ncjt_sim_all_phases(cfg:NcjtSimConfig, h_dmimo:tf.Tensor = None, perfect_pha
 
     # Channel loading
 
-    if h_dmimo is None:
-        ns3_config = Ns3Config(total_slots=cfg.starting_subframe + cfg.num_subframes, _data_folder = cfg.ns3_folder)
-        ns3_channel = LoadNs3Channel(ns3_config)
-        h_dmimo , pathlossdb_dmimo_raw = ns3_channel("dMIMO-Raw", slot_idx=cfg.starting_subframe+cfg.num_subframes_phase1, batch_size=cfg.num_subframes_phase2) # batch_size is the same as num_subframes
-            # h_dmimo.shape = (num_subframes, 1, num_rx_ant, 1, num_tx_ant, num_ofdm_symbols, fft_size)
-            # pathlossdb_dmimo_raw.shape = (num_subframes, 1, num_rx, num_tx, num_ofdm_symbols)
-        nAntRx_list = [4] + [2 for _ in range(10)]
-        nAntTx_list = [4] + [2 for _ in range(10)]
-        h_dmimo = adjust_channel(h_dmimo, pathlossdb_dmimo_raw, nAntRx_list, nAntTx_list, cfg)
-        # (num_subframes, num_subcarriers, num_ofdm_symbols, total_rx_antennas, total_tx_antennas)
+    ns3_config = Ns3Config(total_slots=cfg.starting_subframe + cfg.num_subframes, _data_folder = cfg.ns3_folder)
+    ns3_channel = LoadNs3Channel(ns3_config)
+    h_dmimo, pathlossdb_dmimo_raw = ns3_channel("dMIMO-Raw", slot_idx=cfg.starting_subframe+cfg.num_subframes_phase1, batch_size=cfg.num_subframes_phase2)
+    # batch_size is the same as num_subframes
+    # h_dmimo.shape = (num_subframes, 1, num_rx_ant, 1, num_tx_ant, num_ofdm_symbols, fft_size)
+    # pathlossdb_dmimo_raw.shape = (num_subframes, 1, num_rx, num_tx, num_ofdm_symbols)
+    nAntRx_list = [4] + [2 for _ in range(10)]
+    nAntTx_list = [4] + [2 for _ in range(10)]
+    h_dmimo = adjust_channel(h_dmimo, pathlossdb_dmimo_raw, nAntRx_list, nAntTx_list, cfg)
+    # (num_subframes, num_subcarriers, num_ofdm_symbols, total_rx_antennas, total_tx_antennas)
 
     binary_source = BinarySource()
     add_noise = AWGN()
@@ -228,5 +225,5 @@ def ncjt_sim_all_phases(cfg:NcjtSimConfig, h_dmimo:tf.Tensor = None, perfect_pha
     detected_bits = tf.reshape(detected_bits,(cfg.num_subframes_phase1, cfg.num_subcarriers,  cfg.num_ofdm_symbols * cfg.num_bits_per_symbol_phase1))
     avg_ber = compute_ber(detected_bits, bit_stream)
 
-    return avg_ber, h_dmimo
+    return avg_ber
 
