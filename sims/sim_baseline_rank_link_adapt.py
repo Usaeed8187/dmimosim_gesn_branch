@@ -87,4 +87,3 @@ if __name__ == "__main__":
 
     np.savez("../results/{}/baseline_results_s{}.npz".format(folder_name, cfg.num_tx_streams),
                 ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
-
