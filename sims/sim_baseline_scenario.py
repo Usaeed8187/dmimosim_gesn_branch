@@ -55,6 +55,7 @@ if __name__ == "__main__":
     ldpc_ber = np.zeros((2, num_modulations))
     goodput = np.zeros((2, num_modulations))
     throughput = np.zeros((2, num_modulations))
+    bitrate = np.zeros((2, num_modulations))
 
     for k in range(num_modulations):
         cfg.modulation_order = modulation_orders[k]
@@ -65,6 +66,7 @@ if __name__ == "__main__":
         ldpc_ber[0, k] = rst_svd[1]
         goodput[0, k] = rst_svd[2]
         throughput[0, k] = rst_svd[3]
+        bitrate[0, k] = rst_svd[4]
 
         cfg.precoding_method = "ZF"
         rst_zf = sim_baseline_all(cfg)
@@ -72,6 +74,7 @@ if __name__ == "__main__":
         ldpc_ber[1, k] = rst_zf[1]
         goodput[1, k] = rst_zf[2]
         throughput[1, k] = rst_zf[3]
+        bitrate[1, k] = rst_zf[4]
 
     fig, ax = plt.subplots(1, 3, figsize=(15, 4))
 
@@ -92,7 +95,8 @@ if __name__ == "__main__":
     ax[2].set_ylabel('Goodput/Throughput (Mbps)')
     ax[2].plot(modulation_orders, goodput.transpose(), 's-')
     ax[2].plot(modulation_orders, throughput.transpose(), 'd-')
-    ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF'])
+    ax[2].plot(modulation_orders, bitrate.transpose(), '*-')
+    ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF', 'Bitrate-SVD', 'Bitrate-ZF'])
 
     plt.savefig("../results/{}/baseline_results.png".format(folder_name))
 

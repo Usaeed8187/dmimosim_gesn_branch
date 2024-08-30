@@ -93,7 +93,8 @@ class Baseline(Model):
         cfg.ldpc_n = int(2 * self.rg.num_data_symbols)  # Number of coded bits
         cfg.ldpc_k = int(cfg.ldpc_n * cfg.code_rate)  # Number of information bits
         self.num_codewords = cfg.modulation_order // 2  # number of codewords per frame
-        self.num_bits_per_frame = cfg.ldpc_k * self.num_codewords * self.rg.num_streams_per_tx
+        self.num_bits_per_frame = cfg.ldpc_k * self.num_codewords * self.num_streams_per_tx
+        self.num_uncoded_bits_per_frame = cfg.ldpc_n * self.num_codewords * self.num_streams_per_tx
 
         # The encoder maps information bits to coded bits
         self.encoder = LDPC5GEncoder(cfg.ldpc_k, cfg.ldpc_n)
@@ -168,9 +169,9 @@ class Baseline(Model):
             ValueError("unsupported precoding method")
 
         # add CFO/STO to simulate synchronization errors
-        if self.cfg.sto_sigma > 0:
+        if self.sto_sigma > 0:
             x_precoded = add_timing_offset(x_precoded, self.sto_sigma)
-        if self.cfg.cfo_sigma > 0:
+        if self.cfo_sigma > 0:
             x_precoded = add_frequency_offset(x_precoded, self.cfo_sigma)
 
         # apply dMIMO channels to the resource grid in the frequency domain.
@@ -191,8 +192,12 @@ class Baseline(Model):
         llr = self.demapper([x_hat, no_eff])
 
         # Hard-decision for uncoded bits
-        x_hard = tf.cast(llr > 0, tf.float32)
-        uncoded_ber = compute_ber(d, x_hard).numpy()
+        d_hard = tf.cast(llr > 0, tf.float32)
+        uncoded_ber = compute_ber(d, d_hard).numpy()
+
+        # Hard-decision symbol error rate
+        x_hard = self.mapper(d_hard)
+        uncoded_ser = np.count_nonzero(x - x_hard) / np.prod(x.shape)
 
         # LLR deinterleaver for LDPC decoding
         llr = self.dintlvr(llr)
@@ -201,7 +206,7 @@ class Baseline(Model):
         # LDPC hard-decision decoding
         dec_bits = self.decoder(llr)
 
-        return dec_bits, uncoded_ber, x_hat
+        return dec_bits, uncoded_ber, uncoded_ser, x_hat
 
 
 def sim_baseline(cfg: SimConfig):
@@ -221,23 +226,22 @@ def sim_baseline(cfg: SimConfig):
 
     # The binary source will create batches of information bits
     binary_source = BinarySource()
-
-    # Generate information source
     info_bits = binary_source([cfg.num_slots_p2, baseline.num_bits_per_frame])
 
     # Baseline transmission
-    dec_bits, uncoded_ber, x_hat = baseline(dmimo_chans, info_bits)
+    dec_bits, uncoded_ber, uncoded_ser, x_hat = baseline(dmimo_chans, info_bits)
 
     # Update error statistics
     info_bits = tf.reshape(info_bits, dec_bits.shape)
-    ber = compute_ber(info_bits, dec_bits).numpy()
-    bler = compute_bler(info_bits, dec_bits).numpy()
+    coded_ber = compute_ber(info_bits, dec_bits).numpy()
+    coded_bler = compute_bler(info_bits, dec_bits).numpy()
 
     # Goodput and throughput estimation
-    goodbits = (1.0 - ber) * baseline.num_bits_per_frame
-    userbits = (1.0 - bler) * baseline.num_bits_per_frame
+    goodbits = (1.0 - coded_ber) * baseline.num_bits_per_frame
+    userbits = (1.0 - coded_bler) * baseline.num_bits_per_frame
+    ratedbits= (1.0 - uncoded_ser) * baseline.num_uncoded_bits_per_frame
 
-    return [uncoded_ber, ber], [goodbits, userbits]
+    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
 
 
 def sim_baseline_all(cfg: SimConfig):
@@ -246,7 +250,7 @@ def sim_baseline_all(cfg: SimConfig):
     """
 
     total_cycles = 0
-    uncoded_ber, ldpc_ber, goodput, throughput = 0, 0, 0, 0
+    uncoded_ber, ldpc_ber, goodput, throughput, bitrate = 0, 0, 0, 0, 0
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
@@ -255,9 +259,11 @@ def sim_baseline_all(cfg: SimConfig):
         ldpc_ber += bers[1]
         goodput += bits[0]
         throughput += bits[1]
+        bitrate += bits[2]
 
     slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
     goodput = goodput / (total_cycles * slot_time * 1e6)  # Mbps
     throughput = throughput / (total_cycles * slot_time * 1e6)  # Mbps
+    bitrate = bitrate / (total_cycles * slot_time * 1e6)  # Mbps
 
-    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput]
+    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate]
