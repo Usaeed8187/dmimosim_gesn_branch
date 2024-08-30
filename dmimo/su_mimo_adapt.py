@@ -13,219 +13,207 @@ from sionna.fec.interleaving import RowColumnInterleaver, Deinterleaver
 from sionna.mapping import Mapper, Demapper
 from sionna.utils import BinarySource, ebnodb2no
 from sionna.utils.metrics import compute_ber, compute_bler
+from tensorflow.python.keras import Model
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
+class SU_MIMO(Model):
+    def __init__(self, cfg: SimConfig, **kwargs):
+        """
+        Create Baseline simulation object
 
-def sim_su_mimo(cfg: SimConfig):
-    """
-    Simulation of SU-MIMO scenarios using different settings
+        :param cfg: simulation settings
+        """
+        super().__init__(kwargs)
 
-    Effective channel models for phase 2 (P2) and phase 3 (P3) are used, phase 1 (P1) transmission
-    is simulated separately and assumed to always provide enough data bandwidth for P2.
+        self.cfg = cfg
+        # dMIMO configuration
+        self.num_bs_ant = 24  # total number of Tx squad antennas
+        self.num_ue_ant = 8   # total number of Rx antennas for effective channel
 
-    TODO: add link/rank adaption, UE selection
+        # Estimated EbNo
+        self.ebno_db = 16.0  # temporary fixed for LMMSE equalization
 
-    :param cfg: simulation settings
-    :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
-    """
+        # CFO and STO settings
+        self.sto_sigma = sto_val(cfg, cfg.sto_sigma)
+        self.cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
 
-    # dMIMO configuration
-    num_bs_ant = 24  # total number of Tx squad antennas
-    num_ue_ant = 8   # total number of Rx antennas for effective channel
+        # The number of transmitted streams is equal to the number of UE antennas
+        assert cfg.num_tx_streams <= self.num_ue_ant
+        self.num_streams_per_tx = cfg.num_tx_streams
 
-    # Estimated EbNo
-    ebno_db = 16.0  # temporary fixed for LMMSE equalization
+        # batch processing for all slots in phase 2
+        self.batch_size = cfg.num_slots_p2
 
-    # CFO and STO settings
-    sto_sigma = sto_val(cfg, cfg.sto_sigma)
-    cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
+        # Create an RX-TX association matrix
+        # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
+        rx_tx_association = np.array([[1]])  # 1-Tx 1-RX for SU-MIMO
 
-    # The number of transmitted streams is equal to the number of UE antennas
-    assert cfg.num_tx_streams <= num_ue_ant
-    num_streams_per_tx = cfg.num_tx_streams
+        # Instantiate a StreamManagement object
+        # This determines which data streams are determined for which receiver.
+        sm = StreamManagement(rx_tx_association, self.num_streams_per_tx)
 
-    # batch processing for all slots in phase 2
-    batch_size = cfg.num_slots_p2
+        # Adjust guard subcarriers for channel estimation grid
+        csi_effective_subcarriers = (cfg.fft_size // self.num_bs_ant) * self.num_bs_ant
+        csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
+        csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
 
-    # Create an RX-TX association matrix
-    # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
-    rx_tx_association = np.array([[1]])  # 1-Tx 1-RX for SU-MIMO
+        # Resource grid for channel estimation
+        self.rg_csi = ResourceGrid(num_ofdm_symbols=14,
+                              fft_size=cfg.fft_size,
+                              subcarrier_spacing=cfg.subcarrier_spacing,
+                              num_tx=1,
+                              num_streams_per_tx=self.num_bs_ant,
+                              cyclic_prefix_length=cfg.cyclic_prefix_len,
+                              num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
+                              dc_null=False,
+                              pilot_pattern="kronecker",
+                              pilot_ofdm_symbol_indices=[2, 11])
 
-    # Instantiate a StreamManagement object
-    # This determines which data streams are determined for which receiver.
-    sm = StreamManagement(rx_tx_association, num_streams_per_tx)
+        # Adjust guard subcarriers for different number of streams
+        effective_subcarriers = (csi_effective_subcarriers // self.num_streams_per_tx) * self.num_streams_per_tx
+        guard_carriers_1 = (csi_effective_subcarriers - effective_subcarriers) // 2
+        guard_carriers_2 = (csi_effective_subcarriers - effective_subcarriers) - guard_carriers_1
+        guard_carriers_1 += csi_guard_carriers_1
+        guard_carriers_2 += csi_guard_carriers_2
 
-    # Adjust guard subcarriers for channel estimation grid
-    csi_effective_subcarriers = (cfg.fft_size // num_bs_ant) * num_bs_ant
-    csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
-    csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
-
-    # Resource grid for channel estimation
-    rg_csi = ResourceGrid(num_ofdm_symbols=14,
+        # OFDM resource grid (RG) for normal transmission
+        self.rg = ResourceGrid(num_ofdm_symbols=14,
                           fft_size=cfg.fft_size,
                           subcarrier_spacing=cfg.subcarrier_spacing,
                           num_tx=1,
-                          num_streams_per_tx=num_bs_ant,
-                          cyclic_prefix_length=cfg.cyclic_prefix_len,
-                          num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
+                          num_streams_per_tx=self.num_streams_per_tx,
+                          cyclic_prefix_length=64,
+                          num_guard_carriers=[guard_carriers_1, guard_carriers_2],
                           dc_null=False,
                           pilot_pattern="kronecker",
                           pilot_ofdm_symbol_indices=[2, 11])
 
-    # Adjust guard subcarriers for different number of streams
-    effective_subcarriers = (csi_effective_subcarriers // num_streams_per_tx) * num_streams_per_tx
-    guard_carriers_1 = (csi_effective_subcarriers - effective_subcarriers) // 2
-    guard_carriers_2 = (csi_effective_subcarriers - effective_subcarriers) - guard_carriers_1
-    guard_carriers_1 += csi_guard_carriers_1
-    guard_carriers_2 += csi_guard_carriers_2
+        # LDPC params
+        self.num_codewords = cfg.modulation_order//2  # number of codewords per frame
+        cfg.ldpc_n = int(self.rg.num_data_symbols*cfg.modulation_order/self.num_codewords)  # Number of coded bits
+        cfg.ldpc_k = int(cfg.ldpc_n*cfg.code_rate)  # Number of information bits
+        self.num_bits_per_frame = cfg.ldpc_k * self.num_codewords * self.rg.num_streams_per_tx
 
-    # OFDM resource grid (RG) for normal transmission
-    rg = ResourceGrid(num_ofdm_symbols=14,
-                      fft_size=cfg.fft_size,
-                      subcarrier_spacing=cfg.subcarrier_spacing,
-                      num_tx=1,
-                      num_streams_per_tx=num_streams_per_tx,
-                      cyclic_prefix_length=64,
-                      num_guard_carriers=[guard_carriers_1, guard_carriers_2],
-                      dc_null=False,
-                      pilot_pattern="kronecker",
-                      pilot_ofdm_symbol_indices=[2, 11])
+        # The encoder maps information bits to coded bits
+        self.encoder = LDPC5GEncoder(cfg.ldpc_k, cfg.ldpc_n)
 
-    # LDPC params
-    num_codewords = cfg.modulation_order//2  # number of codewords per frame
-    ldpc_n = int(rg.num_data_symbols*cfg.modulation_order/num_codewords)  # Number of coded bits
-    ldpc_k = int(ldpc_n*cfg.code_rate)  # Number of information bits
+        # LDPC interleaver
+        self.intlvr = RowColumnInterleaver(3072, axis=-1)  # fixed design for current RG config
+        self.dintlvr = Deinterleaver(interleaver=self.intlvr)
 
-    # The binary source will create batches of information bits
-    binary_source = BinarySource()
+        # The mapper maps blocks of information bits to constellation symbols
+        self.mapper = Mapper("qam", cfg.modulation_order)
 
-    # The encoder maps information bits to coded bits
-    encoder = LDPC5GEncoder(ldpc_k, ldpc_n)
+        # The resource grid mapper maps symbols onto an OFDM resource grid
+        self.rg_mapper = ResourceGridMapper(self.rg)
 
-    # LDPC interleaver
-    intlvr = RowColumnInterleaver(3072, axis=-1)  # fixed design for current RG config
-    dintlvr = Deinterleaver(interleaver=intlvr)
+        # The zero forcing precoder
+        self.zf_precoder = ZFPrecoder(self.rg, sm, return_effective_channel=True)
 
-    # The mapper maps blocks of information bits to constellation symbols
-    mapper = Mapper("qam", cfg.modulation_order)
+        # SVD-based precoder and equalizer
+        self.svd_precoder = SVDPrecoder(self.rg, sm, return_effective_channel=True)
+        self.svd_equalizer = SVDEqualizer(self.rg, sm)
 
-    # The resource grid mapper maps symbols onto an OFDM resource grid
-    rg_mapper = ResourceGridMapper(rg)
+        # The LS channel estimator will provide channel estimates and error variances
+        self.ls_estimator = LSChannelEstimator(self.rg, interpolation_type="lin")
 
-    # The zero forcing precoder
-    zf_precoder = ZFPrecoder(rg, sm, return_effective_channel=True)
+        # The LMMSE equalizer will provide soft symbols together with noise variance estimates
+        self.lmmse_equ = LMMSEEqualizer(self.rg, sm)
 
-    # SVD-based precoder and equalizer
-    svd_precoder = SVDPrecoder(rg, sm, return_effective_channel=True)
-    svd_equalizer = SVDEqualizer(rg, sm)
+        # The demapper produces LLR for all coded bits
+        self.demapper = Demapper("maxlog", "qam", cfg.modulation_order)
 
-    # The LS channel estimator will provide channel estimates and error variances
-    ls_estimator = LSChannelEstimator(rg, interpolation_type="lin")
+        # The decoder provides hard-decisions on the information bits
+        self.decoder = LDPC5GDecoder(self.encoder, hard_out=True)
 
-    # The LMMSE equalizer will provide soft symbols together with noise variance estimates
-    lmmse_equ = LMMSEEqualizer(rg, sm)
+    def call(self, dmimo_chans: dMIMOChannels, info_bits):
+        # Compute the noise power for a given Eb/No value.
+        # This takes not only the coderate but also the overheads related pilot
+        # transmissions and nulled carriers
+        chest_noise = AWGN()
+        no = ebnodb2no(self.ebno_db, self.cfg.modulation_order, self.cfg.code_rate, self.rg)
 
-    # The demapper produces LLR for all coded bits
-    demapper = Demapper("maxlog", "qam", cfg.modulation_order)
+        b = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
+                                           self.num_codewords, self.encoder.k])
+        # Transmitter processing
+        c = self.encoder(b)
+        c = tf.reshape(c, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords * self.encoder.n])
+        # Interleaving for coded bits
+        d = self.intlvr(c)
+        # QAM mapping for the OFDM grid
+        x = self.mapper(d)
+        x_rg = self.rg_mapper(x)
 
-    # The decoder provides hard-decisions on the information bits
-    decoder = LDPC5GDecoder(encoder, hard_out=True)
+        if self.cfg.perfect_csi:
+            # Perfect channel estimation
+            h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
+            # add some noise to simulate channel estimation errors
+            h_freq_csi = chest_noise([h_freq_csi, 2e-3])
+        else:
+            # LMMSE channel estimation
+            h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
+                                                               slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
+                                                               cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
+            _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
 
-    # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
-    dmimo_chans = dMIMOChannels(ns3_config, "dMIMO-Forward", add_noise=True)
-    chest_noise = AWGN()
+        if self.cfg.return_estimated_channel:
+            return h_freq_csi, rx_snr_db
 
-    # Compute the noise power for a given Eb/No value.
-    # This takes not only the coderate but also the overheads related pilot
-    # transmissions and nulled carriers
-    no = ebnodb2no(ebno_db, cfg.modulation_order, cfg.code_rate, rg)
+        # TODO: optimize node selection
+        if self.cfg.precoding_method == "ZF":
+            h_freq_csi = h_freq_csi[:, :, :self.num_streams_per_tx]
 
-    # Transmitter processing
-    b = binary_source([batch_size, 1, rg.num_streams_per_tx, num_codewords, encoder.k])
-    c = encoder(b)
-    c = tf.reshape(c, [batch_size, 1, rg.num_streams_per_tx, num_codewords * encoder.n])
-    d = intlvr(c)
-    x = mapper(d)
-    x_rg = rg_mapper(x)
+        # apply precoding to OFDM grids
+        if self.cfg.precoding_method == "ZF":
+            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
+        elif self.cfg.precoding_method == "SVD":
+            x_precoded, g = self.svd_precoder([x_rg, h_freq_csi])
+        else:
+            ValueError("unsupported precoding method")
 
-    if cfg.perfect_csi:
-        # Perfect channel estimation
-        h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
-        # add some noise to simulate channel estimation errors
-        h_freq_csi = chest_noise([h_freq_csi, 2e-3])
-    else:
-        # LMMSE channel estimation
-        h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
-                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay,
-                                                           cfo_sigma=cfo_sigma, sto_sigma=sto_sigma)
-        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=batch_size)
+        # add CFO/STO to simulate synchronization errors
+        if self.cfg.sto_sigma > 0:
+            x_precoded = add_timing_offset(x_precoded, self.sto_sigma)
+        if self.cfg.cfo_sigma > 0:
+            x_precoded = add_frequency_offset(x_precoded, self.cfo_sigma)
 
-    if cfg.return_estimated_channel:
-        return h_freq_csi, rx_snr_db
+        # apply dMIMO channels to the resource grid in the frequency domain.
+        y = dmimo_chans([x_precoded, self.cfg.first_slot_idx])
 
-    # TODO: optimize node selection
-    if cfg.precoding_method == "ZF":
-        h_freq_csi = h_freq_csi[:, :, :num_streams_per_tx]
+        # SVD equalization
+        if self.cfg.precoding_method == "SVD":
+            y = self.svd_equalizer([y, h_freq_csi, self.num_streams_per_tx])
 
-    # apply precoding to OFDM grids
-    if cfg.precoding_method == "ZF":
-        x_precoded, g = zf_precoder([x_rg, h_freq_csi])
-    elif cfg.precoding_method == "SVD":
-        x_precoded, g = svd_precoder([x_rg, h_freq_csi])
-    else:
-        ValueError("unsupported precoding method")
+        # LS channel estimation with linear interpolation
+        h_hat, err_var = self.ls_estimator([y, no])
 
-    # add CFO/STO to simulate synchronization errors
-    if cfg.sto_sigma > 0:
-        x_precoded = add_timing_offset(x_precoded, sto_sigma)
-    if cfg.cfo_sigma > 0:
-        x_precoded = add_frequency_offset(x_precoded, cfo_sigma)
+        # LMMSE equalization
+        x_hat, no_eff = self.lmmse_equ([y, h_hat, err_var, no])
 
-    # apply dMIMO channels to the resource grid in the frequency domain.
-    y = dmimo_chans([x_precoded, cfg.first_slot_idx])
+        # Soft-output QAM demapper
+        llr = self.demapper([x_hat, no_eff])
 
-    # SVD equalization
-    if cfg.precoding_method == "SVD":
-        y = svd_equalizer([y, h_freq_csi, num_streams_per_tx])
+        # Hard-decision for uncoded bits
+        x_hard = tf.cast(llr > 0, tf.float32)
+        uncoded_ber = compute_ber(d, x_hard).numpy()
+        # LLR deinterleaver for LDPC decoding
+        llr = self.dintlvr(llr)
+        llr = tf.reshape(llr, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.n])
 
-    # LS channel estimation with linear interpolation
-    h_hat, err_var = ls_estimator([y, no])
+        # LDPC decoding and BER calculation
+        dec_bits = self.decoder(llr)
 
-    # LMMSE equalization
-    x_hat, no_eff = lmmse_equ([y, h_hat, err_var, no])
+        if self.cfg.rank_adapt and self.cfg.link_adapt:
+            do_rank_link_adaptation(self.cfg, h_freq_csi, rx_snr_db, self.cfg.first_slot_idx)
 
-    # Soft-output QAM demapper
-    llr = demapper([x_hat, no_eff])
+        return dec_bits, uncoded_ber, x_hat
 
-    # Hard-decision for uncoded bits
-    x_hard = tf.cast(llr > 0, tf.float32)
-    uncoded_ber = compute_ber(d, x_hard).numpy()
 
-    # LLR deinterleaver for LDPC decoding
-    llr = dintlvr(llr)
-    llr = tf.reshape(llr, [batch_size, 1, rg.num_streams_per_tx, num_codewords, encoder.n])
-
-    # LDPC decoding and BER calculation
-    b_hat = decoder(llr)
-    ber = compute_ber(b, b_hat).numpy()
-    bler = compute_bler(b, b_hat).numpy()
-
-    # Goodput and throughput estimation
-    num_bits_per_frame = ldpc_k * num_codewords * rg.num_streams_per_tx
-    goodbits = (1.0 - ber) * num_bits_per_frame
-    userbits = (1.0 - bler) * num_bits_per_frame
-
-    if cfg.rank_adapt and cfg.link_adapt:
-        do_rank_link_adaptation(cfg, h_freq_csi, rx_snr_db, cfg.first_slot_idx)
-
-    return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
-
-def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None):
+def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None, su_mimo=None, dmimo_chans=None, info_bits=None):
 
     assert cfg.start_slot_idx >= cfg.csi_delay
 
@@ -237,7 +225,7 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
     if np.any(h_est == None) or np.any(rx_snr_db == None):
         
         cfg.return_estimated_channel = True
-        h_est, rx_snr_db = sim_su_mimo(cfg)
+        h_est, rx_snr_db = su_mimo(dmimo_chans, info_bits)
         cfg.return_estimated_channel = False
 
     network_config = NetworkConfig()
@@ -298,8 +286,51 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
     
     return rank, rate, qam_order_arr, code_rate_arr
 
+def sim_su_mimo(cfg: SimConfig):
+    """
+    Simulation of SU-MIMO scenarios using different settings
 
+    Effective channel models for phase 2 (P2) and phase 3 (P3) are used, phase 1 (P1) transmission
+    is simulated separately and assumed to always provide enough data bandwidth for P2.
 
+    TODO: add link/rank adaption, UE selection
+
+    :param cfg: simulation settings
+    :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
+    """
+
+    # dMIMO channels from ns-3 simulator
+    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
+    dmimo_chans = dMIMOChannels(ns3_config, "dMIMO-Forward", add_noise=True)
+
+    # Create Baseline simulation
+    su_mimo = SU_MIMO(cfg)
+
+    # Generate information source
+    #info_bits = self.binary_source([self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.k])
+    # The binary source will create batches of information bits
+    binary_source = BinarySource()
+    info_bits = binary_source([cfg.num_slots_p2, su_mimo.num_bits_per_frame])
+
+    # Initial rank and link adaptation
+    if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
+        do_rank_link_adaptation(cfg, su_mimo=su_mimo, dmimo_chans=dmimo_chans, info_bits=info_bits)
+
+    # Baseline transmission
+    dec_bits, uncoded_ber, x_hat = su_mimo(dmimo_chans, info_bits)
+
+    info_bits = tf.reshape(info_bits, dec_bits.shape)
+    ber = compute_ber(info_bits, dec_bits).numpy()
+    bler = compute_bler(info_bits, dec_bits).numpy()
+
+    print (ber, bler)
+
+    # Goodput and throughput estimation
+    num_bits_per_frame = cfg.ldpc_k * su_mimo.num_codewords * su_mimo.rg.num_streams_per_tx
+    goodbits = (1.0 - ber) * num_bits_per_frame
+    userbits = (1.0 - bler) * num_bits_per_frame
+
+    return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
 
 
 def sim_su_mimo_all(cfg: SimConfig):
@@ -307,8 +338,8 @@ def sim_su_mimo_all(cfg: SimConfig):
     Simulation of SU-MIMO transmission phases according to the frame structure
     """
 
-    if cfg.rank_adapt and cfg.link_adapt:
-        do_rank_link_adaptation(cfg)
+    # if cfg.rank_adapt and cfg.link_adapt:
+    #     do_rank_link_adaptation(cfg)
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput = 0, 0, 0, 0
