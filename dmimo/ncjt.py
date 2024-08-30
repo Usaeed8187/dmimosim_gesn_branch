@@ -4,6 +4,7 @@ import numpy as np
 from sionna.utils import BinarySource
 from sionna.mapping import Mapper, Demapper
 from sionna.channel import AWGN
+from sionna.ofdm import ResourceGrid, ResourceGridMapper
 from sionna.utils.metrics import compute_ber
 
 from dmimo.config import Ns3Config, NcjtSimConfig
@@ -68,7 +69,8 @@ def ncjt_first_phase(bit_stream: tf.Tensor, h_freq: tf.Tensor, mapper: Mapper, d
 
 
 def ncjt_alamouti_dmimo_phase(bit_streams: tf.Tensor, channel: tf.Tensor, cfg: NcjtSimConfig,
-                              mapper: Mapper, demapper: Demapper, awgn: AWGN, no: float, do_demapping=False):
+                              mapper: Mapper, demapper: Demapper, awgn: AWGN, no: float,
+                              do_demapping=False):
     """
     This function simulates the non-coherent transmission of symbols using the Alamouti scheme
     in the dMIMO phase. This function assumes perfect channel estimate.
@@ -84,19 +86,38 @@ def ncjt_alamouti_dmimo_phase(bit_streams: tf.Tensor, channel: tf.Tensor, cfg: N
     :param Demapper demapper: Sionna-based demodulator
     :param AWGN awgn: Sionna-based AWGN layer for adding noise to the received signal
     :param float no: Noise power in linear scale
+    :param ResourceGridMapper rg_mapper: A Sionna-based resource grid mapper to map the symbols to the resource grid that includes pilots
     :param do_demapping: Enable demapping procedure
     :return y_list: List of Alamouti-decoded received signals, ready to be fed to a demapper
+
     :return gains_list: List of SNR gains achieved by Alamouti coding and decoding (i.e. |h1|**2 + |h2|**2).
     """
 
+    rg_phase2 = ResourceGrid(num_ofdm_symbols=cfg.num_ofdm_symbols,
+                      fft_size=cfg.num_subcarriers,
+                      subcarrier_spacing=15e3,
+                      num_tx=2,
+                      num_streams_per_tx=1,
+                      cyclic_prefix_length=64,
+                      num_guard_carriers=[0, 0],
+                      dc_null=False,
+                      pilot_pattern="kronecker",
+                      pilot_ofdm_symbol_indices=cfg.pilot_syms)
+    rg_mapper_phase2 = ResourceGridMapper(rg_phase2)
     # Alamouti encoding on each transmit node
     x_list = []
     for i_tx in range(cfg.num_TxBs + cfg.num_TxUe):
         nAnt = cfg.nAntTxBs if (i_tx == cfg.num_TxBs - 1) else cfg.nAntTxUe
-        x = mapper(bit_streams[..., i_tx])  # [num_subframes, num_subcarriers, num_ofdm_symbols]
-        x = alamouti_encode(x)  # [num_subframes, num_subcarriers, num_ofdm_symbols, 2]
+        x = mapper(bit_streams[..., i_tx])  # [num_subframes, num_subcarriers, len(data_syms)]
+        x = alamouti_encode(x)  # [num_subframes, num_subcarriers, len(data_syms), 2]
+        # Transpose to make the signal compatible with rg_mapper
+        x = tf.transpose(x, [0,3,2,1]) # [num_subframes, 2, len(data_syms), num_subcarriers]
+        x = rg_mapper_phase2(tf.reshape(x,[cfg.num_subframes_phase2,2,1,len(cfg.data_syms)* cfg.num_subcarriers])) # Becuase input to rg_mapper must be of shape [batch_size,num_tx, num_streams_per_tx, num_data_symbols]
+        # x.shape is [batch_size, num_tx, num_streams_per_tx, num_ofdm_symbols, fft_size] which would be [num_subframes, 2, 1, num_ofdm_symbols, num_subcarriers]
+        x = tf.reshape(x , [cfg.num_subframes_phase2,2,cfg.num_ofdm_symbols, cfg.num_subcarriers])
+        x = tf.transpose(x, [0,3,2,1]) # [num_subframes, num_subcarriers, num_ofdm_symbols, 2]
+        x = tf.concat([x for _ in range(nAnt // 2)], axis=-1) # In case there are more than 2 antennas on the transmitter
         # new x shape [num_subframes, num_subcarriers, num_ofdm_symbols, total_tx_antennas]
-        x = tf.concat([x for _ in range(nAnt // 2)], axis=-1)
         x_list.append(x)
     x = tf.concat(x_list, axis=-1)  # [num_subframes, num_subcarriers, num_ofdm_symbols, total_tx_antennas]
     x = x[..., tf.newaxis]  # [num_subframes, num_subcarriers, num_ofdm_symbols, total_tx_antennas , 1]
@@ -113,7 +134,7 @@ def ncjt_alamouti_dmimo_phase(bit_streams: tf.Tensor, channel: tf.Tensor, cfg: N
     elif cfg.num_RxBs == 1:
         rx_antenna_slice = slice(cfg.nAntRxBs + cfg.num_RxUe * cfg.nAntRxUe)
     else:
-        raise ValueError('Number of TX base stations has to be either 0 or 1.')
+        raise ValueError('Number of RX base stations has to be either 0 or 1.')
 
     h_freq_ns3 = channel[..., rx_antenna_slice, tx_antenna_slice]
     total_tx_antennas = h_freq_ns3.shape[-1]
@@ -121,6 +142,7 @@ def ncjt_alamouti_dmimo_phase(bit_streams: tf.Tensor, channel: tf.Tensor, cfg: N
 
     # Pass through the channel
     ry = tf.linalg.matmul(h_freq_ns3, x)  # (num_subframes, num_subcarriers, num_ofdm_symbols, total_rx_antennas, 1)
+    ry = tf.gather(ry, indices=cfg.data_syms,axis=2) # (num_subframes, num_subcarriers, len(data_syms), total_rx_antennas, 1)
     num_ofdm_symbols = ry.shape[-3]
     total_rx_antennas = ry.shape[-2]
     # Reshaping to be compatible with the alamouti_encode function
@@ -133,14 +155,21 @@ def ncjt_alamouti_dmimo_phase(bit_streams: tf.Tensor, channel: tf.Tensor, cfg: N
 
     # Alamouti decoding
 
+    ## Donald, Here is the place to do channel estimation for each Rx node separately. 
+    ## Donald, The indices for the pilots are cfg.pilot_syms 
+    ## Donald, I am currently using h_freq_ns3 as the perfect channel estimate. Please replace this with 
+    # h_freq_ns3_estimated with shape (num_subframes, num_subcarriers, num_ofdm_symbols, total_rx_antennas, total_tx_antennas)
+    h_freq_ns3_estimated = h_freq_ns3
+    h_freq_ns3_estimated = tf.gather(h_freq_ns3_estimated, indices=cfg.data_syms, axis=2) # (num_subframes, num_subcarriers, len(data_syms), total_rx_antennas, total_tx_antennas)
+
     # Here we have an issue. Alamouti assumes that in two consecutive OFDM symbols the channel stays the same. 
     # but that isn't generally true. In any case, we are going to feed the average of two consecutive OFDM symbol
     # channel to the STBC decoder.
     # (num_subframes, num_subcarriers, num_ofdm_symbols/2, total_rx_antennas, total_tx_antennas)
-    h_freq_ns3_averaged = (h_freq_ns3[..., ::2, :, :] + h_freq_ns3[..., 1::2, :, :]) / 2
+    h_freq_ns3_averaged = (h_freq_ns3_estimated[..., ::2, :, :] + h_freq_ns3_estimated[..., 1::2, :, :]) / 2
     # Now we need to sum over the respective transmit antennas
-    # new shape [num_subframes, num_subcarriers, num_ofdm_symbols/2, total_rx_antennas, 2]
     h_freq_ns3_averaged = tf.add_n([h_freq_ns3_averaged[..., i * 2:i * 2 + 2] for i in range(total_tx_antennas // 2)])
+    # new shape is [num_subframes, num_subcarriers, len(data_syms)/2, total_rx_antennas, 2]
 
     y_list = []
     gains_list = []
@@ -203,18 +232,36 @@ def ncjt_sim_all_phases(cfg: NcjtSimConfig, perfect_phase1=True, perfect_phase3=
 
     binary_source = BinarySource()
     add_noise = AWGN()
+    # Donald: I don't know what parameters to choose here for rg for phase 1
+    rg_phase1 = ResourceGrid(num_ofdm_symbols=cfg.num_ofdm_symbols,
+                      fft_size=cfg.num_subcarriers,
+                      subcarrier_spacing=15e3,
+                      num_tx=1,
+                      num_streams_per_tx=1,
+                      cyclic_prefix_length=64,
+                      num_guard_carriers=[0, 0],
+                      dc_null=False,
+                      pilot_pattern="kronecker",
+                      pilot_ofdm_symbol_indices=cfg.pilot_syms)
+    rg_mapper_phase1 = ResourceGridMapper(rg_phase1)
     bit_stream = binary_source(
-        [cfg.num_subframes_phase1, cfg.num_subcarriers, cfg.num_ofdm_symbols * cfg.num_bits_per_symbol_phase1])
+        [cfg.num_subframes_phase1, cfg.num_subcarriers, len(cfg.data_syms) * cfg.num_bits_per_symbol_phase1])
 
     # Tx Squad Phase
     if perfect_phase1:
         bit_stream_dmimo = tf.stack([tf.reshape(bit_stream,
                                                 (cfg.num_subframes_phase2,
                                                  cfg.num_subcarriers,
-                                                 cfg.num_ofdm_symbols * cfg.num_bits_per_symbol_phase2))
+                                                 len(cfg.data_syms) * cfg.num_bits_per_symbol_phase2))
                                      for _ in range(cfg.num_TxBs + cfg.num_TxUe)], axis=-1)
     else:
-        # Donald: Remember to use cfg.num_bits_per_symbol_phase1 for creating a mapper/demapper here.
+        mapper_phase1 = Mapper('qam',cfg.num_bits_per_symbol_phase1)
+        x = mapper_phase1(bit_stream)
+        x = rg_mapper_phase1(tf.reshape(x,[cfg.num_subframes_phase1,1,1,cfg.num_subcarriers* len(cfg.data_syms)])) # Becuase input to rg_mapper must be of shape [batch_size,num_tx, num_streams_per_tx, num_data_symbols]
+        # x.shape is [batch_size, num_tx, num_streams_per_tx, num_ofdm_symbols, fft_size] which would be [num_subframes, 1, 1, num_ofdm_symbols, num_subcarriers]
+        x = tf.reshape(x , [cfg.num_subframes_phase1,cfg.num_ofdm_symbols, cfg.num_subcarriers])
+        x = tf.transpose(x, [0,2,1]) # [num_subframes, num_subcarriers, num_ofdm_symbols]
+        # Donald: x needs to be broadcast to the Tx UEs.
         raise ValueError('Only perfect Tx Squad phase is supported for now.')
 
     # dMIMO Phase
@@ -247,7 +294,7 @@ def ncjt_sim_all_phases(cfg: NcjtSimConfig, perfect_phase1=True, perfect_phase3=
     # detected_bits shape [cfg.num_subframes_phase2,num_subcarriers, num_ofdm_symbols * cfg.num_bits_per_symbol_phase2]
     detected_bits = demapper_dmimo([y_combined, no])
     detected_bits = tf.reshape(detected_bits, (cfg.num_subframes_phase1, cfg.num_subcarriers,
-                                               cfg.num_ofdm_symbols * cfg.num_bits_per_symbol_phase1))
+                                               (len(cfg.data_syms)) * cfg.num_bits_per_symbol_phase1))
     avg_ber = compute_ber(detected_bits, bit_stream)
 
     return avg_ber

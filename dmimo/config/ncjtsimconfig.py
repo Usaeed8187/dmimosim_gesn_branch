@@ -20,6 +20,8 @@ class NcjtSimConfig(CarrierConfig):
         self._num_subframes_phase1 = 3  # number of subframes in the Tx Squad phase
         self._num_subframes_phase2 = 6  # number of subframes in the dMIMO phase
         self._num_ofdm_symbols = 14  # Number of OFDM symbols in each subframe
+        self._pilot_syms = [2,11]
+        self._data_syms = [0,1,3,4,5,6,7,8,9,10,12,13]
         self._num_subcarriers = 512  # Number of subcarriers
         self._num_TxBs = 1  # Number of transmit base stations participating
         self._num_RxBs = 1  # Number of receive base stations participating
@@ -131,6 +133,22 @@ class NcjtSimConfig(CarrierConfig):
     @num_ofdm_symbols.setter
     def num_ofdm_symbols(self, val):
         self._num_ofdm_symbols = val
+
+    @property
+    def pilot_syms(self):
+        return self._pilot_syms
+
+    @pilot_syms.setter
+    def pilot_syms(self, val):
+        self._pilot_syms = val
+
+    @property
+    def data_syms(self):
+        return self._data_syms
+
+    @data_syms.setter
+    def data_syms(self, val):
+        self._data_syms = val
 
     @property
     def num_subcarriers(self):
