@@ -1,52 +1,52 @@
 import numpy as np
 import tensorflow as tf
+from tensorflow.python.keras import Model
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
-from sionna.ofdm import ZFPrecoder
 from sionna.mimo import StreamManagement
-from sionna.channel import AWGN
 
 from sionna.fec.ldpc.encoding import LDPC5GEncoder
 from sionna.fec.ldpc.decoding import LDPC5GDecoder
 from sionna.fec.interleaving import RowColumnInterleaver, Deinterleaver
 
 from sionna.mapping import Mapper, Demapper
-from sionna.utils import BinarySource, ebnodb2no
+from sionna.utils import BinarySource
 from sionna.utils.metrics import compute_ber, compute_bler
-from tensorflow.python.keras import Model
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation
+from dmimo.mimo import ZFPrecoder
+from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
+from .txs_mimo import TxSquad
+
+
 class SU_MIMO(Model):
+
     def __init__(self, cfg: SimConfig, **kwargs):
         """
-        Create Baseline simulation object
+        Create SU-MIMO simulation object
 
         :param cfg: simulation settings
         """
         super().__init__(kwargs)
 
         self.cfg = cfg
-        # dMIMO configuration
-        self.num_bs_ant = 24  # total number of Tx squad antennas
-        self.num_ue_ant = 8   # total number of Rx antennas for effective channel
-
-        # Estimated EbNo
-        self.ebno_db = 16.0  # temporary fixed for LMMSE equalization
+        self.batch_size = cfg.num_slots_p2  # batch processing for all slots in phase 2
 
         # CFO and STO settings
         self.sto_sigma = sto_val(cfg, cfg.sto_sigma)
         self.cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
 
-        # The number of transmitted streams is equal to the number of UE antennas
-        assert cfg.num_tx_streams <= self.num_ue_ant
-        self.num_streams_per_tx = cfg.num_tx_streams
+        # dMIMO configuration
+        self.num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
+        self.num_rx_ant = 8   # total number of Rx antennas for effective channel
 
-        # batch processing for all slots in phase 2
-        self.batch_size = cfg.num_slots_p2
+        # The number of transmitted streams is equal to the number of UE antennas
+        assert cfg.num_tx_streams <= self.num_rx_ant
+        self.num_streams_per_tx = cfg.num_tx_streams
 
         # Create an RX-TX association matrix
         # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
@@ -57,21 +57,21 @@ class SU_MIMO(Model):
         sm = StreamManagement(rx_tx_association, self.num_streams_per_tx)
 
         # Adjust guard subcarriers for channel estimation grid
-        csi_effective_subcarriers = (cfg.fft_size // self.num_bs_ant) * self.num_bs_ant
+        csi_effective_subcarriers = (cfg.fft_size // self.num_txs_ant) * self.num_txs_ant
         csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
         csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
 
         # Resource grid for channel estimation
         self.rg_csi = ResourceGrid(num_ofdm_symbols=14,
-                              fft_size=cfg.fft_size,
-                              subcarrier_spacing=cfg.subcarrier_spacing,
-                              num_tx=1,
-                              num_streams_per_tx=self.num_bs_ant,
-                              cyclic_prefix_length=cfg.cyclic_prefix_len,
-                              num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
-                              dc_null=False,
-                              pilot_pattern="kronecker",
-                              pilot_ofdm_symbol_indices=[2, 11])
+                                   fft_size=cfg.fft_size,
+                                   subcarrier_spacing=cfg.subcarrier_spacing,
+                                   num_tx=1,
+                                   num_streams_per_tx=self.num_txs_ant,
+                                   cyclic_prefix_length=cfg.cyclic_prefix_len,
+                                   num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
+                                   dc_null=False,
+                                   pilot_pattern="kronecker",
+                                   pilot_ofdm_symbol_indices=[2, 11])
 
         # Adjust guard subcarriers for different number of streams
         effective_subcarriers = (csi_effective_subcarriers // self.num_streams_per_tx) * self.num_streams_per_tx
@@ -82,21 +82,22 @@ class SU_MIMO(Model):
 
         # OFDM resource grid (RG) for normal transmission
         self.rg = ResourceGrid(num_ofdm_symbols=14,
-                          fft_size=cfg.fft_size,
-                          subcarrier_spacing=cfg.subcarrier_spacing,
-                          num_tx=1,
-                          num_streams_per_tx=self.num_streams_per_tx,
-                          cyclic_prefix_length=64,
-                          num_guard_carriers=[guard_carriers_1, guard_carriers_2],
-                          dc_null=False,
-                          pilot_pattern="kronecker",
-                          pilot_ofdm_symbol_indices=[2, 11])
+                               fft_size=cfg.fft_size,
+                               subcarrier_spacing=cfg.subcarrier_spacing,
+                               num_tx=1,
+                               num_streams_per_tx=self.num_streams_per_tx,
+                               cyclic_prefix_length=64,
+                               num_guard_carriers=[guard_carriers_1, guard_carriers_2],
+                               dc_null=False,
+                               pilot_pattern="kronecker",
+                               pilot_ofdm_symbol_indices=[2, 11])
 
         # LDPC params
-        self.num_codewords = cfg.modulation_order//2  # number of codewords per frame
-        cfg.ldpc_n = int(self.rg.num_data_symbols*cfg.modulation_order/self.num_codewords)  # Number of coded bits
-        cfg.ldpc_k = int(cfg.ldpc_n*cfg.code_rate)  # Number of information bits
-        self.num_bits_per_frame = cfg.ldpc_k * self.num_codewords * self.rg.num_streams_per_tx
+        cfg.ldpc_n = int(2 * self.rg.num_data_symbols)  # Number of coded bits
+        cfg.ldpc_k = int(cfg.ldpc_n * cfg.code_rate)  # Number of information bits
+        self.num_codewords = cfg.modulation_order // 2  # number of codewords per frame
+        self.num_bits_per_frame = cfg.ldpc_k * self.num_codewords * self.num_streams_per_tx
+        self.num_uncoded_bits_per_frame = cfg.ldpc_n * self.num_codewords * self.num_streams_per_tx
 
         # The encoder maps information bits to coded bits
         self.encoder = LDPC5GEncoder(cfg.ldpc_k, cfg.ldpc_n)
@@ -131,28 +132,34 @@ class SU_MIMO(Model):
         self.decoder = LDPC5GDecoder(self.encoder, hard_out=True)
 
     def call(self, dmimo_chans: dMIMOChannels, info_bits):
-        # Compute the noise power for a given Eb/No value.
-        # This takes not only the coderate but also the overheads related pilot
-        # transmissions and nulled carriers
-        chest_noise = AWGN()
-        no = ebnodb2no(self.ebno_db, self.cfg.modulation_order, self.cfg.code_rate, self.rg)
+        """
+        Signal processing for one SU-MIMO transmission cycle (P1/P2/P3)
 
-        b = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
+        Effective channel models for phase 2 (P2) and phase 3 (P3) are used, phase 1 (P1) transmission
+        is assumed to always provide enough data bandwidth for P2.
+
+        :param dmimo_chans: dMIMO channels
+        :param info_bits: information bits
+        :return: decoded bits, uncoded BER, demodulated QAM symbols (for debugging purpose)
+        """
+
+        # LDPC encoder processing
+        info_bits = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
                                            self.num_codewords, self.encoder.k])
-        # Transmitter processing
-        c = self.encoder(b)
+        c = self.encoder(info_bits)
         c = tf.reshape(c, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords * self.encoder.n])
+
         # Interleaving for coded bits
         d = self.intlvr(c)
+
         # QAM mapping for the OFDM grid
         x = self.mapper(d)
         x_rg = self.rg_mapper(x)
 
-        if self.cfg.perfect_csi:
+        if self.cfg.perfect_csi is True:
             # Perfect channel estimation
-            h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
-            # add some noise to simulate channel estimation errors
-            h_freq_csi = chest_noise([h_freq_csi, 2e-3])
+            h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
+                                                             batch_size=self.batch_size)
         else:
             # LMMSE channel estimation
             h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
@@ -163,10 +170,6 @@ class SU_MIMO(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
 
-        # TODO: optimize node selection
-        if self.cfg.precoding_method == "ZF":
-            h_freq_csi = h_freq_csi[:, :, :self.num_streams_per_tx]
-
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
@@ -176,9 +179,9 @@ class SU_MIMO(Model):
             ValueError("unsupported precoding method")
 
         # add CFO/STO to simulate synchronization errors
-        if self.cfg.sto_sigma > 0:
+        if self.sto_sigma > 0:
             x_precoded = add_timing_offset(x_precoded, self.sto_sigma)
-        if self.cfg.cfo_sigma > 0:
+        if self.cfo_sigma > 0:
             x_precoded = add_frequency_offset(x_precoded, self.cfo_sigma)
 
         # apply dMIMO channels to the resource grid in the frequency domain.
@@ -189,6 +192,7 @@ class SU_MIMO(Model):
             y = self.svd_equalizer([y, h_freq_csi, self.num_streams_per_tx])
 
         # LS channel estimation with linear interpolation
+        no = 0.1  # initial noise estimation (tunable param)
         h_hat, err_var = self.ls_estimator([y, no])
 
         # LMMSE equalization
@@ -198,8 +202,13 @@ class SU_MIMO(Model):
         llr = self.demapper([x_hat, no_eff])
 
         # Hard-decision for uncoded bits
-        x_hard = tf.cast(llr > 0, tf.float32)
-        uncoded_ber = compute_ber(d, x_hard).numpy()
+        d_hard = tf.cast(llr > 0, tf.float32)
+        uncoded_ber = compute_ber(d, d_hard).numpy()
+
+        # Hard-decision symbol error rate
+        x_hard = self.mapper(d_hard)
+        uncoded_ser = np.count_nonzero(x - x_hard) / np.prod(x.shape)
+
         # LLR deinterleaver for LDPC decoding
         llr = self.dintlvr(llr)
         llr = tf.reshape(llr, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.n])
@@ -210,7 +219,7 @@ class SU_MIMO(Model):
         if self.cfg.rank_adapt and self.cfg.link_adapt:
             do_rank_link_adaptation(self.cfg, h_freq_csi, rx_snr_db, self.cfg.first_slot_idx)
 
-        return dec_bits, uncoded_ber, x_hat
+        return dec_bits, uncoded_ber, uncoded_ser, x_hat
 
 
 def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None, su_mimo=None, dmimo_chans=None, info_bits=None):
@@ -290,71 +299,75 @@ def sim_su_mimo(cfg: SimConfig):
     """
     Simulation of SU-MIMO scenarios using different settings
 
-    Effective channel models for phase 2 (P2) and phase 3 (P3) are used, phase 1 (P1) transmission
-    is simulated separately and assumed to always provide enough data bandwidth for P2.
-
-    TODO: add link/rank adaption, UE selection
-
     :param cfg: simulation settings
-    :return: [uncoded BER, LDPC BER], [goodput, throughput], demodulated QAM symbols (for debugging purpose)
+    :return: [uncoded BER, LDPC BER], [goodput, throughput, bitrate]
     """
 
     # dMIMO channels from ns-3 simulator
-    ns3_config = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
-    dmimo_chans = dMIMOChannels(ns3_config, "dMIMO-Forward", add_noise=True)
+    ns3cfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
+    dmimo_chans = dMIMOChannels(ns3cfg, "dMIMO-Forward", add_noise=True)
+
+    # UE selection
+    if cfg.enable_ue_selection is True:
+        tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
+        ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
     # Create Baseline simulation
     su_mimo = SU_MIMO(cfg)
 
     # Generate information source
-    #info_bits = self.binary_source([self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.k])
-    # The binary source will create batches of information bits
     binary_source = BinarySource()
     info_bits = binary_source([cfg.num_slots_p2, su_mimo.num_bits_per_frame])
+
+    # TxSquad transmission (P1)
+    if cfg.enable_txsquad is True:
+        tx_squad = TxSquad(cfg, su_mimo.num_bits_per_frame)
+        txs_chans = dMIMOChannels(ns3cfg, "TxSquad", add_noise=True)
+        info_bits_new, txs_ber, txs_bler = tx_squad(txs_chans, info_bits)
+        print("BER: {}  BLER: {}".format(txs_ber, txs_bler))
+        assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
 
     # Initial rank and link adaptation
     if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
         do_rank_link_adaptation(cfg, su_mimo=su_mimo, dmimo_chans=dmimo_chans, info_bits=info_bits)
 
     # Baseline transmission
-    dec_bits, uncoded_ber, x_hat = su_mimo(dmimo_chans, info_bits)
+    dec_bits, uncoded_ber, uncoded_ser, x_hat = su_mimo(dmimo_chans, info_bits)
 
+    # Update error statistics
     info_bits = tf.reshape(info_bits, dec_bits.shape)
-    ber = compute_ber(info_bits, dec_bits).numpy()
-    bler = compute_bler(info_bits, dec_bits).numpy()
-
-    print (ber, bler)
+    coded_ber = compute_ber(info_bits, dec_bits).numpy()
+    coded_bler = compute_bler(info_bits, dec_bits).numpy()
 
     # Goodput and throughput estimation
-    num_bits_per_frame = cfg.ldpc_k * su_mimo.num_codewords * su_mimo.rg.num_streams_per_tx
-    goodbits = (1.0 - ber) * num_bits_per_frame
-    userbits = (1.0 - bler) * num_bits_per_frame
+    goodbits = (1.0 - coded_ber) * su_mimo.num_bits_per_frame
+    userbits = (1.0 - coded_bler) * su_mimo.num_bits_per_frame
+    ratedbits = (1.0 - uncoded_ser) * su_mimo.num_uncoded_bits_per_frame
 
-    return [uncoded_ber, ber], [goodbits, userbits], x_hat.numpy()
+    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
 
 
 def sim_su_mimo_all(cfg: SimConfig):
     """"
-    Simulation of SU-MIMO transmission phases according to the frame structure
+    Simulation of SU-MIMO scenario according to the frame structure
     """
 
-    # if cfg.rank_adapt and cfg.link_adapt:
-    #     do_rank_link_adaptation(cfg)
-
     total_cycles = 0
-    uncoded_ber, ldpc_ber, goodput, throughput = 0, 0, 0, 0
+    uncoded_ber, ldpc_ber, goodput, throughput, bitrate = 0, 0, 0, 0, 0
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits, x_hat = sim_su_mimo(cfg)
+        bers, bits = sim_su_mimo(cfg)
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
         goodput += bits[0]
         throughput += bits[1]
+        bitrate += bits[2]
 
     slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
     overhead = cfg.num_slots_p2/(cfg.num_slots_p1 + cfg.num_slots_p2)
     goodput = goodput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
     throughput = throughput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
+    bitrate = bitrate / (total_cycles * slot_time * 1e6) * overhead  # Mbps
 
-    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput]
+    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate]
