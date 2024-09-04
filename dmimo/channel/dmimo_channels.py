@@ -5,7 +5,7 @@ including TxSquad, dMIMO, and RxSquad models
 
 import tensorflow as tf
 import numpy as np
-from tensorflow.keras.layers import Layer
+from tensorflow.python.keras.layers import Layer
 
 from sionna.channel import ApplyOFDMChannel, AWGN
 from sionna.ofdm import ResourceGrid

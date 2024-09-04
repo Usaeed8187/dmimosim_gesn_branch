@@ -1,7 +1,7 @@
 import numpy as np
 
 import tensorflow as tf
-from tensorflow.keras.layers import Layer
+from tensorflow.python.keras.layers import Layer
 
 import sionna
 from sionna.ofdm import ZFPrecoder, ResourceGridMapper, ResourceGrid

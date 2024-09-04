@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import Model
+from tensorflow.python.keras import Model
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
 from sionna.mimo import StreamManagement
@@ -245,7 +245,7 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
     Simulation of SU-MIMO scenarios using different settings
 
     :param cfg: simulation settings
-    :return: [uncoded BER, LDPC BER], [goodput, throughput]
+    :return: [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
     """
 
     # dMIMO channels from ns-3 simulator
@@ -256,10 +256,6 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
     if cfg.enable_ue_selection is True:
         tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
         ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
-
-    # Rank and link adaption support
-    if cfg.rank_adapt is True and cfg.link_adapt is True:
-        do_rank_link_adaptation(cfg, dmimo_chans)
 
     # Create SU-MIMO simulation
     su_mimo = SU_MIMO(cfg)

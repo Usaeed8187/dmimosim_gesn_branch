@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras import Model
+from tensorflow.python.keras import Model
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
 from sionna.mimo import StreamManagement
@@ -214,7 +214,7 @@ def sim_baseline(cfg: SimConfig):
     Simulation of baseline scenarios using 4x4 MIMO channels
 
     :param cfg: simulation settings
-    :return: [uncoded BER, LDPC BER], [goodput, throughput]
+    :return: [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
     """
 
     # dMIMO channels from ns-3 simulator
