@@ -44,7 +44,7 @@ class MU_MIMO(Model):
         # A 4-antennas basestation is regarded as the combination of two 2-antenna UEs
         self.num_streams_per_tx = cfg.num_tx_streams
 
-        self.num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
+        self.num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # gNB always present with 4 antennas
         self.num_ue_ant = 2  # assuming 2 antennas per UE for reshaping data/channels
         if cfg.ue_indices is None:
             # no rank/link adaptation
@@ -57,8 +57,8 @@ class MU_MIMO(Model):
             if cfg.ue_ranks is None:
                 cfg.ue_ranks = self.num_ue_ant  # no rank adaptation
 
-        # Use 4 UEs with BS (12 antennas)
-        # A 4-antennas basestation is regarded as the combination of two 2-antenna UEs
+        # Create an RX-TX association matrix
+        # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
         rx_tx_association = np.ones((self.num_rx_ue, 1))
 
         # Instantiate a StreamManagement object
@@ -101,7 +101,7 @@ class MU_MIMO(Model):
                                pilot_pattern="kronecker",
                                pilot_ofdm_symbol_indices=[2, 11])
 
-        # LDPC params
+        # Update number of data bits and LDPC params
         cfg.ldpc_n = int(2 * self.rg.num_data_symbols)  # Number of coded bits
         cfg.ldpc_k = int(cfg.ldpc_n * cfg.code_rate)  # Number of information bits
         self.num_codewords = cfg.modulation_order // 2  # number of codewords per frame
@@ -138,7 +138,7 @@ class MU_MIMO(Model):
         # The decoder provides hard-decisions on the information bits
         self.decoder = LDPC5GDecoder(self.encoder, hard_out=True)
 
-    def call(self, dmimo_chans: dMIMOChannels, info_bits):
+    def call(self, dmimo_chans: dMIMOChannels, info_bits=None):
         """
         Signal processing for one MU-MIMO transmission cycle (P2)
 
@@ -147,18 +147,19 @@ class MU_MIMO(Model):
         :return: decoded bits, uncoded BER, demodulated QAM symbols (for debugging purpose)
         """
 
-        # LDPC encoder processing
-        info_bits = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
-                                           self.num_codewords, self.encoder.k])
-        c = self.encoder(info_bits)
-        c = tf.reshape(c, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords * self.encoder.n])
+        if not self.cfg.return_estimated_channel:
+            # LDPC encoder processing
+            info_bits = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
+                                            self.num_codewords, self.encoder.k])
+            c = self.encoder(info_bits)
+            c = tf.reshape(c, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords * self.encoder.n])
 
-        # Interleaving for coded bits
-        d = self.intlvr(c)
+            # Interleaving for coded bits
+            d = self.intlvr(c)
 
-        # QAM mapping for the OFDM grid
-        x = self.mapper(d)
-        x_rg = self.rg_mapper(x)
+            # QAM mapping for the OFDM grid
+            x = self.mapper(d)
+            x_rg = self.rg_mapper(x)
 
         if self.cfg.perfect_csi is True:
             # Perfect channel estimation
@@ -174,7 +175,7 @@ class MU_MIMO(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
 
-        shape_tmp = h_freq_csi.shape
+        h_freq_csi_all = h_freq_csi
 
         # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
         h_freq_csi = h_freq_csi[:, :, :self.num_rxs_ant, :, :, :, :]
@@ -216,7 +217,7 @@ class MU_MIMO(Model):
         # Soft-output QAM demapper
         llr = self.demapper([x_hat, no_eff])
 
-        # Hard-decision for uncoded bits
+        # Hard-decision bit error rate
         d_hard = tf.cast(llr > 0, tf.float32)
         uncoded_ber = compute_ber(d, d_hard).numpy()
 
@@ -228,17 +229,17 @@ class MU_MIMO(Model):
         llr = self.dintlvr(llr)
         llr = tf.reshape(llr, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.n])
 
-        # LDPC decoding and BER calculation
+        # LDPC hard-decision decoding
         dec_bits = self.decoder(llr)
 
         if self.cfg.rank_adapt and self.cfg.link_adapt:
-            h_freq_csi_reshaped = tf.reshape(h_freq_csi, shape_tmp)
-            do_rank_link_adaptation(self.cfg, self.dmimo_chans, h_freq_csi_reshaped, rx_snr_db, self.cfg.first_slot_idx)
+            # h_freq_csi_reshaped = tf.reshape(h_freq_csi, shape_tmp)
+            do_rank_link_adaptation(self.cfg, dmimo_chans, h_freq_csi_all, rx_snr_db, self.cfg.first_slot_idx)
 
         return dec_bits, uncoded_ber, uncoded_ser, x_hat
 
 
-def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_slot_idx=None, mu_mimo=None, info_bits=None):
+def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_slot_idx=None, mu_mimo=None):
 
     assert cfg.start_slot_idx >= cfg.csi_delay
 
@@ -250,7 +251,7 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_
     if np.any(h_est == None) or np.any(rx_snr_db == None):
         
         cfg.return_estimated_channel = True
-        h_est, rx_snr_db = mu_mimo(dmimo_chans, info_bits)
+        h_est, rx_snr_db = mu_mimo(dmimo_chans)
         cfg.return_estimated_channel = False
 
     # Rank adaptation
@@ -264,7 +265,10 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_
         rate = rank_feedback_report[1]
 
         cfg.num_tx_streams = int(rank)*(cfg.num_rx_ue_sel+1)
-        cfg.ue_ranks = rank
+        cfg.ue_ranks = [rank]
+
+        cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2
+        cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
         
         print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
         print("\n", "rate per user (MU-MIMO) = ", rate, "\n")
@@ -315,7 +319,7 @@ def sim_mu_mimo(cfg: SimConfig):
     Simulation of MU-MIMO scenarios using different settings
 
     :param cfg: simulation settings
-    :return: [uncoded BER, LDPC BER], [goodput, throughput]
+    :return: [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
     """
 
     # dMIMO channels from ns-3 simulator
@@ -326,6 +330,13 @@ def sim_mu_mimo(cfg: SimConfig):
     if cfg.enable_ue_selection is True:
         tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
         ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
+
+    # Initial rank and link adaptation
+    mu_mimo_tmp = MU_MIMO(cfg)
+    binary_source = BinarySource()
+    info_bits = binary_source([cfg.num_slots_p2, mu_mimo_tmp.num_bits_per_frame])
+    if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
+        do_rank_link_adaptation(cfg, dmimo_chans=dmimo_chans, mu_mimo=mu_mimo_tmp)
 
     # Create MU-MIMO simulation
     mu_mimo = MU_MIMO(cfg)
@@ -341,10 +352,6 @@ def sim_mu_mimo(cfg: SimConfig):
         info_bits_new, txs_ber, txs_bler = tx_squad(txs_chans, info_bits)
         print("BER: {}  BLER: {}".format(txs_ber, txs_bler))
         assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
-
-    # Initial rank and link adaptation
-    if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
-        do_rank_link_adaptation(cfg, dmimo_chans=dmimo_chans, mu_mimo=mu_mimo, info_bits=info_bits)
 
     # MU-MIMO transmission (P2)
     dec_bits, uncoded_ber, uncoded_ser, x_hat = mu_mimo(dmimo_chans, info_bits)

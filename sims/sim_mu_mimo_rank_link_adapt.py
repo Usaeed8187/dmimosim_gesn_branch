@@ -40,6 +40,14 @@ if __name__ == "__main__":
     goodput = np.zeros(3)
     throughput = np.zeros(3)
 
+    # cfg.num_rx_ue_sel = 7  # TODO consolidate params
+    # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+    # cfg.ue_ranks = [2]  # same rank for all UEs
+    # cfg.modulation_order = 2
+
+    # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
+    # modulation_orders = [2, 4, 6]
+
     #############################################
     # Testing with rank and link adaptation
     #############################################
@@ -59,9 +67,13 @@ if __name__ == "__main__":
     cfg.link_adapt = False
     
     # Test 1 parameters
-    cfg.num_tx_streams = 1
-    cfg.modulation_order = 2
+    num_tx_streams = 6
+    cfg.num_tx_streams = num_tx_streams
+    cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+    cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+    cfg.ue_ranks = [2]  # same rank for all UEs
     cfg.code_rate = 0.5
+    cfg.modulation_order = 2
 
     cfg.precoding_method = "ZF"
     rst_svd = sim_mu_mimo_all(cfg)
@@ -71,9 +83,13 @@ if __name__ == "__main__":
     throughput[1] = rst_svd[3]
 
     # Test 2 parameters
-    cfg.num_tx_streams = 2
-    cfg.modulation_order = 4
+    num_tx_streams = 12
+    cfg.num_tx_streams = num_tx_streams
+    cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+    cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+    cfg.ue_ranks = [2]  # same rank for all UEs
     cfg.code_rate = 0.5
+    cfg.modulation_order = 4
 
     cfg.precoding_method = "ZF"
     rst_svd = sim_mu_mimo_all(cfg)
