@@ -17,7 +17,7 @@ from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
-from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
+from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val, compute_UE_wise_BER, compute_UE_wise_SER
 
 from .txs_mimo import TxSquad
 from .rxs_mimo import RxSquad
@@ -224,6 +224,8 @@ class MU_MIMO(Model):
         # Hard-decision symbol error rate
         x_hard = self.mapper(d_hard)
         uncoded_ser = np.count_nonzero(x - x_hard) / np.prod(x.shape)
+        num_tx_streams_per_node = int(self.cfg.num_tx_streams/(self.cfg.num_rx_ue_sel+2))
+        node_wise_uncoded_ser = compute_UE_wise_SER(x ,x_hard, num_tx_streams_per_node, self.cfg.num_tx_streams)
 
         # LLR deinterleaver for LDPC decoding
         llr = self.dintlvr(llr)
@@ -236,7 +238,7 @@ class MU_MIMO(Model):
             # h_freq_csi_reshaped = tf.reshape(h_freq_csi, shape_tmp)
             do_rank_link_adaptation(self.cfg, dmimo_chans, h_freq_csi_all, rx_snr_db, self.cfg.first_slot_idx)
 
-        return dec_bits, uncoded_ber, uncoded_ser, x_hat
+        return dec_bits, uncoded_ber, uncoded_ser, node_wise_uncoded_ser, x_hat
 
 
 def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_slot_idx=None, mu_mimo=None):
@@ -354,12 +356,17 @@ def sim_mu_mimo(cfg: SimConfig):
         assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
 
     # MU-MIMO transmission (P2)
-    dec_bits, uncoded_ber, uncoded_ser, x_hat = mu_mimo(dmimo_chans, info_bits)
+    dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat = mu_mimo(dmimo_chans, info_bits)
 
-    # Update error statistics
+    # Update average error statistics
     info_bits = tf.reshape(info_bits, dec_bits.shape)
     coded_ber = compute_ber(info_bits, dec_bits).numpy()
     coded_bler = compute_bler(info_bits, dec_bits).numpy()
+
+    # Update per-node error statistics
+    num_tx_streams_per_node = int(cfg.num_tx_streams/(cfg.num_rx_ue_sel+2))
+    node_wise_ber, node_wise_bler = compute_UE_wise_BER(info_bits, dec_bits, num_tx_streams_per_node, cfg.num_tx_streams)
+    
 
     # RxSquad transmission (P3)
     if cfg.enable_rxsquad is True:
@@ -380,7 +387,11 @@ def sim_mu_mimo(cfg: SimConfig):
     userbits = (1.0 - coded_bler) * mu_mimo.num_bits_per_frame
     ratedbits = (1.0 - uncoded_ser) * mu_mimo.num_uncoded_bits_per_frame
 
-    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
+    node_wise_goodbits = (1.0 - node_wise_ber) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
+    node_wise_userbits = (1.0 - node_wise_bler) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
+    node_wise_ratedbits = (1.0 - node_wise_uncoded_ser) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
+
+    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits], [node_wise_goodbits, node_wise_userbits, node_wise_ratedbits]
 
 
 def sim_mu_mimo_all(cfg: SimConfig):
@@ -390,15 +401,23 @@ def sim_mu_mimo_all(cfg: SimConfig):
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput, bitrate = 0, 0, 0, 0, 0
+    nodewise_goodput = nodewise_throughput = nodewise_bitrate = []
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits = sim_mu_mimo(cfg)
+        bers, bits, nodewise_bits = sim_mu_mimo(cfg)
+        
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
+        
         goodput += bits[0]
         throughput += bits[1]
         bitrate += bits[2]
+
+        nodewise_goodput.append(nodewise_bits[0])
+        nodewise_throughput.append(nodewise_bits[1])
+        nodewise_bitrate.append(nodewise_bits[2])
+        
 
     slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
     overhead = cfg.num_slots_p2/(cfg.num_slots_p1 + cfg.num_slots_p2)
@@ -406,4 +425,8 @@ def sim_mu_mimo_all(cfg: SimConfig):
     throughput = throughput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
     bitrate = bitrate / (total_cycles * slot_time * 1e6) * overhead  # Mbps
 
-    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate]
+    nodewise_goodput = np.concatenate(nodewise_goodput) / (slot_time * 1e6) * overhead  # Mbps
+    nodewise_throughput = np.concatenate(nodewise_throughput) / (slot_time * 1e6) * overhead  # Mbps
+    nodewise_bitrate = np.concatenate(nodewise_bitrate) / (slot_time * 1e6) * overhead  # Mbps
+
+    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate, nodewise_goodput, nodewise_throughput, nodewise_bitrate]
