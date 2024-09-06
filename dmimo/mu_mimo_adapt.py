@@ -198,7 +198,7 @@ class MU_MIMO(Model):
             x_precoded = add_frequency_offset(x_precoded, self.cfo_sigma)
 
         # apply dMIMO channels to the resource grid in the frequency domain.
-        y = dmimo_chans([x_precoded, self.cfg.first_slot_idx])
+        y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
 
         # make proper shape
         y = y[:, :, :self.num_rxs_ant, :, :]
@@ -212,13 +212,13 @@ class MU_MIMO(Model):
         h_hat, err_var = self.ls_estimator([y, no])
 
         # LMMSE equalization
-        x_hat, no_eff = self.lmmse_equ([y, h_hat, err_var, no])
+        x_hat, no_eff = self.lmmse_equ([y, h_hat, err_var, no]) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols]
 
         # Soft-output QAM demapper
         llr = self.demapper([x_hat, no_eff])
 
         # Hard-decision bit error rate
-        d_hard = tf.cast(llr > 0, tf.float32)
+        d_hard = tf.cast(llr > 0, tf.float32) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols * QAM order]
         uncoded_ber = compute_ber(d, d_hard).numpy()
 
         # Hard-decision symbol error rate
@@ -230,7 +230,7 @@ class MU_MIMO(Model):
         llr = tf.reshape(llr, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.n])
 
         # LDPC hard-decision decoding
-        dec_bits = self.decoder(llr)
+        dec_bits = self.decoder(llr) # Shape: [nbatches, 1, number of streams, 1, number of effective subcarriers * number of data OFDM symbols * QAM order * code rate]
 
         if self.cfg.rank_adapt and self.cfg.link_adapt:
             # h_freq_csi_reshaped = tf.reshape(h_freq_csi, shape_tmp)
