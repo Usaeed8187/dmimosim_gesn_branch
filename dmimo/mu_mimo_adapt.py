@@ -337,6 +337,7 @@ def sim_mu_mimo(cfg: SimConfig):
     mu_mimo_tmp = MU_MIMO(cfg)
     binary_source = BinarySource()
     info_bits = binary_source([cfg.num_slots_p2, mu_mimo_tmp.num_bits_per_frame])
+    ranks_list = []
     if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
         do_rank_link_adaptation(cfg, dmimo_chans=dmimo_chans, mu_mimo=mu_mimo_tmp)
 
@@ -357,6 +358,7 @@ def sim_mu_mimo(cfg: SimConfig):
 
     # MU-MIMO transmission (P2)
     dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat = mu_mimo(dmimo_chans, info_bits)
+    ranks_list.append(int(cfg.num_tx_streams / (cfg.num_rx_ue_sel+2)))
 
     # Update average error statistics
     info_bits = tf.reshape(info_bits, dec_bits.shape)
@@ -391,7 +393,7 @@ def sim_mu_mimo(cfg: SimConfig):
     node_wise_userbits = (1.0 - node_wise_bler) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
     node_wise_ratedbits = (1.0 - node_wise_uncoded_ser) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
 
-    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits], [node_wise_goodbits, node_wise_userbits, node_wise_ratedbits]
+    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits], [node_wise_goodbits, node_wise_userbits, node_wise_ratedbits, ranks_list]
 
 
 def sim_mu_mimo_all(cfg: SimConfig):
@@ -401,22 +403,28 @@ def sim_mu_mimo_all(cfg: SimConfig):
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput, bitrate = 0, 0, 0, 0, 0
-    nodewise_goodput = nodewise_throughput = nodewise_bitrate = []
+    nodewise_goodput = []
+    nodewise_throughput = []
+    nodewise_bitrate = []
+    ranks_list = []
+    ldpc_ber_list = []
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits, nodewise_bits = sim_mu_mimo(cfg)
+        bers, bits, additional_KPIs = sim_mu_mimo(cfg)
         
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
+        ldpc_ber_list.append(bers[1])
         
         goodput += bits[0]
         throughput += bits[1]
         bitrate += bits[2]
-
-        nodewise_goodput.append(nodewise_bits[0])
-        nodewise_throughput.append(nodewise_bits[1])
-        nodewise_bitrate.append(nodewise_bits[2])
+        
+        nodewise_goodput.append(additional_KPIs[0])
+        nodewise_throughput.append(additional_KPIs[1])
+        nodewise_bitrate.append(additional_KPIs[2])
+        ranks_list.append(additional_KPIs[3])
         
 
     slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
@@ -428,5 +436,6 @@ def sim_mu_mimo_all(cfg: SimConfig):
     nodewise_goodput = np.concatenate(nodewise_goodput) / (slot_time * 1e6) * overhead  # Mbps
     nodewise_throughput = np.concatenate(nodewise_throughput) / (slot_time * 1e6) * overhead  # Mbps
     nodewise_bitrate = np.concatenate(nodewise_bitrate) / (slot_time * 1e6) * overhead  # Mbps
+    ranks = np.concatenate(ranks_list)
 
-    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate, nodewise_goodput, nodewise_throughput, nodewise_bitrate]
+    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate, nodewise_goodput, nodewise_throughput, nodewise_bitrate, ranks, ldpc_ber_list]
