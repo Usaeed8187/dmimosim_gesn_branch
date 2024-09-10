@@ -1,6 +1,6 @@
 backup
 data
-ns3/*
+ns3/channel*
 results
 .conda
 .idea
