@@ -207,6 +207,29 @@ class MU_MIMO(Model):
         # apply dMIMO channels to the resource grid in the frequency domain.
         y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
 
+        if self.cfg.precoding_method is not "None":
+            
+            sinr_arr = np.zeros((self.cfg.num_rx_ue_sel+1))
+            dmimo_chans._add_noise = False
+
+            for node_idx in range(self.cfg.num_rx_ue_sel+1):
+                if node_idx == 0:
+                    
+                    if self.cfg.precoding_method == "ZF":
+                        zeros_slice = tf.zeros_like(x_rg[:, :, 4:, ...])
+                        x_rg_tmp = tf.concat([x_rg[:, :, :4, ...], zeros_slice], axis=2)
+                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi])
+                    else:
+                        ValueError("unsupported precoding method for SINR calculation")
+                    
+                    
+                    sig_all = dmimo_chans([x_precoded, self.cfg.first_slot_idx])
+                    sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
+                    sig_pow = tf.sqrt(tf.reduce_sum(tf.square(sig_intended), axis=[1, 2, 3, 4]))
+                    interf_pow = tf.sqrt(tf.reduce_sum(tf.square(sig_all - sig_intended), axis=[1, 2, 3, 4]))
+                    
+
+
         # make proper shape
         y = y[:, :, :self.num_rxs_ant, :, :]
         y = tf.reshape(y, (self.batch_size, self.num_rx_ue, self.num_ue_ant, 14, -1))
