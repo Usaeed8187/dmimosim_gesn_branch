@@ -188,6 +188,13 @@ class MU_MIMO(Model):
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
         elif self.cfg.precoding_method == "BD":
             x_precoded, g = self.bd_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
+        elif self.cfg.precoding_method == "None":
+            if self.cfg.ue_ranks[0] == 2:
+                x_precoded = x_rg
+            elif self.cfg.ue_ranks[0] == 1:
+                x_precoded = tf.repeat(x_rg, repeats=2, axis=2)
+            else:
+                ValueError("unsupported number of streams")
         else:
             ValueError("unsupported precoding method")
 
