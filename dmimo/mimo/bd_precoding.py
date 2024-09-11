@@ -19,9 +19,9 @@ def mumimo_bd_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
 
     # Input dimensions:
     # x: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx]
-    # h: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx, num_tx_ant]
-    # total_rx_ant = num_streams_per_tx
+    # h: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_rxs_ant, num_txs_ant]
 
+    # total_rx_ant >= num_streams_per_tx
     total_rx_ant, total_tx_ant = h.shape[-2:]
     num_user = len(ue_indices)
 

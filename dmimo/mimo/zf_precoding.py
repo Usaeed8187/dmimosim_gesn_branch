@@ -84,8 +84,11 @@ def mumimo_zf_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
             num_rx_ant = len(ue_indices[k])  # number of antennas for user k
             h_ue = tf.gather(h, indices=ue_indices[k], axis=-2)
             if ue_ranks[k] == num_rx_ant:
+                # full rank
                 h_all.append(h_ue)
-            else:  # assuming rank==1
+            else:
+                # support only one stream adaptation
+                assert(ue_ranks[k] == 1)
                 # Calculate MRC weights
                 g = tf.math.conj(tf.math.reduce_sum(h_ue, axis=-1, keepdims=True))
                 # g = tf.matmul(g, tf.cast(1.0, tf.complex64)/tf.matmul(g, g, adjoint_a=True))

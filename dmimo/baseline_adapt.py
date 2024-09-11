@@ -28,7 +28,7 @@ class Baseline(Model):
 
         :param cfg: simulation settings
         """
-        super().__init__(kwargs)
+        super().__init__(trainable=False, **kwargs)
 
         self.cfg = cfg
         self.batch_size = cfg.num_slots_p2  # batch processing for all slots in phase 2

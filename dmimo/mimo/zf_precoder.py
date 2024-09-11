@@ -64,7 +64,7 @@ class ZFPrecoder(Layer):
 
         ue_rank_adapt = False
         if len(inputs) == 2:
-            # all user has the same number of streams/antennas
+            # not using rank adaptation
             x, h = inputs
         elif len(inputs) == 4:
             # specify user Rx antennas indices and streams (rank)
