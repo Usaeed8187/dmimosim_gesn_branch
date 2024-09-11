@@ -207,9 +207,10 @@ class MU_MIMO(Model):
         # apply dMIMO channels to the resource grid in the frequency domain.
         y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
 
+        # SINR calculation
         if self.cfg.precoding_method is not "None":
             
-            sinr_arr = np.zeros((self.cfg.num_rx_ue_sel+1))
+            sinr_dB_arr = np.zeros((self.cfg.num_rx_ue_sel+1, self.batch_size))
             dmimo_chans._add_noise = False
 
             for node_idx in range(self.cfg.num_rx_ue_sel+1):
@@ -222,13 +223,41 @@ class MU_MIMO(Model):
                     else:
                         ValueError("unsupported precoding method for SINR calculation")
                     
-                    
-                    sig_all = dmimo_chans([x_precoded, self.cfg.first_slot_idx])
+                    sig_all = y[:,:,:4, :,:]
                     sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
-                    sig_pow = tf.sqrt(tf.reduce_sum(tf.square(sig_intended), axis=[1, 2, 3, 4]))
-                    interf_pow = tf.sqrt(tf.reduce_sum(tf.square(sig_all - sig_intended), axis=[1, 2, 3, 4]))
-                    
+                    sig_intended = sig_intended[:,:,:4, :,:]
+                    sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
+                    interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
+                    rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,:4,:], axis=(1,2,3)) / 10)
+                    noise_pow = sig_pow / rx_snr_linear
+                    sinr_linear = sig_pow / (interf_pow + noise_pow)
+                    sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
 
+                else:
+                    num_UE_Ant = 2
+                    num_BS_Ant = 4
+                    ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant)
+
+                    if self.cfg.precoding_method == "ZF":
+                        mask = tf.reduce_any(tf.equal(tf.range(tf.shape(x_rg)[2])[..., tf.newaxis], ant_indices), axis=-1)
+                        mask = tf.cast(mask, x_rg.dtype)
+                        mask = tf.reshape(mask, [1, 1, -1, 1, 1])
+                        x_rg_tmp = x_rg * mask
+                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi])
+                    else:
+                        ValueError("unsupported precoding method for SINR calculation")
+                    
+                    sig_all = tf.gather(y, ant_indices, axis=2)
+                    sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
+                    sig_intended = tf.gather(sig_intended, ant_indices, axis=2)
+                    sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
+                    interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
+                    rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,ant_indices,:], axis=(1,2,3)) / 10)
+                    noise_pow = sig_pow / rx_snr_linear
+                    sinr_linear = sig_pow / (interf_pow + noise_pow)
+                    sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
+        else:
+            sinr_dB_arr = None
 
         # make proper shape
         y = y[:, :, :self.num_rxs_ant, :, :]
@@ -268,7 +297,7 @@ class MU_MIMO(Model):
             # h_freq_csi_reshaped = tf.reshape(h_freq_csi, shape_tmp)
             do_rank_link_adaptation(self.cfg, dmimo_chans, h_freq_csi_all, rx_snr_db, self.cfg.first_slot_idx)
 
-        return dec_bits, uncoded_ber, uncoded_ser, node_wise_uncoded_ser, x_hat
+        return dec_bits, uncoded_ber, uncoded_ser, node_wise_uncoded_ser, x_hat, sinr_dB_arr
 
 
 def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_slot_idx=None, mu_mimo=None):
@@ -296,11 +325,11 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_
         rank = rank_feedback_report[0]
         rate = rank_feedback_report[1]
 
-        cfg.num_tx_streams = int(rank)*(cfg.num_rx_ue_sel+1)
+        cfg.num_tx_streams = int(rank)*(cfg.num_rx_ue_sel+2)
         cfg.ue_ranks = [rank]
 
-        cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2
-        cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+        # cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2
+        # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
         
         print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
         print("\n", "rate per user (MU-MIMO) = ", rate, "\n")
@@ -387,7 +416,7 @@ def sim_mu_mimo(cfg: SimConfig):
         assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
 
     # MU-MIMO transmission (P2)
-    dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat = mu_mimo(dmimo_chans, info_bits)
+    dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat, sinr_dB_arr = mu_mimo(dmimo_chans, info_bits)
     ranks_list.append(int(cfg.num_tx_streams / (cfg.num_rx_ue_sel+2)))
 
     # Update average error statistics
@@ -423,7 +452,7 @@ def sim_mu_mimo(cfg: SimConfig):
     node_wise_userbits = (1.0 - node_wise_bler) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
     node_wise_ratedbits = (1.0 - node_wise_uncoded_ser) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
 
-    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits], [node_wise_goodbits, node_wise_userbits, node_wise_ratedbits, ranks_list]
+    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits], [node_wise_goodbits, node_wise_userbits, node_wise_ratedbits, ranks_list, sinr_dB_arr]
 
 
 def sim_mu_mimo_all(cfg: SimConfig):
@@ -438,6 +467,8 @@ def sim_mu_mimo_all(cfg: SimConfig):
     nodewise_bitrate = []
     ranks_list = []
     ldpc_ber_list = []
+    uncoded_ber_list = []
+    sinr_dB_list = []
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
@@ -445,6 +476,7 @@ def sim_mu_mimo_all(cfg: SimConfig):
         
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
+        uncoded_ber_list.append(bers[0])
         ldpc_ber_list.append(bers[1])
         
         goodput += bits[0]
@@ -455,6 +487,7 @@ def sim_mu_mimo_all(cfg: SimConfig):
         nodewise_throughput.append(additional_KPIs[1])
         nodewise_bitrate.append(additional_KPIs[2])
         ranks_list.append(additional_KPIs[3])
+        sinr_dB_list.append(additional_KPIs[4])
         
 
     slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
@@ -467,5 +500,9 @@ def sim_mu_mimo_all(cfg: SimConfig):
     nodewise_throughput = np.concatenate(nodewise_throughput) / (slot_time * 1e6) * overhead  # Mbps
     nodewise_bitrate = np.concatenate(nodewise_bitrate) / (slot_time * 1e6) * overhead  # Mbps
     ranks = np.concatenate(ranks_list)
+    if sinr_dB_list[0] is not None:
+        sinr_dB = np.concatenate(sinr_dB_list)
+    else:
+        sinr_dB = None
 
-    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate, nodewise_goodput, nodewise_throughput, nodewise_bitrate, ranks, ldpc_ber_list]
+    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate, nodewise_goodput, nodewise_throughput, nodewise_bitrate, ranks, uncoded_ber_list, ldpc_ber_list, sinr_dB]
