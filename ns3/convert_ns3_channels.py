@@ -91,8 +91,8 @@ def convert_ipc_channels(ipc_data_folder, ns3_chans_folder):
                         else:
                             start2 = bsAnts + (j - 1) * ueAnts
                             end2 = bsAnts + j * ueAnts
-                        Hdm[start:end, start2:end2, sym_in_sf, :] = Hmats[(rNodeId, tNodeId)]
-                        Ldm[j, i, sym_in_sf] = propLosses[(rNodeId, tNodeId)]
+                        Hdm[start2:end2, start:end, sym_in_sf, :] = Hmats[(tNodeId, rNodeId)]
+                        Ldm[j, i, sym_in_sf] = propLosses[(tNodeId, rNodeId)]
 
         # save channel for current subframe/slot
         output_file = os.path.join(ns3_chans_folder, "dmimochans_{}.npz".format(slot_idx))
