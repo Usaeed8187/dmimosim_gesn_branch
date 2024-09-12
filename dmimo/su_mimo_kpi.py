@@ -333,6 +333,7 @@ def sim_su_mimo(cfg: SimConfig):
 
     # Baseline transmission
     dec_bits, uncoded_ber, uncoded_ser, x_hat = su_mimo(dmimo_chans, info_bits)
+    ranks = int(cfg.num_tx_streams)
 
     # Update error statistics
     info_bits = tf.reshape(info_bits, dec_bits.shape)
@@ -344,7 +345,7 @@ def sim_su_mimo(cfg: SimConfig):
     userbits = (1.0 - coded_bler) * su_mimo.num_bits_per_frame
     ratedbits = (1.0 - uncoded_ser) * su_mimo.num_uncoded_bits_per_frame
 
-    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
+    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits], [ranks]
 
 
 def sim_su_mimo_all(cfg: SimConfig):
@@ -354,15 +355,26 @@ def sim_su_mimo_all(cfg: SimConfig):
 
     total_cycles = 0
     uncoded_ber, ldpc_ber, goodput, throughput, bitrate = 0, 0, 0, 0, 0
+
+    ranks_list = []
+    ldpc_ber_list = []
+    uncoded_ber_list = []
+
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits = sim_su_mimo(cfg)
+        bers, bits, additional_KPIs = sim_su_mimo(cfg)
+        
         uncoded_ber += bers[0]
         ldpc_ber += bers[1]
+        uncoded_ber_list.append(bers[0])
+        ldpc_ber_list.append(bers[1])
+        
         goodput += bits[0]
         throughput += bits[1]
         bitrate += bits[2]
+        
+        ranks_list.append(additional_KPIs[0])
 
     slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
     overhead = cfg.num_slots_p2/(cfg.num_slots_p1 + cfg.num_slots_p2)
@@ -370,4 +382,9 @@ def sim_su_mimo_all(cfg: SimConfig):
     throughput = throughput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
     bitrate = bitrate / (total_cycles * slot_time * 1e6) * overhead  # Mbps
 
-    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate]
+    try:
+        ranks = np.concatenate(ranks_list)
+    except:
+        ranks = np.asarray(ranks_list)
+
+    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate, ranks, ldpc_ber_list, uncoded_ber_list]
