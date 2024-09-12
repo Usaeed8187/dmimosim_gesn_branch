@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from dmimo.config import SimConfig
-from dmimo.mu_mimo_adapt import sim_mu_mimo_all
+from dmimo.mu_mimo_kpi import sim_mu_mimo_all
 
 
 # Main function

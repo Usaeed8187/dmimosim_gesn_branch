@@ -208,7 +208,7 @@ class MU_MIMO(Model):
         y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
 
         # SINR calculation
-        if self.cfg.precoding_method is not "None":
+        if self.cfg.precoding_method != "None":
             
             sinr_dB_arr = np.zeros((self.cfg.num_rx_ue_sel+1, self.batch_size))
             dmimo_chans._add_noise = False
