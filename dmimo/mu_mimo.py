@@ -27,11 +27,11 @@ class MU_MIMO(Model):
 
     def __init__(self, cfg: SimConfig, **kwargs):
         """
-        Create SU-MIMO simulation object
+        Create MU-MIMO simulation object
 
         :param cfg: simulation settings
         """
-        super().__init__(kwargs)
+        super().__init__(trainable=False, **kwargs)
 
         self.cfg = cfg
         self.batch_size = cfg.num_slots_p2  # batch processing for all slots in phase 2
@@ -178,7 +178,7 @@ class MU_MIMO(Model):
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
-            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
+            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
         elif self.cfg.precoding_method == "BD":
             x_precoded, g = self.bd_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
         else:

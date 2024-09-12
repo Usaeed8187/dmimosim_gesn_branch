@@ -47,12 +47,18 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_tx_streams in [6, 8, 10, 12]:
-        # manual rank adaptation (assuming 2 antennas per UE)
-        cfg.num_tx_streams = num_tx_streams
-        cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+    for num_rx_antennas in [8, 10, 12]:
+        # Test case 1:  no rank adaptation, assuming 2 antennas per UE and treating BS as two UEs
+        # cfg.num_tx_streams = num_rx_antennas
+        # cfg.num_rx_ue_sel = (num_rx_antennas - 4) // 2
+        # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+        # cfg.ue_ranks = [2]  # same rank for all UEs
+
+        # Test case 2: manual rank 1 adaption, assuming 2 antennas per UE and treating BS as two UEs
+        cfg.num_tx_streams = num_rx_antennas // 2
+        cfg.num_rx_ue_sel = (num_rx_antennas - 4) // 2
         cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
-        cfg.ue_ranks = [2]  # same rank for all UEs
+        cfg.ue_ranks = [1]  # same rank for all UEs
 
         # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
         modulation_orders = [2, 4, 6]

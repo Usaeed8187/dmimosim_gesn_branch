@@ -32,7 +32,7 @@ class SU_MIMO(Model):
 
         :param cfg: simulation settings
         """
-        super().__init__(kwargs)
+        super().__init__(trainable=False, **kwargs)
 
         self.cfg = cfg
         self.batch_size = cfg.num_slots_p2  # batch processing for all slots in phase 2
@@ -45,7 +45,7 @@ class SU_MIMO(Model):
         self.num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
         self.num_rx_ant = 8   # total number of Rx antennas for effective channel
 
-        # The number of transmitted streams is equal to the number of UE antennas
+        # The number of transmitted streams is less than or equal to the number of Rx UE antennas
         assert cfg.num_tx_streams <= self.num_rx_ant
         self.num_streams_per_tx = cfg.num_tx_streams
 
@@ -93,7 +93,7 @@ class SU_MIMO(Model):
                                pilot_pattern="kronecker",
                                pilot_ofdm_symbol_indices=[2, 11])
 
-        # LDPC params
+        # Update number of data bits and LDPC params
         cfg.ldpc_n = int(2 * self.rg.num_data_symbols)  # Number of coded bits
         cfg.ldpc_k = int(cfg.ldpc_n * cfg.code_rate)  # Number of information bits
         self.num_codewords = cfg.modulation_order // 2  # number of codewords per frame
@@ -147,7 +147,7 @@ class SU_MIMO(Model):
         :return: decoded bits, uncoded BER, demodulated QAM symbols (for debugging purpose)
         """
 
-        # Transmitter processing
+        # LDPC encoder processing
         info_bits = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
                                            self.num_codewords, self.encoder.k])
         c = self.encoder(info_bits)
@@ -209,7 +209,7 @@ class SU_MIMO(Model):
         # Soft-output QAM demapper
         llr = self.demapper([x_hat, no_eff])
 
-        # Hard-decision for uncoded bits
+        # Hard-decision bit error rate
         d_hard = tf.cast(llr > 0, tf.float32)
         uncoded_ber = compute_ber(d, d_hard).numpy()
 
@@ -221,7 +221,7 @@ class SU_MIMO(Model):
         llr = self.dintlvr(llr)
         llr = tf.reshape(llr, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.n])
 
-        # LDPC decoding and BER calculation
+        # LDPC hard-decision decoding
         dec_bits = self.decoder(llr)
 
         return dec_bits, uncoded_ber, uncoded_ser, x_hat

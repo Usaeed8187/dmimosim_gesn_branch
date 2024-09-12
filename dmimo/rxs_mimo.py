@@ -33,7 +33,7 @@ class RxSquad(Model):
         :param cfg: simulation settings
         :param rxs_bits_per_frame: total number of bits per subframe/slot for all UEs
         """
-        super().__init__(kwargs)
+        super().__init__(trainable=False, **kwargs)
 
         self.cfg = cfg
         self.batch_size = cfg.num_slots_p1  # batch processing for all slots in phase 1
