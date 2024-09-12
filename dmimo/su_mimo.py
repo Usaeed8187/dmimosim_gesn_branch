@@ -15,6 +15,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
+from dmimo.channel import standard_rc_pred_freq_mimo
 from dmimo.mimo import SVDPrecoder, SVDEqualizer
 from dmimo.mimo import ZFPrecoder
 from dmimo.mimo import update_node_selection
@@ -245,6 +246,14 @@ def sim_su_mimo(cfg: SimConfig):
         # Perfect channel estimation
         h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                          batch_size=cfg.num_slots_p2)
+    elif cfg.csi_prediction is True:
+            rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
+            # Get CSI history
+            # TODO: optimize channel estimation and optimization procedures (currently very slow)
+            h_freq_csi_history = rc_predictor.get_csi_history(cfg.first_slot_idx, cfg.csi_delay,
+                                                              rg_csi, dmimo_chans)
+            # Do channel prediction
+            h_freq_csi = rc_predictor.rc_siso_predict(h_freq_csi_history)
     else:
         # LMMSE channel estimation
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
@@ -258,7 +267,7 @@ def sim_su_mimo(cfg: SimConfig):
     # Create SU-MIMO simulation
     su_mimo = SU_MIMO(cfg, rg_csi)
 
-    # The binary source will create batches of information bits
+    # Generate information source
     binary_source = BinarySource()
     info_bits = binary_source([cfg.num_slots_p2, su_mimo.num_bits_per_frame])
 

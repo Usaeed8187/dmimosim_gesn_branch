@@ -101,8 +101,6 @@ if __name__ == "__main__":
         ax[2].plot(modulation_orders, bitrate.transpose(), '*-')
         ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF', 'Bitrate-SVD', 'Bitrate-ZF'])
 
-        plt.savefig("../results/{}/su_mimo_results_s{}.png".format(folder_name, cfg.num_tx_streams))
-
-        np.savez("../results/{}/su_mimo_results_s{}.npz".format(folder_name, cfg.num_tx_streams),
-                 ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
-
+        basename = "../results/{}/su_mimo_results_s{}".format(folder_name, cfg.num_tx_streams)
+        plt.savefig(f"{basename}.png")
+        np.savez(f"{basename}.npz", ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)

@@ -28,7 +28,7 @@ tf.get_logger().setLevel('ERROR')
 sys.path.append(os.path.join('..'))
 
 from dmimo.config import SimConfig
-from dmimo.su_mimo_chanpred import sim_su_mimo_chanpred_all
+from dmimo.su_mimo import sim_su_mimo_all
 
 
 # Main function
@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
             cfg.csi_prediction = True
             cfg.precoding_method = "SVD"
-            rst_svd = sim_su_mimo_chanpred_all(cfg)
+            rst_svd = sim_su_mimo_all(cfg)
             ber[0, k] = rst_svd[0]
             ldpc_ber[0, k] = rst_svd[1]
             goodput[0, k] = rst_svd[2]
@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
             cfg.csi_prediction = True
             cfg.precoding_method = "ZF"
-            rst_zf = sim_su_mimo_chanpred_all(cfg)
+            rst_zf = sim_su_mimo_all(cfg)
             ber[1, k] = rst_zf[0]
             ldpc_ber[1, k] = rst_zf[1]
             goodput[1, k] = rst_zf[2]
@@ -103,8 +103,6 @@ if __name__ == "__main__":
         ax[2].plot(modulation_orders, bitrate.transpose(), '*-')
         ax[2].legend(['Goodput-SVD', 'Goodput-ZF', 'Throughput-SVD', 'Throughput-ZF', 'Bitrate-SVD', 'Bitrate-ZF'])
 
-        plt.savefig("../results/{}/su_mimo_results_chanpred_s{}.png".format(folder_name, cfg.num_tx_streams))
-
-        np.savez("../results/{}/su_mimo_results_chanpred_s{}.npz".format(folder_name, cfg.num_tx_streams),
-                 ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
-
+        basename = "../results/{}/su_mimo_results_chanpred_s{}".format(folder_name, cfg.num_tx_streams)
+        plt.savefig(f"{basename}.png")
+        np.savez(f"{basename}.npz", ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
