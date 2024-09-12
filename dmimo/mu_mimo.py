@@ -257,7 +257,7 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est, rx_snr_db):
         code_rate_arr = []
 
         modulation_order = int(np.min(qam_order_arr))
-        code_rate = []
+        code_rate = []  # FIXME update code rate
 
         print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
 
