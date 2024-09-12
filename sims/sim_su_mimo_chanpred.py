@@ -7,7 +7,6 @@ This scripts should be called from the "sims" folder
 import sys
 import os
 import numpy as np
-import tensorflow as tf
 import matplotlib.pyplot as plt
 
 gpu_num = 0  # Use "" to use the CPU, Use 0 to select first GPU
@@ -16,6 +15,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['DRJIT_LIBLLVM_PATH'] = '/usr/lib/llvm/16/lib64/libLLVM.so'
 
 # Configure to use only a single GPU and allocate only as much memory as needed
+import tensorflow as tf
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
     try:
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     print("Using channels in {}".format(folder_name))
 
     for num_tx_streams in [4, 5, 6, 7, 8]:
-        # 4/6/8 equal to total number of streams
+        # 4/5/7/8 equal to total number of streams
         cfg.num_tx_streams = num_tx_streams
 
         # Modulation order: 2/4/6 for QPSK/16QAM/64QAM

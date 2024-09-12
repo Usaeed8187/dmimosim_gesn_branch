@@ -26,25 +26,24 @@ from .txs_mimo import TxSquad
 
 class SU_MIMO(Model):
 
-    def __init__(self, cfg: SimConfig, **kwargs):
+    def __init__(self, cfg: SimConfig, rg_csi: ResourceGrid, **kwargs):
         """
         Create SU-MIMO simulation object
 
         :param cfg: simulation settings
+        :param rg_csi: Resource grid for CSI estimation
         """
         super().__init__(trainable=False, **kwargs)
 
         self.cfg = cfg
+        self.rg_csi = rg_csi
         self.batch_size = cfg.num_slots_p2  # batch processing for all slots in phase 2
 
         # CFO and STO settings
         self.sto_sigma = sto_val(cfg, cfg.sto_sigma)
         self.cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
 
-        # dMIMO configuration
-        self.num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
         self.num_rx_ant = 8   # total number of Rx antennas for effective channel
-
         # The number of transmitted streams is less than or equal to the number of Rx UE antennas
         assert cfg.num_tx_streams <= self.num_rx_ant
         self.num_streams_per_tx = cfg.num_tx_streams
@@ -57,24 +56,10 @@ class SU_MIMO(Model):
         # This determines which data streams are determined for which receiver.
         sm = StreamManagement(rx_tx_association, self.num_streams_per_tx)
 
-        # Adjust guard subcarriers for channel estimation grid
-        csi_effective_subcarriers = (cfg.fft_size // self.num_txs_ant) * self.num_txs_ant
-        csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
-        csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
-
-        # Resource grid for channel estimation
-        self.rg_csi = ResourceGrid(num_ofdm_symbols=14,
-                                   fft_size=cfg.fft_size,
-                                   subcarrier_spacing=cfg.subcarrier_spacing,
-                                   num_tx=1,
-                                   num_streams_per_tx=self.num_txs_ant,
-                                   cyclic_prefix_length=cfg.cyclic_prefix_len,
-                                   num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
-                                   dc_null=False,
-                                   pilot_pattern="kronecker",
-                                   pilot_ofdm_symbol_indices=[2, 11])
-
         # Adjust guard subcarriers for different number of streams
+        csi_effective_subcarriers = self.rg_csi.num_effective_subcarriers
+        csi_guard_carriers_1 = self.rg_csi.num_guard_carriers[0]
+        csi_guard_carriers_2 = self.rg_csi.num_guard_carriers[1]
         effective_subcarriers = (csi_effective_subcarriers // self.num_streams_per_tx) * self.num_streams_per_tx
         guard_carriers_1 = (csi_effective_subcarriers - effective_subcarriers) // 2
         guard_carriers_2 = (csi_effective_subcarriers - effective_subcarriers) - guard_carriers_1
@@ -132,10 +117,7 @@ class SU_MIMO(Model):
         # The decoder provides hard-decisions on the information bits
         self.decoder = LDPC5GDecoder(self.encoder, hard_out=True)
 
-        if cfg.csi_prediction:
-            self.rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
-
-    def call(self, dmimo_chans: dMIMOChannels, info_bits):
+    def call(self, dmimo_chans: dMIMOChannels, h_freq_csi, info_bits):
         """
         Signal processing for one SU-MIMO transmission cycle (P1/P2/P3)
 
@@ -143,6 +125,7 @@ class SU_MIMO(Model):
         is assumed to always provide enough data bandwidth for P2.
 
         :param dmimo_chans: dMIMO channels
+        :param h_freq_csi: CSI feedback for precoding
         :param info_bits: information bits
         :return: decoded bits, uncoded BER, demodulated QAM symbols (for debugging purpose)
         """
@@ -159,24 +142,6 @@ class SU_MIMO(Model):
         # QAM mapping for the OFDM grid
         x = self.mapper(d)
         x_rg = self.rg_mapper(x)
-
-        if self.cfg.perfect_csi is True:
-            # Perfect channel estimation
-            h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
-                                                             batch_size=self.batch_size)
-        elif self.cfg.csi_prediction is True:
-            # Get CSI history
-            # TODO: optimize channel estimation and optimization procedures (currently very slow)
-            h_freq_csi_history = self.rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
-                                                                   self.rg_csi, dmimo_chans)
-            # Do channel prediction
-            chan_pred = self.rc_predictor.rc_siso_predict(h_freq_csi_history)
-            h_freq_csi = chan_pred
-        else:
-            # LMMSE channel estimation
-            h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
-                                                               slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
-                                                               cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
@@ -257,8 +222,51 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
         tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
         ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
+    # Total number of antennas in the TxSquad, always use all gNB antennas
+    num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
+
+    # Adjust guard subcarriers for channel estimation grid
+    csi_effective_subcarriers = (cfg.fft_size // num_txs_ant) * num_txs_ant
+    csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
+    csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
+
+    # Resource grid for channel estimation
+    rg_csi = ResourceGrid(num_ofdm_symbols=14,
+                          fft_size=cfg.fft_size,
+                          subcarrier_spacing=cfg.subcarrier_spacing,
+                          num_tx=1,
+                          num_streams_per_tx=num_txs_ant,
+                          cyclic_prefix_length=cfg.cyclic_prefix_len,
+                          num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
+                          dc_null=False,
+                          pilot_pattern="kronecker",
+                          pilot_ofdm_symbol_indices=[2, 11])
+
+    if cfg.perfect_csi is True:
+        # Perfect channel estimation
+        h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                         batch_size=cfg.num_slots_p2)
+    elif cfg.csi_prediction is True:
+            rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
+            # Get CSI history
+            # TODO: optimize channel estimation and optimization procedures (currently very slow)
+            h_freq_csi_history = rc_predictor.get_csi_history(cfg.first_slot_idx, cfg.csi_delay,
+                                                              rg_csi, dmimo_chans)
+            # Do channel prediction
+            chan_pred = rc_predictor.rc_siso_predict(h_freq_csi_history)
+            h_freq_csi = chan_pred
+    else:
+        # LMMSE channel estimation
+        h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
+                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                           cfo_sigma=cfo_val(cfg, cfg.cfo_sigma),
+                                                           sto_sigma=sto_val(cfg, cfg.sto_sigma))
+
+    # Rank and link adaptation
+    # call do_rank_link_adaptation()
+
     # Create SU-MIMO simulation
-    su_mimo = SU_MIMO(cfg)
+    su_mimo = SU_MIMO(cfg, rg_csi)
 
     # The binary source will create batches of information bits
     binary_source = BinarySource()
@@ -273,7 +281,7 @@ def sim_su_mimo_chanpred(cfg: SimConfig):
         assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
 
     # SU-MIMO transmission (P2 & P3)
-    dec_bits, uncoded_ber, uncoded_ser, x_hat = su_mimo(dmimo_chans, info_bits)
+    dec_bits, uncoded_ber, uncoded_ser, x_hat = su_mimo(dmimo_chans, h_freq_csi, info_bits)
 
     # Update error statistics
     info_bits = tf.reshape(info_bits, dec_bits.shape)

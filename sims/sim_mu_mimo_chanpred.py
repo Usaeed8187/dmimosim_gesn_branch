@@ -7,7 +7,6 @@ This scripts should be called from the "sims" folder
 import sys
 import os
 import numpy as np
-import tensorflow as tf
 import matplotlib.pyplot as plt
 
 gpu_num = 0  # Use "" to use the CPU, Use 0 to select first GPU
@@ -16,6 +15,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 os.environ['DRJIT_LIBLLVM_PATH'] = '/usr/lib/llvm/16/lib64/libLLVM.so'
 
 # Configure to use only a single GPU and allocate only as much memory as needed
+import tensorflow as tf
 gpus = tf.config.list_physical_devices('GPU')
 if gpus:
     try:
@@ -47,13 +47,18 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_tx_streams in [6, 8, 10, 12]:
-        # 6/7/8/10/12 equal to total number of streams
-        # manual rank adaptation (assuming 2 antennas per UE)
-        cfg.num_tx_streams = num_tx_streams
-        cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+    for num_rx_antennas in [8, 10, 12]:
+        # Test case 1:  no rank adaptation, assuming 2 antennas per UE and treating BS as two UEs
+        cfg.num_tx_streams = num_rx_antennas
+        cfg.num_rx_ue_sel = (num_rx_antennas - 4) // 2
         cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
         cfg.ue_ranks = [2]  # same rank for all UEs
+
+        # Test case 2: manual rank 1 adaption, assuming 2 antennas per UE and treating BS as two UEs
+        # cfg.num_tx_streams = num_rx_antennas // 2
+        # cfg.num_rx_ue_sel = (num_rx_antennas - 4) // 2
+        # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+        # cfg.ue_ranks = [1]  # same rank for all UEs
 
         # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
         modulation_orders = [2, 4, 6]
@@ -107,8 +112,8 @@ if __name__ == "__main__":
         ax[2].plot(modulation_orders, bitrate.transpose(), '*-')
         ax[2].legend(['Goodput-BD', 'Goodput-ZF', 'Throughput-BD', 'Throughput-ZF', 'Bitrate-SVD', 'Bitrate-ZF'])
 
-        plt.savefig("../results/{}/mu_mimo_results_chanpred_s{}.png".format(folder_name, cfg.num_tx_streams))
-
-        np.savez("../results/{}/mu_mimo_results_chanpred_s{}.npz".format(folder_name, cfg.num_tx_streams),
-                 ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
+        basename = "../results/{}/mu_mimo_results_chanpred_s{}r{}".format(folder_name,
+                                                                          cfg.num_tx_streams, cfg.ue_ranks[0])
+        plt.savefig(f"{basename}.png")
+        np.savez(f"{basename}.npz", ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
 

@@ -22,15 +22,17 @@ from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_va
 
 class Baseline(Model):
 
-    def __init__(self, cfg: SimConfig, **kwargs):
+    def __init__(self, cfg: SimConfig, rg_csi: ResourceGrid, **kwargs):
         """
         Create Baseline simulation object
 
         :param cfg: simulation settings
+        :param rg_csi: Resource grid for CSI estimation
         """
         super().__init__(trainable=False, **kwargs)
 
         self.cfg = cfg
+        self.rg_csi = rg_csi
         self.batch_size = cfg.num_slots_p2  # batch processing for all slots in phase 2
 
         # dMIMO configuration
@@ -53,24 +55,10 @@ class Baseline(Model):
         # This determines which data streams are determined for which receiver.
         sm = StreamManagement(rx_tx_association, self.num_streams_per_tx)
 
-        # Adjust guard subcarriers for channel estimation grid
-        csi_effective_subcarriers = (cfg.fft_size // self.num_bs_ant) * self.num_bs_ant
-        csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
-        csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
-
-        # Resource grid for channel estimation
-        self.rg_csi = ResourceGrid(num_ofdm_symbols=14,
-                                   fft_size=cfg.fft_size,
-                                   subcarrier_spacing=cfg.subcarrier_spacing,
-                                   num_tx=1,
-                                   num_streams_per_tx=self.num_bs_ant,
-                                   cyclic_prefix_length=cfg.cyclic_prefix_len,
-                                   num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
-                                   dc_null=False,
-                                   pilot_pattern="kronecker",
-                                   pilot_ofdm_symbol_indices=[2, 11])
-
         # Adjust guard subcarriers for different number of streams
+        csi_effective_subcarriers = self.rg_csi.num_effective_subcarriers
+        csi_guard_carriers_1 = self.rg_csi.num_guard_carriers[0]
+        csi_guard_carriers_2 = self.rg_csi.num_guard_carriers[1]
         effective_subcarriers = (csi_effective_subcarriers // self.num_streams_per_tx) * self.num_streams_per_tx
         guard_carriers_1 = (csi_effective_subcarriers - effective_subcarriers) // 2
         guard_carriers_2 = (csi_effective_subcarriers - effective_subcarriers) - guard_carriers_1
@@ -89,7 +77,7 @@ class Baseline(Model):
                                pilot_pattern="kronecker",
                                pilot_ofdm_symbol_indices=[2, 11])
 
-        # Update number of data bits and LDPC codewords
+        # Update number of data bits and LDPC params
         cfg.ldpc_n = int(2 * self.rg.num_data_symbols)  # Number of coded bits
         cfg.ldpc_k = int(cfg.ldpc_n * cfg.code_rate)  # Number of information bits
         self.num_codewords = cfg.modulation_order // 2  # number of codewords per frame
@@ -128,11 +116,12 @@ class Baseline(Model):
         # The decoder provides hard-decisions on the information bits
         self.decoder = LDPC5GDecoder(self.encoder, hard_out=True)
 
-    def call(self, dmimo_chans: dMIMOChannels, info_bits):
+    def call(self, dmimo_chans: dMIMOChannels, h_freq_csi, info_bits):
         """
         Signal processing for baseline one transmission cycle
 
         :param dmimo_chans: dMIMO channels
+        :param h_freq_csi: CSI feedback for precoding
         :param info_bits: information bits
         :return: decoded bits, uncoded BER, demodulated QAM symbols (for debugging purpose)
         """
@@ -149,16 +138,6 @@ class Baseline(Model):
         # QAM mapping for the OFDM grid
         x = self.mapper(d)
         x_rg = self.rg_mapper(x)
-
-        if self.cfg.perfect_csi is True:
-            # Perfect channel estimation
-            h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
-                                                             batch_size=self.batch_size)
-        else:
-            # LMMSE channel estimation
-            h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
-                                                               slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
-                                                               cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
@@ -191,7 +170,7 @@ class Baseline(Model):
         # Soft-output QAM demapper
         llr = self.demapper([x_hat, no_eff])
 
-        # Hard-decision for uncoded bits
+        # Hard-decision bit error rate
         d_hard = tf.cast(llr > 0, tf.float32)
         uncoded_ber = compute_ber(d, d_hard).numpy()
 
@@ -221,15 +200,47 @@ def sim_baseline(cfg: SimConfig):
     ns3cfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3cfg, "Baseline", add_noise=True)
 
+    # Adjust guard subcarriers for channel estimation grid
+    num_bs_ant = 4
+    csi_effective_subcarriers = (cfg.fft_size // num_bs_ant) * num_bs_ant
+    csi_guard_carriers_1 = (cfg.fft_size - csi_effective_subcarriers) // 2
+    csi_guard_carriers_2 = (cfg.fft_size - csi_effective_subcarriers) - csi_guard_carriers_1
+
+    # Resource grid for channel estimation
+    rg_csi = ResourceGrid(num_ofdm_symbols=14,
+                          fft_size=cfg.fft_size,
+                          subcarrier_spacing=cfg.subcarrier_spacing,
+                          num_tx=1,
+                          num_streams_per_tx=num_bs_ant,
+                          cyclic_prefix_length=cfg.cyclic_prefix_len,
+                          num_guard_carriers=[csi_guard_carriers_1, csi_guard_carriers_2],
+                          dc_null=False,
+                          pilot_pattern="kronecker",
+                          pilot_ofdm_symbol_indices=[2, 11])
+
+    if cfg.perfect_csi is True:
+        # Perfect channel estimation
+        h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                         batch_size=cfg.num_slots_p2)
+    else:
+        # LMMSE channel estimation
+        h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
+                                                           slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                           cfo_sigma=cfo_val(cfg, cfg.cfo_sigma),
+                                                           sto_sigma=sto_val(cfg, cfg.sto_sigma))
+
+    # Rank and link adaptation
+    # call do_rank_link_adaptation()
+
     # Create Baseline simulation
-    baseline = Baseline(cfg)
+    baseline = Baseline(cfg, rg_csi)
 
     # The binary source will create batches of information bits
     binary_source = BinarySource()
     info_bits = binary_source([cfg.num_slots_p2, baseline.num_bits_per_frame])
 
     # Baseline transmission
-    dec_bits, uncoded_ber, uncoded_ser, x_hat = baseline(dmimo_chans, info_bits)
+    dec_bits, uncoded_ber, uncoded_ser, x_hat = baseline(dmimo_chans, h_freq_csi, info_bits)
 
     # Update error statistics
     info_bits = tf.reshape(info_bits, dec_bits.shape)
