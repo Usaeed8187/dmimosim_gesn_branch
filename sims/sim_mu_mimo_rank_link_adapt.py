@@ -27,13 +27,14 @@ if __name__ == "__main__":
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 8
-    cfg.ns3_folder = "ns3/channels_medium_mobility/"
+    mobility = 'medium_mobility'
+    cfg.ns3_folder = "ns3/channels_" + mobility + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    rx_ues_arr = [1,2,4]
+    rx_ues_arr = [1,2,4,6]
     
     ber = np.zeros(np.size(rx_ues_arr ))
     ldpc_ber = np.zeros(np.size(rx_ues_arr ))
@@ -82,12 +83,17 @@ if __name__ == "__main__":
         ranks.append(rst_bd[8])
         uncoded_ber_list.append(rst_bd[9])
         ldpc_ber_list.append(rst_bd[10])
-        sinr_dB.append(np.concatenate(rst_bd[11]))    
+        sinr_dB.append(np.concatenate(rst_bd[11]))
 
-    #############################################
-    # Testing without rank and link adaptation
-    #############################################
+        np.savez("results/{}/mu_mimo_results_UE_{}.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),
+                ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, nodewise_goodput=rst_bd[5],
+                nodewise_throughput=rst_bd[6], nodewise_bitrate=rst_bd[7], ranks=rst_bd[8], uncoded_ber_list=rst_bd[9],
+                ldpc_ber_list=rst_bd[10], sinr_dB=rst_bd[11])
     
+    #############################################
+    # Test for beamforming gain
+    #############################################
+
     cfg.rank_adapt = False
     cfg.link_adapt = False
 
@@ -107,6 +113,10 @@ if __name__ == "__main__":
     ldpc_ber[1] = rst_bd[1]
     goodput[1] = rst_bd[2]
     throughput[1] = rst_bd[3]
+
+    #############################################
+    # Testing without rank and link adaptation
+    #############################################
     
     # # Test 1 parameters
     # num_tx_streams = 6
@@ -139,7 +149,4 @@ if __name__ == "__main__":
     # ldpc_ber[3] = rst_svd[1]
     # goodput[3] = rst_svd[2]
     # throughput[3] = rst_svd[3]
-
-    np.savez("../results/{}/mu_mimo_results_s{}.npz".format(folder_name, cfg.num_tx_streams),
-                ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
 
