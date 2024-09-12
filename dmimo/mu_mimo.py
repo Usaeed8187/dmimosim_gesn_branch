@@ -323,7 +323,7 @@ def sim_mu_mimo(cfg: SimConfig):
         cfg.ue_ranks = [rank]
         cfg.num_tx_streams = rank * (cfg.num_rx_ue_sel + 2)  # treat BS as two UEs
         cfg.modulation_order = modulation_order
-        # cfg.code_rate = code_rate  # FIXME add code rate adaptation
+        cfg.code_rate = code_rate  # FIXME add code rate adaptation
 
     # Create MU-MIMO simulation
     mu_mimo = MU_MIMO(cfg, rg_csi)
