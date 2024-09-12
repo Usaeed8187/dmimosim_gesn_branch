@@ -237,7 +237,7 @@ class linkAdaptation(Layer):
                         for beta in beta_list:
                             
                             exp_term = np.exp(-per_stream_sinr[...,stream_idx] / beta)
-                            if np.any(exp_term == 0):
+                            if np.mean(exp_term) == 1:
                                 sinr_eff = np.mean(per_stream_sinr)
                             else:
                                 sinr_eff = -beta * np.log(np.mean(exp_term))

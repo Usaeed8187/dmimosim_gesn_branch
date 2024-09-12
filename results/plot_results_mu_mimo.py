@@ -41,6 +41,15 @@ uncoded_ber_list = []
 ldpc_ber_list = []
 sinr_dB = []
 
+baseline_ber = []
+baseline_ldpc_ber = []
+baseline_goodput = []
+baseline_throughput = []
+baseline_bitrate = []
+baseline_ranks = []
+baseline_uncoded_ber_list = []
+baseline_ldpc_ber_list = []
+
 for mobility_idx in range(np.size(mobilities)):
 
     curr_mobility = mobilities[mobility_idx]
@@ -79,6 +88,18 @@ for mobility_idx in range(np.size(mobilities)):
     ldpc_ber_list.append(temp_ldpc_ber_list)
     sinr_dB.append(temp_sinr_dB)
 
+    baseline_file_path = "results/channels_{}/baseline_results.npz".format(curr_mobility)
+    baseline_data = np.load(baseline_file_path)
+
+    baseline_ranks.append(baseline_data['ranks'])
+    baseline_uncoded_ber_list.append(baseline_data['uncoded_ber_list'])
+    baseline_ldpc_ber_list.append(baseline_data['ldpc_ber_list'])
+    baseline_ber.append(baseline_data['ber'])
+    baseline_ldpc_ber.append(baseline_data['ldpc_ber'])
+    baseline_goodput.append(baseline_data['goodput'])
+    baseline_throughput.append(baseline_data['throughput'])
+    baseline_bitrate.append(baseline_data['bitrate'])
+
 #############################################
 # Plots
 #############################################
@@ -104,31 +125,66 @@ plt.title('SINR (dB)')
 plt.savefig("results/plots/SINR")
 
 ############################### End-to-end average BER ######################################
+# Method 1 for end-to-end average BER (mobility on x-axis)
 plt.figure()
-plt.semilogy(rx_ues_arr, ber[0], marker='o', label='Low Mobility')
-plt.semilogy(rx_ues_arr, ber[1], marker='s', label='Medium Mobility')
-plt.semilogy(rx_ues_arr, ber[2], marker='^', label='High Mobility')
+x_labels = ['Low mobility', 'Medium mobility', 'High mobility']
+x_values = np.arange(1,np.size(mobilities)+1)
+plt.semilogy(x_values, np.asarray(ber)[:,0], marker='o', label='1 UE')
+plt.semilogy(x_values, np.asarray(ber)[:,1], marker='s', label='2 UEs')
+plt.semilogy(x_values, np.asarray(ber)[:,2], marker='v', label='4 UEs')
+plt.semilogy(x_values, np.asarray(ber)[:,3], marker='^', label='6 UEs')
+plt.semilogy(x_values, np.asarray(baseline_ber), marker='*', label='Baseline')
 plt.grid(True)
-plt.xlabel('Number of UEs')
+plt.xticks(x_values, x_labels)
 plt.ylabel('BER')
 plt.title('Uncoded BER')
 plt.legend()
 plt.savefig("results/plots/BER")
 
+# # Method 2 for end-to-end average BER (number of UEs on x-axis)
+# plt.figure()
+# plt.semilogy(rx_ues_arr, ber[0], marker='o', label='Low Mobility')
+# plt.semilogy(rx_ues_arr, ber[1], marker='s', label='Medium Mobility')
+# plt.semilogy(rx_ues_arr, ber[2], marker='^', label='High Mobility')
+# plt.grid(True)
+# plt.xlabel('Number of UEs')
+# plt.ylabel('BER')
+# plt.title('Uncoded BER')
+# plt.legend()
+# plt.savefig("results/plots/BER")
+
 ############################### End-to-end average BLER ######################################
+# Method 1 for end-to-end average BER (mobility on x-axis)
 plt.figure()
-plt.semilogy(rx_ues_arr, ldpc_ber[0], marker='o', label='Low Mobility')
-plt.semilogy(rx_ues_arr, ldpc_ber[1], marker='s', label='Medium Mobility')
-plt.semilogy(rx_ues_arr, ldpc_ber[2], marker='^', label='High Mobility')
+x_labels = ['Low mobility', 'Medium mobility', 'High mobility']
+x_values = np.arange(1,np.size(mobilities)+1)
+plt.semilogy(x_values, np.asarray(ldpc_ber)[:,0], marker='o', label='1 UE')
+plt.semilogy(x_values, np.asarray(ldpc_ber)[:,1], marker='s', label='2 UEs')
+plt.semilogy(x_values, np.asarray(ldpc_ber)[:,2], marker='v', label='4 UEs')
+plt.semilogy(x_values, np.asarray(ldpc_ber)[:,3], marker='^', label='6 UEs')
+plt.semilogy(x_values, np.asarray(baseline_ldpc_ber), marker='*', label='Baseline')
 plt.grid(True)
-plt.xlabel('Number of UEs')
+plt.xticks(x_values, x_labels)
 plt.ylabel('BLER')
 plt.title('BLER')
 plt.legend()
 plt.savefig("results/plots/BLER")
 
 
-############################### Probability of Outage (rx nodes in phase 2) - graph version 1 ######################################
+# # Method 2 for end-to-end average BLER (number of UEs on x-axis)
+# plt.figure()
+# plt.semilogy(rx_ues_arr, ldpc_ber[0], marker='o', label='Low Mobility')
+# plt.semilogy(rx_ues_arr, ldpc_ber[1], marker='s', label='Medium Mobility')
+# plt.semilogy(rx_ues_arr, ldpc_ber[2], marker='^', label='High Mobility')
+# plt.grid(True)
+# plt.xlabel('Number of UEs')
+# plt.ylabel('BLER')
+# plt.title('BLER')
+# plt.legend()
+# plt.savefig("results/plots/BLER")
+
+
+############################### Probability of Outage (rx nodes in phase 2) ######################################
 threshold = 0.15
 outage_probability = []
 for mobility_idx in range(np.size(mobilities)):
