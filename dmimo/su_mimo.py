@@ -16,7 +16,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.channel import standard_rc_pred_freq_mimo
-from dmimo.mimo import SVDPrecoder, SVDEqualizer
+from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation
 from dmimo.mimo import ZFPrecoder
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
@@ -192,17 +192,61 @@ class SU_MIMO(Model):
         return dec_bits, uncoded_ber, uncoded_ser, x_hat
 
 
-def do_rank_link_adaptation(cfg: SimConfig, dmimo_chans: dMIMOChannels):
-    """
-    Rank and link adaptation algorithm
+def do_rank_link_adaptation(cfg, dmimo_chans, h_est, rx_snr_db):
 
-    :param cfg: simulation configuration
-    :param dmimo_chans: dMIMO channels
-    :return: updated rank and link configuration
-    """
+    # Rank adaptation
+    rank_adaptation = rankAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant,
+                                     architecture='SU-MIMO', snrdb=rx_snr_db, fft_size=cfg.fft_size,
+                                     precoder='SVD')
 
-    # remove current implementation
-    pass
+    rank_feedback_report = rank_adaptation(h_est, channel_type='dMIMO')
+
+    if rank_adaptation.use_mmse_eesm_method:
+        rank = rank_feedback_report[0]
+        rate = rank_feedback_report[1]
+
+        print("\n", "rank (SU-MIMO) = ", rank, "\n")
+        print("\n", "rate (SU-MIMO) = ", rate, "\n")
+
+    else:
+        rank = rank_feedback_report
+        rate = []
+
+        print("\n", "rank (SU-MIMO) = ", rank, "\n")
+
+    # Link adaptation
+    data_sym_position = np.arange(0, 14)
+    link_adaptation = linkAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant,
+                                     architecture='SU-MIMO', snrdb=rx_snr_db, nfft=cfg.fft_size,
+                                     N_s=rank, data_sym_position=data_sym_position, lookup_table_size='short')
+
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO')
+
+    if link_adaptation.use_mmse_eesm_method:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = mcs_feedback_report[1]
+
+        # Majority vote for MCS selection for now
+        values, counts = np.unique(qam_order_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        modulation_order = int(most_frequent_value)
+
+        values, counts = np.unique(code_rate_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        code_rate = most_frequent_value
+
+        print("\n", "Bits per stream (SU-MIMO) = ", cfg.modulation_order, "\n")
+        print("\n", "Code-rate per stream (SU-MIMO) = ", cfg.code_rate, "\n")
+    else:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = []
+
+        modulation_order = int(np.min(qam_order_arr))
+        code_rate = []  # FIXME update code rate
+
+        print("\n", "Bits per stream (SU-MIMO) = ", cfg.modulation_order, "\n")
+
+    return rank, rate, modulation_order, code_rate
 
 
 def sim_su_mimo(cfg: SimConfig):
@@ -223,7 +267,7 @@ def sim_su_mimo(cfg: SimConfig):
         ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
     # Total number of antennas in the TxSquad, always use all gNB antennas
-    num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # total number of Tx squad antennas
+    num_txs_ant = 2 * cfg.num_tx_ue_sel + ns3cfg.num_bs_ant
 
     # Adjust guard subcarriers for channel estimation grid
     csi_effective_subcarriers = (cfg.fft_size // num_txs_ant) * num_txs_ant
@@ -242,18 +286,19 @@ def sim_su_mimo(cfg: SimConfig):
                           pilot_pattern="kronecker",
                           pilot_ofdm_symbol_indices=[2, 11])
 
+    # Channel CSI estimation using channels in previous frames/slots
     if cfg.perfect_csi is True:
         # Perfect channel estimation
         h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                          batch_size=cfg.num_slots_p2)
     elif cfg.csi_prediction is True:
-            rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
-            # Get CSI history
-            # TODO: optimize channel estimation and optimization procedures (currently very slow)
-            h_freq_csi_history = rc_predictor.get_csi_history(cfg.first_slot_idx, cfg.csi_delay,
-                                                              rg_csi, dmimo_chans)
-            # Do channel prediction
-            h_freq_csi = rc_predictor.rc_siso_predict(h_freq_csi_history)
+        rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
+        # Get CSI history
+        # TODO: optimize channel estimation and optimization procedures (currently very slow)
+        h_freq_csi_history = rc_predictor.get_csi_history(cfg.first_slot_idx, cfg.csi_delay,
+                                                          rg_csi, dmimo_chans)
+        # Do channel prediction
+        h_freq_csi = rc_predictor.rc_siso_predict(h_freq_csi_history)
     else:
         # LMMSE channel estimation
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
@@ -262,7 +307,16 @@ def sim_su_mimo(cfg: SimConfig):
                                                            sto_sigma=sto_val(cfg, cfg.sto_sigma))
 
     # Rank and link adaptation
-    # call do_rank_link_adaptation()
+    if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
+        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                batch_size=cfg.num_slots_p2)
+        rank, rate, modulation_order, code_rate = \
+            do_rank_link_adaptation(cfg, dmimo_chans, h_freq_csi, rx_snr_db)
+
+        # Update rank and total number of streams
+        cfg.num_tx_streams = rank
+        cfg.modulation_order = modulation_order
+        cfg.code_rate = code_rate
 
     # Create SU-MIMO simulation
     su_mimo = SU_MIMO(cfg, rg_csi)
