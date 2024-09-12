@@ -29,9 +29,11 @@ class linkAdaptation(Layer):
             snr_linear = 10**(snrdb/10)
             snr_linear = np.sum(snr_linear, axis=(2))
             self.snr_linear = np.mean(snr_linear)
+            precoder= 'SVD'
         elif self.architecture == 'MU-MIMO':
             snr_linear = 10**(snrdb/10)
             self.snr_linear = np.mean(snr_linear, axis =   (0,1,3))
+            precoder= 'BD'
         else:
             raise Exception(f"Rank adaptation for {self.architecture} has not been implemented.")
 
@@ -43,7 +45,7 @@ class linkAdaptation(Layer):
 
         self.N_s = N_s
         
-        self.rank_adaptation = rankAdaptation(num_bs_ant, num_ue_ant, architecture, snrdb, nfft, precoder='SVD')
+        self.rank_adaptation = rankAdaptation(num_bs_ant, num_ue_ant, architecture, snrdb, nfft, precoder=precoder)
 
 
     def call(self, h_est, channel_type):
