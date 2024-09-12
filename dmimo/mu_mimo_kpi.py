@@ -14,7 +14,7 @@ from sionna.utils import BinarySource
 from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig
-from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
+from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val, compute_UE_wise_BER, compute_UE_wise_SER
@@ -165,6 +165,15 @@ class MU_MIMO(Model):
             # Perfect channel estimation
             h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
                                                              batch_size=self.batch_size)
+        elif self.cfg.csi_prediction is True:
+            rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
+            # Get CSI history
+            # TODO: optimize channel estimation and optimization procedures (currently very slow)
+            h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
+                                                                self.rg_csi, dmimo_chans)
+            # Do channel prediction
+            h_freq_csi = rc_predictor.rc_siso_predict(h_freq_csi_history)
+            _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
         else:
             # LMMSE channel estimation
             h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
@@ -181,7 +190,7 @@ class MU_MIMO(Model):
         h_freq_csi = h_freq_csi[:, :, :self.num_rxs_ant, :, :, :, :]
 
         # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-        h_freq_csi = tf.reshape(h_freq_csi, (-1, self.num_rx_ue, self.num_ue_ant, *h_freq_csi.shape[3:]))
+        h_freq_csi =tf.reshape(h_freq_csi, (-1, self.num_rx_ue, self.num_ue_ant, *h_freq_csi.shape[3:]))
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":

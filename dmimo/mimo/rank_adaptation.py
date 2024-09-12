@@ -249,6 +249,8 @@ class rankAdaptation(Layer):
             v, u_h = self.generate_bd_precoding(stream_idx, h_est) # calculating the svd precoder
 
         h_est_reshaped = tf.transpose(h_est, [0, 1, 3, 5, 6, 2, 4])
+        h_est_reshaped = tf.cast(h_est_reshaped, dtype=v.dtype)
+
         h_eff = tf.matmul(h_est_reshaped, v)
 
         if self.precoder == 'SVD':

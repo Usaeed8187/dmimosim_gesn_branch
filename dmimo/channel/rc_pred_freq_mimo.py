@@ -100,7 +100,7 @@ class standard_rc_pred_freq_mimo:
         for loop_idx, slot_idx in enumerate(channel_history_slots):
             # h_freq_csi has shape [batch_size, num_rx, num_rx_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
             h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi, slot_idx=slot_idx)
-            h_freq_csi = h_freq_csi[:, :, :self.num_rx_ant]  # TODO: use node selection mask
+            # h_freq_csi = h_freq_csi[:, :, :self.num_rx_ant, ...]  # TODO: use node selection mask
             h_freq_csi_list.append(np.expand_dims(h_freq_csi, axis=0))
 
         h_freq_csi_history = np.concatenate(h_freq_csi_list, axis=0)

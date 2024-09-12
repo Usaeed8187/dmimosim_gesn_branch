@@ -25,7 +25,7 @@ if __name__ == "__main__":
     # Simulation settings
     cfg = SimConfig()
     cfg.total_slots = 100        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
+    cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
@@ -47,6 +47,7 @@ if __name__ == "__main__":
 
     cfg.rank_adapt = True
     cfg.link_adapt = True
+    cfg.csi_prediction = True
     
     cfg.precoding_method = "ZF"
     rst_zf = sim_su_mimo_all(cfg)
@@ -60,9 +61,14 @@ if __name__ == "__main__":
     ldpc_ber_list = rst_zf[6]
     uncoded_ber_list = rst_zf[7]
 
-    np.savez("results/{}/su_mimo_results.npz".format(folder_name),
-                ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
-                ldpc_ber_list=ldpc_ber_list)
+    if cfg.csi_prediction:
+        np.savez("results/{}/su_mimo_results_pred.npz".format(folder_name),
+                    ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
+                    ldpc_ber_list=ldpc_ber_list)
+    else:
+        np.savez("results/{}/su_mimo_results.npz".format(folder_name),
+                    ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
+                    ldpc_ber_list=ldpc_ber_list)
 
 
     #############################################
