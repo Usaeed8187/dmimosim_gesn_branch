@@ -15,7 +15,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
-from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder
+from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
@@ -206,6 +206,63 @@ class MU_MIMO(Model):
         return dec_bits, uncoded_ber, uncoded_ser, x_hat
 
 
+def do_rank_link_adaptation(cfg, dmimo_chans, h_est, rx_snr_db):
+
+    # Rank adaptation
+    rank_adaptation = rankAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant,
+                                     architecture='MU-MIMO', snrdb=rx_snr_db, fft_size=cfg.fft_size,
+                                     precoder='BD', ue_indices=cfg.ue_indices)
+
+    rank_feedback_report = rank_adaptation(h_est, channel_type='dMIMO')
+
+    if rank_adaptation.use_mmse_eesm_method:
+        rank = rank_feedback_report[0]
+        rate = rank_feedback_report[1]
+
+        print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
+        print("\n", "rate per user (MU-MIMO) = ", rate, "\n")
+
+    else:
+        rank = rank_feedback_report
+        rate = []
+
+        print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
+
+    # Link adaptation
+    data_sym_position = np.arange(0, 14)
+    link_adaptation = linkAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant,
+                                     architecture='MU-MIMO', snrdb=rx_snr_db, nfft=cfg.fft_size,
+                                     N_s=rank, data_sym_position=data_sym_position, lookup_table_size='short')
+
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO')
+
+    if link_adaptation.use_mmse_eesm_method:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = mcs_feedback_report[1]
+
+        # Majority vote for MCS selection for now
+        values, counts = np.unique(qam_order_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        modulation_order = int(most_frequent_value)
+
+        values, counts = np.unique(code_rate_arr, return_counts=True)
+        most_frequent_value = values[np.argmax(counts)]
+        code_rate = most_frequent_value
+
+        print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
+        print("\n", "Code-rate per stream per user (MU-MIMO) = ", cfg.code_rate, "\n")
+    else:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = []
+
+        modulation_order = int(np.min(qam_order_arr))
+        code_rate = []
+
+        print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
+
+    return rank, rate, modulation_order, code_rate
+
+
 def sim_mu_mimo(cfg: SimConfig):
     """
     Simulation of MU-MIMO scenarios using different settings
@@ -256,7 +313,17 @@ def sim_mu_mimo(cfg: SimConfig):
                                                            sto_sigma=sto_val(cfg, cfg.sto_sigma))
 
     # Rank and link adaptation
-    # call do_rank_link_adaptation()
+    if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
+        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                batch_size=cfg.num_slots_p2)
+        rank, rate, modulation_order, code_rate = \
+            do_rank_link_adaptation(cfg, dmimo_chans, h_freq_csi, rx_snr_db)
+
+        # Update rank and total number of streams
+        cfg.ue_ranks = [rank]
+        cfg.num_tx_streams = rank * (cfg.num_rx_ue_sel + 2)  # treat BS as two UEs
+        cfg.modulation_order = modulation_order
+        # cfg.code_rate = code_rate  # FIXME add code rate adaptation
 
     # Create MU-MIMO simulation
     mu_mimo = MU_MIMO(cfg, rg_csi)
