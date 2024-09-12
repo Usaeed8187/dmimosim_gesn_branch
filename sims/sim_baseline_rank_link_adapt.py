@@ -1,5 +1,5 @@
 """
-Simulation of SU-MIMO scenario with ns-3 channels
+Simulation of Baseline scenario with ns-3 channels
 
 This scripts should be called from the "sims" folder
 """
@@ -28,7 +28,7 @@ tf.get_logger().setLevel('ERROR')
 sys.path.append(os.path.join('..'))
 
 from dmimo.config import SimConfig
-from dmimo.su_mimo import sim_su_mimo_all
+from dmimo.baseline_adapt import sim_baseline_all
 
 
 # Main function
@@ -36,9 +36,9 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 35        # total number of slots in ns-3 channels
+    cfg.total_slots = 30        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
-    cfg.csi_delay = 9           # feedback delay in number of subframe
+    cfg.csi_delay = 2           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.ns3_folder = "../ns3/channels_medium_mobility/"
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     cfg.link_adapt = True
 
     cfg.precoding_method = "ZF"
-    rst_svd = sim_su_mimo_all(cfg)
+    rst_svd = sim_baseline_all(cfg)
     ber[0] = rst_svd[0]
     ldpc_ber[0] = rst_svd[1]
     goodput[0] = rst_svd[2]
@@ -78,24 +78,24 @@ if __name__ == "__main__":
     cfg.modulation_order = 2
     cfg.code_rate = 0.5
 
-    cfg.precoding_method = "ZF"
-    rst_svd = sim_su_mimo_all(cfg)
+    cfg.precoding_method = "SVD"
+    rst_svd = sim_baseline_all(cfg)
     ber[1] = rst_svd[0]
     ldpc_ber[1] = rst_svd[1]
     goodput[1] = rst_svd[2]
     throughput[1] = rst_svd[3]
 
     # Test 2 parameters
-    cfg.num_tx_streams = 6
-    cfg.modulation_order = 6
+    cfg.num_tx_streams = 4
+    cfg.modulation_order = 4
     cfg.code_rate = 0.5
 
-    cfg.precoding_method = "ZF"
-    rst_svd = sim_su_mimo_all(cfg)
+    cfg.precoding_method = "SVD"
+    rst_svd = sim_baseline_all(cfg)
     ber[2] = rst_svd[0]
     ldpc_ber[2] = rst_svd[1]
     goodput[2] = rst_svd[2]
     throughput[2] = rst_svd[3]
 
-    np.savez("../results/{}/su_mimo_results_adapt.npz".format(folder_name),
+    np.savez("../results/{}/baseline_results_adapt.npz".format(folder_name),
              ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)

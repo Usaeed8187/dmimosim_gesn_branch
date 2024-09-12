@@ -15,7 +15,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
-from dmimo.mimo import SVDPrecoder, SVDEqualizer
+from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation
 from dmimo.mimo import ZFPrecoder
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
@@ -188,6 +188,56 @@ class Baseline(Model):
         return dec_bits, uncoded_ber, uncoded_ser, x_hat
 
 
+def do_rank_link_adaptation(cfg, dmimo_chans, h_est, rx_snr_db):
+
+    # Rank adaptation
+    rank_adaptation = rankAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant,
+                                     architecture='SU-MIMO', snrdb=rx_snr_db, fft_size=cfg.fft_size,
+                                     precoder='SVD')
+
+    rank_feedback_report = rank_adaptation(h_est, channel_type='dMIMO')
+
+    if rank_adaptation.use_mmse_eesm_method:
+        rank = rank_feedback_report[0]
+        rate = rank_feedback_report[1]
+
+        print("\n", "rank (baseline) = ", rank, "\n")
+        print("\n", "rate (baseline) = ", rate, "\n")
+
+    else:
+        rank = rank_feedback_report
+        rate = []
+
+        print("\n", "rank (baseline) = ", rank, "\n")
+
+    # Link adaptation
+    data_sym_position = np.arange(0, 14)
+    link_adaptation = linkAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant,
+                                     architecture='SU-MIMO', snrdb=rx_snr_db, nfft=cfg.fft_size,
+                                     N_s=rank, data_sym_position=data_sym_position, lookup_table_size='long')
+
+    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO')
+
+    if link_adaptation.use_mmse_eesm_method:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = mcs_feedback_report[1]
+
+        modulation_order = int(np.min(qam_order_arr))
+        code_rate = np.min(code_rate_arr)
+
+        print("\n", "Bits per stream (baseline) = ", cfg.modulation_order, "\n")
+        print("\n", "Code-rate per stream (baseline) = ", cfg.code_rate, "\n")
+    else:
+        qam_order_arr = mcs_feedback_report[0]
+        code_rate_arr = []
+        modulation_order = qam_order_arr[0]  # FIXME update modulation order
+        code_rate = []  # FIXME update code rate
+
+        print("\n", "Bits per stream (SU-MIMO) = ", cfg.modulation_order, "\n")
+
+    return rank, rate, modulation_order, code_rate
+
+
 def sim_baseline(cfg: SimConfig):
     """
     Simulation of baseline scenarios using 4x4 MIMO channels
@@ -230,12 +280,21 @@ def sim_baseline(cfg: SimConfig):
                                                            sto_sigma=sto_val(cfg, cfg.sto_sigma))
 
     # Rank and link adaptation
-    # call do_rank_link_adaptation()
+    if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
+        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
+                                                batch_size=cfg.num_slots_p2)
+        rank, rate, modulation_order, code_rate = \
+            do_rank_link_adaptation(cfg, dmimo_chans, h_freq_csi, rx_snr_db)
+
+        # Update rank and total number of streams
+        cfg.num_tx_streams = rank
+        cfg.modulation_order = modulation_order
+        cfg.code_rate = code_rate
 
     # Create Baseline simulation
     baseline = Baseline(cfg, rg_csi)
 
-    # The binary source will create batches of information bits
+    # Generate information source
     binary_source = BinarySource()
     info_bits = binary_source([cfg.num_slots_p2, baseline.num_bits_per_frame])
 
@@ -250,7 +309,7 @@ def sim_baseline(cfg: SimConfig):
     # Goodput and throughput estimation
     goodbits = (1.0 - coded_ber) * baseline.num_bits_per_frame
     userbits = (1.0 - coded_bler) * baseline.num_bits_per_frame
-    ratedbits= (1.0 - uncoded_ser) * baseline.num_uncoded_bits_per_frame
+    ratedbits = (1.0 - uncoded_ser) * baseline.num_uncoded_bits_per_frame
 
     return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits]
 
