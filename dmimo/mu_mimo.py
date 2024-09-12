@@ -15,6 +15,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
+from dmimo.channel import standard_rc_pred_freq_mimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
@@ -305,6 +306,14 @@ def sim_mu_mimo(cfg: SimConfig):
         # Perfect channel estimation
         h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                          batch_size=cfg.num_slots_p2)
+    elif cfg.csi_prediction is True:
+        rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', cfg.num_tx_streams)
+        # Get CSI history
+        # TODO: optimize channel estimation and optimization procedures (currently very slow)
+        h_freq_csi_history = rc_predictor.get_csi_history(cfg.first_slot_idx, cfg.csi_delay,
+                                                          rg_csi, dmimo_chans)
+        # Do channel prediction
+        h_freq_csi = rc_predictor.rc_siso_predict(h_freq_csi_history)
     else:
         # LMMSE channel estimation
         h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, rg_csi,
@@ -323,7 +332,7 @@ def sim_mu_mimo(cfg: SimConfig):
         cfg.ue_ranks = [rank]
         cfg.num_tx_streams = rank * (cfg.num_rx_ue_sel + 2)  # treat BS as two UEs
         cfg.modulation_order = modulation_order
-        cfg.code_rate = code_rate  # FIXME add code rate adaptation
+        cfg.code_rate = code_rate
 
     # Create MU-MIMO simulation
     mu_mimo = MU_MIMO(cfg, rg_csi)

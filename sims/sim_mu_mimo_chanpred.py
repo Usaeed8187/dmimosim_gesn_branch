@@ -28,7 +28,7 @@ tf.get_logger().setLevel('ERROR')
 sys.path.append(os.path.join('..'))
 
 from dmimo.config import SimConfig
-from dmimo.mu_mimo_chanpred import sim_mu_mimo_chanpred_all
+from dmimo.mu_mimo import sim_mu_mimo_all
 
 
 # Main function
@@ -74,7 +74,7 @@ if __name__ == "__main__":
 
             cfg.csi_prediction = True
             cfg.precoding_method = "BD"
-            rst_bd = sim_mu_mimo_chanpred_all(cfg)
+            rst_bd = sim_mu_mimo_all(cfg)
             ber[0, k] = rst_bd[0]
             ldpc_ber[0, k] = rst_bd[1]
             goodput[0, k] = rst_bd[2]
@@ -83,7 +83,7 @@ if __name__ == "__main__":
 
             cfg.csi_prediction = True
             cfg.precoding_method = "ZF"
-            rst_zf = sim_mu_mimo_chanpred_all(cfg)
+            rst_zf = sim_mu_mimo_all(cfg)
             ber[1, k] = rst_zf[0]
             ldpc_ber[1, k] = rst_zf[1]
             goodput[1, k] = rst_zf[2]
