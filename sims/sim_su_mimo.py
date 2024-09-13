@@ -103,4 +103,5 @@ if __name__ == "__main__":
 
         basename = "../results/{}/su_mimo_results_s{}".format(folder_name, cfg.num_tx_streams)
         plt.savefig(f"{basename}.png")
-        np.savez(f"{basename}.npz", ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput)
+        np.savez(f"{basename}.npz", ber=ber, ldpc_ber=ldpc_ber,
+                 goodput=goodput, throughput=throughput, bitrate=bitrate)
