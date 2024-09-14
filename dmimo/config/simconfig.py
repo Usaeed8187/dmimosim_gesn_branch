@@ -28,7 +28,6 @@ class SimConfig(CarrierConfig, MCSConfig):
         self._link_adapt = True                 # turn on link adaptation
         self._enable_txsquad = False            # enable simulation of TxSquad transmission
         self._enable_rxsquad = False            # enable simulation of TxSquad transmission
-        self._return_estimated_channel = False  # return estimated channel without doing any symbol detection
         super().__init__(**kwargs)
 
     @property
@@ -198,11 +197,3 @@ class SimConfig(CarrierConfig, MCSConfig):
     @enable_rxsquad.setter
     def enable_rxsquad(self, val):
         self._enable_rxsquad = val
-
-    @property
-    def return_estimated_channel(self):
-        return self._return_estimated_channel
-
-    @return_estimated_channel.setter
-    def return_estimated_channel(self, val):
-        self._return_estimated_channel = val

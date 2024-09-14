@@ -39,6 +39,8 @@ if __name__ == "__main__":
     cfg.total_slots = 35        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 15     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
+    cfg.rank_adapt = False      # disable rank adaptation
+    cfg.link_adapt = False      # disable link adaptation
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.ns3_folder = "../ns3/channels_medium_mobility/"
@@ -113,4 +115,3 @@ if __name__ == "__main__":
                 plt.savefig(f"{basename}.png")
                 np.savez(f"{basename}.npz", ber=ber, ldpc_ber=ldpc_ber,
                          goodput=goodput, throughput=throughput, bitrate=bitrate)
-
