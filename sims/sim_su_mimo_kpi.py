@@ -25,11 +25,11 @@ if __name__ == "__main__":
     # Simulation settings
     cfg = SimConfig()
     cfg.total_slots = 100        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
+    cfg.start_slot_idx = 75     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    mobility = 'high_mobility'
+    mobility = 'medium_mobility'
     cfg.ns3_folder = "ns3/channels_" + mobility + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))

@@ -166,7 +166,7 @@ class MU_MIMO(Model):
             h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
                                                              batch_size=self.batch_size)
         elif self.cfg.csi_prediction is True:
-            rc_predictor = standard_rc_pred_freq_mimo('SU_MIMO')
+            rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)
             h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,

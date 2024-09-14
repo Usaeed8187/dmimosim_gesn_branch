@@ -11,18 +11,9 @@ import numpy as np
 # Settings
 #############################################
 
-rx_ues_arr = [1,2,4,6]
-
-# Define positions for the box plots
-positions_all_scenarios = []
-positions_scenario_1 = np.arange(1,np.size(rx_ues_arr)+1)
-positions_all_scenarios.append(positions_scenario_1)
-positions_all_scenarios.append(positions_scenario_1 + 5) # Shifted right for the second scenario
-positions_all_scenarios.append(positions_scenario_1 + 10) # Shifted further right for the third scenario
-
 mobilities = ['low_mobility', 'medium_mobility', 'high_mobility']
 
-
+prediction_results = True
 
 #############################################
 # KPI Handling
@@ -50,7 +41,10 @@ for mobility_idx in range(np.size(mobilities)):
 
     curr_mobility = mobilities[mobility_idx]
 
-    file_path = "results/channels_{}/su_mimo_results.npz".format(curr_mobility)
+    if prediction_results:
+        file_path = "results/channels_{}/su_mimo_results_pred.npz".format(curr_mobility)
+    else:
+        file_path = "results/channels_{}/su_mimo_results.npz".format(curr_mobility)
     data = np.load(file_path)
     
     ber.append(data['ber'])
@@ -62,7 +56,10 @@ for mobility_idx in range(np.size(mobilities)):
     bitrate.append(data['bitrate'])
     ranks.append(ranks)
 
-    baseline_file_path = "results/channels_{}/baseline_results.npz".format(curr_mobility)
+    if prediction_results:
+        baseline_file_path = "results/channels_{}/baseline_results_pred.npz".format(curr_mobility)
+    else:
+        baseline_file_path = "results/channels_{}/baseline_results.npz".format(curr_mobility)
     baseline_data = np.load(baseline_file_path)
 
     baseline_ranks.append(baseline_data['ranks'])
@@ -104,19 +101,36 @@ plt.savefig("results/plots/BER_SU_MIMO")
 # plt.legend()
 # plt.savefig("results/plots/BER")
 
-############################### End-to-end average BLER ######################################
-# Method 1 for end-to-end average BER (mobility on x-axis)
+# Method 3 for end-to-end average BER (bar plot with mobility on x-axis)
+num_categories = len(mobilities)
+x = np.arange(num_categories)
+bar_width = 0.35
+x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
 plt.figure()
-x_labels = ['Low mobility', 'Medium mobility', 'High mobility']
-x_values = np.arange(1,np.size(mobilities)+1)
-plt.semilogy(x_values, np.asarray(ldpc_ber), marker='o', label='SU MIMO')
-plt.semilogy(x_values, np.asarray(baseline_ldpc_ber), marker='*', label='Baseline')
+plt.bar(x - bar_width/2, np.asarray(baseline_ber), width=bar_width, label='Baseline', color='#4F81BD')
+plt.bar(x + bar_width/2, np.asarray(ber), width=bar_width, label='SU MIMO', color='#C0504D')
+plt.yscale('log')
+plt.xticks(x, x_labels)
 plt.grid(True)
-plt.xticks(x_values, x_labels)
-plt.ylabel('BLER')
-plt.title('BLER')
+plt.ylabel('BER')
+plt.title('Uncoded BER')
 plt.legend()
-plt.savefig("results/plots/BLER_SU_MIMO")
+plt.savefig("results/plots/BER_SU_MIMO")
+
+
+############################### End-to-end average BLER ######################################
+# Method 1 for end-to-end average BLER (mobility on x-axis)
+# plt.figure()
+# x_labels = ['Low mobility', 'Medium mobility', 'High mobility']
+# x_values = np.arange(1,np.size(mobilities)+1)
+# plt.semilogy(x_values, np.asarray(ldpc_ber), marker='o', label='SU MIMO')
+# plt.semilogy(x_values, np.asarray(baseline_ldpc_ber), marker='*', label='Baseline')
+# plt.grid(True)
+# plt.xticks(x_values, x_labels)
+# plt.ylabel('BLER')
+# plt.title('BLER')
+# plt.legend()
+# plt.savefig("results/plots/BLER_SU_MIMO")
 
 
 # # Method 2 for end-to-end average BLER (number of UEs on x-axis)
@@ -130,6 +144,22 @@ plt.savefig("results/plots/BLER_SU_MIMO")
 # plt.title('BLER')
 # plt.legend()
 # plt.savefig("results/plots/BLER")
+
+# Method 3 for end-to-end average BLER (bar plot with mobility on x-axis)
+num_categories = len(mobilities)
+x = np.arange(num_categories)
+bar_width = 0.35
+x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
+plt.figure()
+plt.bar(x - bar_width/2, np.asarray(baseline_ldpc_ber), width=bar_width, label='Baseline', color='#4F81BD')
+plt.bar(x + bar_width/2, np.asarray(ldpc_ber), width=bar_width, label='SU MIMO', color='#C0504D')
+plt.yscale('log')
+plt.xticks(x, x_labels)
+plt.grid(True)
+plt.ylabel('BER')
+plt.title('Uncoded BER')
+plt.legend()
+plt.savefig("results/plots/BLER_SU_MIMO")
 
 
 hold = 1

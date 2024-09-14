@@ -29,7 +29,7 @@ if __name__ == "__main__":
     cfg.csi_delay = 2           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    mobility = 'high_mobility'
+    mobility = 'medium_mobility'
     cfg.ns3_folder = "ns3/channels_" + mobility + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
@@ -52,6 +52,7 @@ if __name__ == "__main__":
 
     cfg.rank_adapt = True
     cfg.link_adapt = True
+    cfg.csi_prediction = True
 
     cfg.precoding_method = "ZF"
     rst_zf = sim_baseline_all(cfg)
@@ -64,10 +65,15 @@ if __name__ == "__main__":
     ranks = rst_zf[5]
     ldpc_ber_list = rst_zf[6]
     uncoded_ber_list = rst_zf[7]
-
-    np.savez("results/{}/baseline_results.npz".format(folder_name),
-                ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
-                ldpc_ber_list=ldpc_ber_list)
+    
+    if cfg.csi_prediction:
+        np.savez("results/{}/baseline_results_pred.npz".format(folder_name),
+                    ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
+                    ldpc_ber_list=ldpc_ber_list)
+    else:
+        np.savez("results/{}/baseline_results.npz".format(folder_name),
+                    ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
+                    ldpc_ber_list=ldpc_ber_list)
 
     #############################################
     # Testing without rank and link adaptation

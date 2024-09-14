@@ -27,14 +27,14 @@ if __name__ == "__main__":
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 8
-    mobility = 'high_mobility'
+    mobility = 'low_mobility'
     cfg.ns3_folder = "ns3/channels_" + mobility + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    rx_ues_arr = [6]
+    rx_ues_arr = [1,2,4,6]
     
     ber = np.zeros(np.size(rx_ues_arr ))
     ldpc_ber = np.zeros(np.size(rx_ues_arr ))
