@@ -35,7 +35,7 @@ if __name__ == "__main__":
     print("Using channels in {}".format(folder_name))
 
     rx_ues_arr = [1,2,4,6]
-    
+
     ber = np.zeros(np.size(rx_ues_arr ))
     ldpc_ber = np.zeros(np.size(rx_ues_arr ))
     goodput = np.zeros(np.size(rx_ues_arr ))
