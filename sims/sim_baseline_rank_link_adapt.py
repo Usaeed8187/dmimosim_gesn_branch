@@ -28,7 +28,7 @@ tf.get_logger().setLevel('ERROR')
 sys.path.append(os.path.join('..'))
 
 from dmimo.config import SimConfig
-from dmimo.baseline_adapt import sim_baseline_all
+from dmimo.baseline import sim_baseline_all
 
 
 # Main function
