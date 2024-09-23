@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 from tensorflow.python.keras import Model
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
@@ -178,6 +179,34 @@ class SU_MIMO(Model):
 
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
+
+        debug = False
+        if debug:
+            rx_ant = 2
+            tx_ant = 1
+            sym_ind = 2
+            batch = 1
+            
+            predicted_channel = h_freq_csi
+            ground_truth_channel, _ = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                             batch_size=self.batch_size)                                                             
+            prev_est_channel, _ = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
+                                                               slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
+                                                               cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
+            curr_est_channel, _ = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
+                                                               slot_idx=self.cfg.first_slot_idx,
+                                                               cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)                                                               
+            
+            plt.figure()
+            plt.plot(np.real(predicted_channel[0,0,rx_ant,0,tx_ant,sym_ind,:]), label='Predicted Channel')
+            plt.plot(np.real(ground_truth_channel[0,0,rx_ant,0,tx_ant,sym_ind,:]), label='Ground Truth Channel (up to date) batch 0')
+            # plt.plot(np.real(ground_truth_channel[1,0,rx_ant,0,tx_ant,sym_ind,:]), label='Ground Truth Channel (up to date) batch 1')
+            # plt.plot(np.real(ground_truth_channel[2,0,rx_ant,0,tx_ant,sym_ind,:]), label='Ground Truth Channel (up to date) batch 2')
+            plt.plot(np.real(prev_est_channel[0,0,rx_ant,0,tx_ant,sym_ind,:]), label='Outdated estimated channel')
+            plt.plot(np.real(curr_est_channel[0,0,rx_ant,0,tx_ant,sym_ind,:]), label='Up-to-date estimated channel')
+            plt.legend()
+            plt.savefig('channels comparison')
+        debug = False
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":

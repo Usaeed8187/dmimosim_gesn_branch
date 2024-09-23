@@ -13,7 +13,7 @@ import numpy as np
 
 mobilities = ['low_mobility', 'medium_mobility', 'high_mobility']
 
-prediction_results = True
+prediction_results = False
 
 #############################################
 # KPI Handling
@@ -156,10 +156,15 @@ plt.bar(x + bar_width/2, np.asarray(ldpc_ber), width=bar_width, label='SU MIMO',
 plt.yscale('log')
 plt.xticks(x, x_labels)
 plt.grid(True)
-plt.ylabel('BER')
-plt.title('Uncoded BER')
+plt.ylabel('BLER')
+plt.title('BLER')
 plt.legend()
 plt.savefig("results/plots/BLER_SU_MIMO")
 
+
+############################### Throughput and bitrate ######################################
+
+print('Throughput: ',  throughput)
+print('Bitrate: ',  bitrate)
 
 hold = 1

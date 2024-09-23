@@ -25,7 +25,7 @@ if __name__ == "__main__":
     # Simulation settings
     cfg = SimConfig()
     cfg.total_slots = 100        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 75     # starting slots (must be greater than csi_delay + 5)
+    cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
     cfg.rank_adapt = True
     cfg.link_adapt = True
-    cfg.csi_prediction = True
+    cfg.csi_prediction = False
     
     cfg.precoding_method = "ZF"
     rst_zf = sim_su_mimo_all(cfg)

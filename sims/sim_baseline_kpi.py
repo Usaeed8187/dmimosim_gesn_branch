@@ -29,7 +29,7 @@ if __name__ == "__main__":
     cfg.csi_delay = 2           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    mobility = 'medium_mobility'
+    mobility = 'low_mobility'
     cfg.ns3_folder = "ns3/channels_" + mobility + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
@@ -50,9 +50,13 @@ if __name__ == "__main__":
     # Testing with rank and link adaptation
     #############################################
 
-    cfg.rank_adapt = True
-    cfg.link_adapt = True
-    cfg.csi_prediction = True
+    cfg.rank_adapt = False
+    cfg.link_adapt = False
+    cfg.csi_prediction = False
+
+    cfg.num_tx_streams = 4
+    cfg.modulation_order = 2
+    cfg.code_rate = 0.5
 
     cfg.precoding_method = "ZF"
     rst_zf = sim_baseline_all(cfg)

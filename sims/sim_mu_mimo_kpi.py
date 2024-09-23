@@ -21,13 +21,13 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 100        # total number of slots in ns-3 channels
+    cfg.total_slots = 250        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 8
-    mobility = 'low_mobility'
+    mobility = 'medium_mobility'
     cfg.ns3_folder = "ns3/channels_" + mobility + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
@@ -102,25 +102,25 @@ if __name__ == "__main__":
     # Test for beamforming gain
     #############################################
 
-    cfg.rank_adapt = False
-    cfg.link_adapt = False
+    # cfg.rank_adapt = False
+    # cfg.link_adapt = False
 
-    cfg.ue_ranks = [1]  # same rank for all UEs
-    cfg.code_rate = 0.5
-    cfg.modulation_order = 2
+    # cfg.ue_ranks = [1]  # same rank for all UEs
+    # cfg.code_rate = 0.5
+    # cfg.modulation_order = 2
 
-    num_tx_streams = (cfg.num_tx_ue_sel+2) * cfg.ue_ranks[0]
-    cfg.num_tx_streams = num_tx_streams
-    cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
-    cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+    # num_tx_streams = (cfg.num_tx_ue_sel+2) * cfg.ue_ranks[0]
+    # cfg.num_tx_streams = num_tx_streams
+    # cfg.num_rx_ue_sel = (num_tx_streams - 4) // 2  # TODO consolidate params
+    # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
     
 
-    cfg.precoding_method = "None"
-    rst_bd = sim_mu_mimo_all(cfg)
-    ber[1] = rst_bd[0]
-    ldpc_ber[1] = rst_bd[1]
-    goodput[1] = rst_bd[2]
-    throughput[1] = rst_bd[3]
+    # cfg.precoding_method = "None"
+    # rst_bd = sim_mu_mimo_all(cfg)
+    # ber[1] = rst_bd[0]
+    # ldpc_ber[1] = rst_bd[1]
+    # goodput[1] = rst_bd[2]
+    # throughput[1] = rst_bd[3]
 
     #############################################
     # Testing without rank and link adaptation

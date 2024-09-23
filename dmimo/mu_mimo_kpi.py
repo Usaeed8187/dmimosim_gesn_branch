@@ -340,8 +340,8 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_
         # cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2
         # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
         
-        print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
-        print("\n", "rate per user (MU-MIMO) = ", rate, "\n")
+        # print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
+        # print("\n", "rate per user (MU-MIMO) = ", rate, "\n")
 
     else:
         rank = rank_feedback_report
@@ -349,7 +349,7 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_
 
         cfg.num_tx_streams = int(rank)
 
-        print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
+        # print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
 
     # Link adaptation
     data_sym_position = np.arange(0, 14)
@@ -371,15 +371,15 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_
         most_frequent_value = values[np.argmax(counts)]
         cfg.code_rate = most_frequent_value
 
-        print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
-        print("\n", "Code-rate per stream per user (MU-MIMO) = ", cfg.code_rate, "\n")
+        # print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
+        # print("\n", "Code-rate per stream per user (MU-MIMO) = ", cfg.code_rate, "\n")
     else:
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = []
 
         cfg.modulation_order = int(np.min(qam_order_arr))
 
-        print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
+        # print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
     
     return rank, rate, qam_order_arr, code_rate_arr
 
@@ -421,7 +421,7 @@ def sim_mu_mimo(cfg: SimConfig):
         tx_squad = TxSquad(cfg, mu_mimo.num_bits_per_frame)
         txs_chans = dMIMOChannels(ns3cfg, "TxSquad", add_noise=True)
         info_bits_new, txs_ber, txs_bler = tx_squad(txs_chans, info_bits)
-        print("BER: {}  BLER: {}".format(txs_ber, txs_bler))
+        # print("BER: {}  BLER: {}".format(txs_ber, txs_bler))
         assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
 
     # MU-MIMO transmission (P2)
@@ -444,8 +444,8 @@ def sim_mu_mimo(cfg: SimConfig):
         rxcfg.csi_delay = 0
         rxcfg.perfect_csi = True
         rx_squad = RxSquad(rxcfg, mu_mimo.num_bits_per_frame)
-        print("RxSquad using modulation order {} for {} streams / {}".format(
-            rx_squad.num_bits_per_symbol, mu_mimo.num_streams_per_tx, mu_mimo.mapper.constellation.num_bits_per_symbol))
+        # print("RxSquad using modulation order {} for {} streams / {}".format(
+        #     rx_squad.num_bits_per_symbol, mu_mimo.num_streams_per_tx, mu_mimo.mapper.constellation.num_bits_per_symbol))
         rxscfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
         rxs_chans = dMIMOChannels(rxscfg, "RxSquad", add_noise=True)
         received_bits, rxs_ber, rxs_bler, rxs_ber_max, rxs_bler_max = rx_squad(rxs_chans, dec_bits)

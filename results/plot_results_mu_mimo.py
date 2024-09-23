@@ -197,25 +197,46 @@ for mobility_idx in range(np.size(mobilities)):
 
 
 ############################### SINR Distributions (rx nodes in phase 2) ######################################
+
+# # Method 1 for SINR Distributions (rx nodes in phase 2) (number of UEs on x-axis)
+# plt.figure()
+# colors = ['red', 'green', 'purple']
+# for mobility_idx in range(np.size(mobilities)):
+#     plt.boxplot(sinr_dB[mobility_idx], positions=positions_all_scenarios[mobility_idx], widths=0.6, patch_artist=True, showfliers=False,
+#                 boxprops=dict(facecolor=colors[mobility_idx], color=colors[mobility_idx]),
+#                 medianprops=dict(color='black'))
+# plt.xticks(np.concatenate(positions_all_scenarios), rx_ues_arr * 3)
+# legend_elements = [plt.Line2D([0], [0], color='red', lw=4, label='Scenario 1'),
+#                    plt.Line2D([0], [0], color='green', lw=4, label='Scenario 2'),
+#                    plt.Line2D([0], [0], color='purple', lw=4, label='Scenario 3')]
+# plt.legend(handles=legend_elements, title='Scenarios', loc='upper right')
+# plt.grid(True)
+# plt.xlabel('Number of UEs')
+# plt.ylabel('SINR')
+# plt.title('SINR (dB)')
+# plt.ylim(-10, 15)
+# plt.savefig("results/plots/SINR_MU_MIMO")
+
+
+# Method 2 for SINR Distributions (rx nodes in phase 2) (mobility on x-axis and only showing best selection)
+num_categories = len(mobilities)
+mean_snr_db_arr = np.zeros(num_categories)
+UE_ind = 2
+for i in range(num_categories):
+    mean_snr_db_arr[i] = np.mean(sinr_dB[i][UE_ind])
+x = np.arange(num_categories)
+bar_width = 0.35
+x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
 plt.figure()
-colors = ['red', 'green', 'purple']
-for mobility_idx in range(np.size(mobilities)):
-    plt.boxplot(sinr_dB[mobility_idx], positions=positions_all_scenarios[mobility_idx], widths=0.6, patch_artist=True, showfliers=False,
-                boxprops=dict(facecolor=colors[mobility_idx], color=colors[mobility_idx]),
-                medianprops=dict(color='black'))
-plt.xticks(np.concatenate(positions_all_scenarios), rx_ues_arr * 3)
-legend_elements = [plt.Line2D([0], [0], color='red', lw=4, label='Scenario 1'),
-                   plt.Line2D([0], [0], color='green', lw=4, label='Scenario 2'),
-                   plt.Line2D([0], [0], color='purple', lw=4, label='Scenario 3')]
-plt.legend(handles=legend_elements, title='Scenarios', loc='upper right')
+plt.bar(x, np.asarray(mean_snr_db_arr), width=bar_width, label='MU MIMO', color='#4F81BD')
+plt.xticks(x, x_labels)
 plt.grid(True)
-plt.xlabel('Number of UEs')
 plt.ylabel('SINR')
 plt.title('SINR (dB)')
-plt.ylim(-10, 15)
 plt.savefig("results/plots/SINR_MU_MIMO")
 
 ############################### End-to-end average BER ######################################
+
 # # Method 1 for end-to-end average BER (mobility on x-axis)
 # plt.figure()
 # x_labels = ['Low mobility', 'Medium mobility', 'High mobility']
@@ -263,16 +284,14 @@ plt.savefig("results/plots/SINR_MU_MIMO")
 # plt.legend()
 # plt.savefig("results/plots/BER_MU_MIMO")
 
-
-# Method 3 for end-to-end average BER (bar plot with mobility on x-axis), but plotting only the best selection of UEs. also plotting the prediction cases
+# Method 3 for end-to-end average BER (bar plot with mobility on x-axis), but plotting only the best selection of UEs
 num_categories = len(mobilities)
 x = np.arange(num_categories)
-bar_width = 0.25
+bar_width = 0.35
 x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
 plt.figure()
-plt.bar(x - bar_width, np.asarray(baseline_ber), width=bar_width, label='Baseline', color='#4F81BD')
-plt.bar(x, np.asarray(ber)[:,2], width=bar_width, label='MU MIMO', color='#C0504D')
-plt.bar(x + bar_width, np.asarray(ber_pred)[:,2], width=bar_width, label='MU MIMO with Channel Prediction', color='#9BBB59')
+plt.bar(x - bar_width/2, np.asarray(baseline_ber), width=bar_width, label='Baseline', color='#4F81BD')
+plt.bar(x + bar_width/2, np.asarray(ber)[:,0], width=bar_width, label='MU MIMO', color='#C0504D')
 plt.yscale('log')
 plt.xticks(x, x_labels)
 plt.grid(True)
@@ -280,6 +299,23 @@ plt.ylabel('BER')
 plt.title('Uncoded BER')
 plt.legend()
 plt.savefig("results/plots/BER_MU_MIMO")
+
+# # Method 3 for end-to-end average BER (bar plot with mobility on x-axis), but plotting only the best selection of UEs. also plotting the prediction cases
+# num_categories = len(mobilities)
+# x = np.arange(num_categories)
+# bar_width = 0.25
+# x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
+# plt.figure()
+# plt.bar(x - bar_width, np.asarray(baseline_ber), width=bar_width, label='Baseline', color='#4F81BD')
+# plt.bar(x, np.asarray(ber)[:,0], width=bar_width, label='MU MIMO', color='#C0504D')
+# plt.bar(x + bar_width, np.asarray(ber_pred)[:,0], width=bar_width, label='MU MIMO with Channel Prediction', color='#9BBB59')
+# plt.yscale('log')
+# plt.xticks(x, x_labels)
+# plt.grid(True)
+# plt.ylabel('BER')
+# plt.title('Uncoded BER')
+# plt.legend()
+# plt.savefig("results/plots/BER_MU_MIMO")
 
 
 ############################### End-to-end average BLER ######################################
@@ -331,59 +367,98 @@ plt.savefig("results/plots/BER_MU_MIMO")
 # plt.legend()
 # plt.savefig("results/plots/BLER_MU_MIMO")
 
-# # Method 3 for end-to-end average BLER (bar plot with mobility on x-axis), but plotting only the best selection of UEs
-# num_categories = len(mobilities)
-# x = np.arange(num_categories)
-# bar_width = 0.35
-# x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
-# plt.figure()
-# plt.bar(x - bar_width/2, np.asarray(baseline_ldpc_ber), width=bar_width, label='Baseline', color='#4F81BD')
-# plt.bar(x + bar_width/2, np.asarray(ldpc_ber)[:,2], width=bar_width, label='MU MIMO', color='#9BBB59')
-# plt.yscale('log')
-# plt.xticks(x, x_labels)
-# plt.grid(True)
-# plt.ylabel('BER')
-# plt.title('Uncoded BER')
-# plt.legend()
-# plt.savefig("results/plots/BLER_MU_MIMO")
-
 # Method 3 for end-to-end average BLER (bar plot with mobility on x-axis), but plotting only the best selection of UEs
 num_categories = len(mobilities)
 x = np.arange(num_categories)
 bar_width = 0.35
 x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
 plt.figure()
-plt.bar(x - bar_width, np.asarray(baseline_ldpc_ber_pred), width=bar_width, label='Baseline', color='#4F81BD')
-plt.bar(x, np.asarray(ldpc_ber)[:,2], width=bar_width, label='MU MIMO', color='#C0504D')
-plt.bar(x + bar_width, np.asarray(ldpc_ber_pred)[:,2], width=bar_width, label='MU MIMO with Channel Prediction', color='#9BBB59')
+plt.bar(x - bar_width/2, np.asarray(baseline_ldpc_ber), width=bar_width, label='Baseline', color='#4F81BD')
+plt.bar(x + bar_width/2, np.asarray(ldpc_ber)[:,0], width=bar_width, label='MU MIMO', color='#C0504D')
 plt.yscale('log')
 plt.xticks(x, x_labels)
 plt.grid(True)
-plt.ylabel('BER')
-plt.title('Uncoded BER')
+plt.ylabel('BLER')
+plt.title('BLER')
 plt.legend()
 plt.savefig("results/plots/BLER_MU_MIMO")
 
+# # Method 3 for end-to-end average BLER (bar plot with mobility on x-axis), but plotting only the best selection of UEs and also plotting with prediction
+# num_categories = len(mobilities)
+# x = np.arange(num_categories)
+# bar_width = 0.35
+# x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
+# plt.figure()
+# plt.bar(x - bar_width, np.asarray(baseline_ldpc_ber_pred), width=bar_width, label='Baseline', color='#4F81BD')
+# plt.bar(x, np.asarray(ldpc_ber)[:,0], width=bar_width, label='MU MIMO', color='#C0504D')
+# plt.bar(x + bar_width, np.asarray(ldpc_ber_pred)[:,0], width=bar_width, label='MU MIMO with Channel Prediction', color='#9BBB59')
+# plt.yscale('log')
+# plt.xticks(x, x_labels)
+# plt.grid(True)
+# plt.ylabel('BLER')
+# plt.title('BLER')
+# plt.legend()
+# plt.savefig("results/plots/BLER_MU_MIMO")
+
 
 ############################### Probability of Outage (rx nodes in phase 2) ######################################
+# # Method 1 for phase 2 probability of outage (plotting all mobilities and all UE selections)
+# threshold = 0.15
+# outage_probability = []
+# for mobility_idx in range(np.size(mobilities)):
+#     temp_outage_probability = []
+#     for ue_idx in range(np.size(rx_ues_arr)):
+#         prob = np.sum(uncoded_ber_list[mobility_idx][ue_idx] > threshold) / np.size(uncoded_ber_list[0][0]) * 100
+#         temp_outage_probability.append(prob)
+#     outage_probability.append(temp_outage_probability)
+# plt.figure()
+# plt.plot(rx_ues_arr, outage_probability[0], marker='o', label='Low Mobility')
+# plt.plot(rx_ues_arr, outage_probability[1], marker='s', label='Medium Mobility')
+# plt.plot(rx_ues_arr, outage_probability[2], marker='^', label='High Mobility')
+# plt.grid(True)
+# plt.xlabel('Number of UEs')
+# plt.ylabel('Probability (%)')
+# plt.title('Probability of Outage')
+# plt.legend()
+# plt.savefig("results/plots/prob_outage_MU_MIMO")
+
+# Method 2 for phase 2 probability of outage (plotting all mobilities and only the UE selection we used for the "best" throughput)
+# threshold = 0.15
+# outage_probability = []
+# for mobility_idx in range(np.size(mobilities)):
+#     temp_outage_probability = []
+#     for ue_idx in range(np.size(rx_ues_arr)):
+#         prob = np.sum(uncoded_ber_list[mobility_idx][ue_idx] > threshold) / np.size(uncoded_ber_list[0][0]) * 100
+#         temp_outage_probability.append(prob)
+#     outage_probability.append(temp_outage_probability)
+# plt.figure()
+# plt.plot(rx_ues_arr, outage_probability[0], marker='o', label='Low Mobility')
+# plt.plot(rx_ues_arr, outage_probability[1], marker='s', label='Medium Mobility')
+# plt.plot(rx_ues_arr, outage_probability[2], marker='^', label='High Mobility')
+# plt.grid(True)
+# plt.xlabel('Number of UEs')
+# plt.ylabel('Probability (%)')
+# plt.title('Probability of Outage')
+# plt.legend()
+# plt.savefig("results/plots/prob_outage_MU_MIMO")
+
 threshold = 0.15
-outage_probability = []
+outage_probability = np.zeros(len(mobilities))
+ue_idx = 2
 for mobility_idx in range(np.size(mobilities)):
-    temp_outage_probability = []
-    for ue_idx in range(np.size(rx_ues_arr)):
-        prob = np.sum(uncoded_ber_list[mobility_idx][ue_idx] > threshold) / np.size(uncoded_ber_list[0][0]) * 100
-        temp_outage_probability.append(prob)
-    outage_probability.append(temp_outage_probability)
+    prob = np.sum(uncoded_ber_list[mobility_idx][ue_idx] > threshold) / np.size(uncoded_ber_list[mobility_idx][ue_idx]) * 100
+    outage_probability[mobility_idx] = prob
+num_categories = len(mobilities)
+x = np.arange(num_categories)
+bar_width = 0.35
+x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
 plt.figure()
-plt.plot(rx_ues_arr, outage_probability[0], marker='o', label='Low Mobility')
-plt.plot(rx_ues_arr, outage_probability[1], marker='s', label='Medium Mobility')
-plt.plot(rx_ues_arr, outage_probability[2], marker='^', label='High Mobility')
+plt.bar(x, outage_probability, width=bar_width, color='#4F81BD')
+plt.xticks(x, x_labels)
+plt.ylim(0,100)
 plt.grid(True)
-plt.xlabel('Number of UEs')
 plt.ylabel('Probability (%)')
 plt.title('Probability of Outage')
-plt.legend()
 plt.savefig("results/plots/prob_outage_MU_MIMO")
-
 
 hold = 1

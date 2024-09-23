@@ -314,6 +314,8 @@ def sim_baseline(cfg: SimConfig):
     # Initial rank and link adaptation
     if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
         do_rank_link_adaptation(cfg, baseline=baseline, dmimo_chans=dmimo_chans, info_bits=info_bits)
+    else:
+        cfg.return_estimated_channel = False
 
     # Baseline transmission
     dec_bits, uncoded_ber, uncoded_ser, x_hat = baseline(dmimo_chans, info_bits)
