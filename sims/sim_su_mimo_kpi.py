@@ -29,7 +29,7 @@ if __name__ == "__main__":
     cfg.csi_delay = 9           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    mobility = 'medium_mobility'
+    mobility = 'low_mobility'
     cfg.ns3_folder = "ns3/channels_" + mobility + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
@@ -44,31 +44,38 @@ if __name__ == "__main__":
     #############################################
     # Testing with rank and link adaptation
     #############################################
-
+    
     cfg.rank_adapt = True
     cfg.link_adapt = True
     cfg.csi_prediction = False
+
+    rx_ues_arr = [1,2,4,6]
     
-    cfg.precoding_method = "ZF"
-    rst_zf = sim_su_mimo_all(cfg)
-    ber = rst_zf[0]
-    ldpc_ber = rst_zf[1]
-    goodput = rst_zf[2]
-    throughput = rst_zf[3]
-    bitrate = rst_zf[4]
+    for ue_arr_idx in range(np.size(rx_ues_arr)):
 
-    ranks = rst_zf[5]
-    ldpc_ber_list = rst_zf[6]
-    uncoded_ber_list = rst_zf[7]
+        cfg.num_rx_ue_sel = rx_ues_arr[ue_arr_idx]
+        cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+            
+        cfg.precoding_method = "ZF"
+        rst_zf = sim_su_mimo_all(cfg)
+        ber = rst_zf[0]
+        ldpc_ber = rst_zf[1]
+        goodput = rst_zf[2]
+        throughput = rst_zf[3]
+        bitrate = rst_zf[4]
 
-    if cfg.csi_prediction:
-        np.savez("results/{}/su_mimo_results_pred.npz".format(folder_name),
-                    ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
-                    ldpc_ber_list=ldpc_ber_list)
-    else:
-        np.savez("results/{}/su_mimo_results.npz".format(folder_name),
-                    ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
-                    ldpc_ber_list=ldpc_ber_list)
+        ranks = rst_zf[5]
+        ldpc_ber_list = rst_zf[6]
+        uncoded_ber_list = rst_zf[7]
+
+        if cfg.csi_prediction:
+            np.savez("results/{}/su_mimo_results_UE_{}_pred.npz".format(folder_name),
+                        ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
+                        ldpc_ber_list=ldpc_ber_list)
+        else:
+            np.savez("results/{}/su_mimo_results_UE_{}.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),
+                        ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
+                        ldpc_ber_list=ldpc_ber_list)
 
 
     #############################################
