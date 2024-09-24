@@ -27,7 +27,7 @@ if __name__ == "__main__":
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 8
-    mobility = 'medium_mobility'
+    mobility = 'low_mobility'
     drop_idx = '3'
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 

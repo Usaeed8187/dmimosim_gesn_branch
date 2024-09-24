@@ -266,13 +266,15 @@ class MU_MIMO(Model):
                     rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,ant_indices,:], axis=(1,2,3)) / 10)
                     noise_pow = sig_pow / rx_snr_linear
                     sinr_linear = sig_pow / (interf_pow + noise_pow)
+
+                    if tf.reduce_any(tf.equal(sinr_linear, 0)):
+                        sinr_linear = rx_snr_linear
                     
                     sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
                     
                     print("UE ", node_idx-1, " sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
 
-                    if tf.reduce_any(tf.equal(sinr_linear, 0)):
-                        hold = 1
+                    
                     if (sinr_dB_arr[node_idx, :] == np.inf).any():
                         hold = 1
 
