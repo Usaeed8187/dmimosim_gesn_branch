@@ -242,6 +242,8 @@ class MU_MIMO(Model):
                     sinr_linear = sig_pow / (interf_pow + noise_pow)
                     sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
 
+                    print("BS sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
+
                 else:
                     num_UE_Ant = 2
                     num_BS_Ant = 4
@@ -264,7 +266,16 @@ class MU_MIMO(Model):
                     rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,ant_indices,:], axis=(1,2,3)) / 10)
                     noise_pow = sig_pow / rx_snr_linear
                     sinr_linear = sig_pow / (interf_pow + noise_pow)
+                    
                     sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
+                    
+                    print("UE ", node_idx-1, " sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
+
+                    if tf.reduce_any(tf.equal(sinr_linear, 0)):
+                        hold = 1
+                    if (sinr_dB_arr[node_idx, :] == np.inf).any():
+                        hold = 1
+
         else:
             sinr_dB_arr = None
 
@@ -479,6 +490,9 @@ def sim_mu_mimo_all(cfg: SimConfig):
     uncoded_ber_list = []
     sinr_dB_list = []
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
+
+        print("first_slot_idx: ", first_slot_idx, "\n")
+
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
         bers, bits, additional_KPIs = sim_mu_mimo(cfg)

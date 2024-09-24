@@ -21,14 +21,15 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 250        # total number of slots in ns-3 channels
+    cfg.total_slots = 100        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 8
     mobility = 'medium_mobility'
-    cfg.ns3_folder = "ns3/channels_" + mobility + '/'
+    drop_idx = '3'
+    cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("results", folder_name), exist_ok=True)
@@ -64,7 +65,7 @@ if __name__ == "__main__":
 
     cfg.rank_adapt = True
     cfg.link_adapt = True
-    cfg.csi_prediction = True
+    cfg.csi_prediction = False
 
     for ue_arr_idx in range(np.size(rx_ues_arr)):
 
@@ -88,12 +89,12 @@ if __name__ == "__main__":
         sinr_dB.append(np.concatenate(rst_bd[11]))
 
         if cfg.csi_prediction:
-            np.savez("results/{}/mu_mimo_results_UE_{}_pred.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),
+            np.savez("results/channels_multiple_mu_mimo/results/{}/mu_mimo_results_UE_{}_pred.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),
                     ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, nodewise_goodput=rst_bd[5],
                     nodewise_throughput=rst_bd[6], nodewise_bitrate=rst_bd[7], ranks=rst_bd[8], uncoded_ber_list=rst_bd[9],
                     ldpc_ber_list=rst_bd[10], sinr_dB=rst_bd[11])
         else:
-            np.savez("results/{}/mu_mimo_results_UE_{}.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),
+            np.savez("results/channels_multiple_mu_mimo/results/{}/mu_mimo_results_UE_{}.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),
                     ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, nodewise_goodput=rst_bd[5],
                     nodewise_throughput=rst_bd[6], nodewise_bitrate=rst_bd[7], ranks=rst_bd[8], uncoded_ber_list=rst_bd[9],
                     ldpc_ber_list=rst_bd[10], sinr_dB=rst_bd[11])

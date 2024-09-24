@@ -198,42 +198,42 @@ for mobility_idx in range(np.size(mobilities)):
 
 ############################### SINR Distributions (rx nodes in phase 2) ######################################
 
-# # Method 1 for SINR Distributions (rx nodes in phase 2) (number of UEs on x-axis)
-# plt.figure()
-# colors = ['red', 'green', 'purple']
-# for mobility_idx in range(np.size(mobilities)):
-#     plt.boxplot(sinr_dB[mobility_idx], positions=positions_all_scenarios[mobility_idx], widths=0.6, patch_artist=True, showfliers=False,
-#                 boxprops=dict(facecolor=colors[mobility_idx], color=colors[mobility_idx]),
-#                 medianprops=dict(color='black'))
-# plt.xticks(np.concatenate(positions_all_scenarios), rx_ues_arr * 3)
-# legend_elements = [plt.Line2D([0], [0], color='red', lw=4, label='Scenario 1'),
-#                    plt.Line2D([0], [0], color='green', lw=4, label='Scenario 2'),
-#                    plt.Line2D([0], [0], color='purple', lw=4, label='Scenario 3')]
-# plt.legend(handles=legend_elements, title='Scenarios', loc='upper right')
-# plt.grid(True)
-# plt.xlabel('Number of UEs')
-# plt.ylabel('SINR')
-# plt.title('SINR (dB)')
-# plt.ylim(-10, 15)
-# plt.savefig("results/plots/SINR_MU_MIMO")
-
-
-# Method 2 for SINR Distributions (rx nodes in phase 2) (mobility on x-axis and only showing best selection)
-num_categories = len(mobilities)
-mean_snr_db_arr = np.zeros(num_categories)
-UE_ind = 2
-for i in range(num_categories):
-    mean_snr_db_arr[i] = np.mean(sinr_dB[i][UE_ind])
-x = np.arange(num_categories)
-bar_width = 0.35
-x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
+# Method 1 for SINR Distributions (rx nodes in phase 2) (number of UEs on x-axis)
 plt.figure()
-plt.bar(x, np.asarray(mean_snr_db_arr), width=bar_width, label='MU MIMO', color='#4F81BD')
-plt.xticks(x, x_labels)
+colors = ['red', 'green', 'purple']
+for mobility_idx in range(np.size(mobilities)):
+    plt.boxplot(sinr_dB[mobility_idx], positions=positions_all_scenarios[mobility_idx], widths=0.6, patch_artist=True, showfliers=False,
+                boxprops=dict(facecolor=colors[mobility_idx], color=colors[mobility_idx]),
+                medianprops=dict(color='black'))
+plt.xticks(np.concatenate(positions_all_scenarios), rx_ues_arr * 3)
+legend_elements = [plt.Line2D([0], [0], color='red', lw=4, label='Scenario 1'),
+                   plt.Line2D([0], [0], color='green', lw=4, label='Scenario 2'),
+                   plt.Line2D([0], [0], color='purple', lw=4, label='Scenario 3')]
+plt.legend(handles=legend_elements, title='Scenarios', loc='upper right')
 plt.grid(True)
+plt.xlabel('Number of UEs')
 plt.ylabel('SINR')
 plt.title('SINR (dB)')
+plt.ylim(-10, 15)
 plt.savefig("results/plots/SINR_MU_MIMO")
+
+
+# # Method 2 for SINR Distributions (rx nodes in phase 2) (mobility on x-axis and only showing best selection)
+# num_categories = len(mobilities)
+# mean_snr_db_arr = np.zeros(num_categories)
+# UE_ind = 2
+# for i in range(num_categories):
+#     mean_snr_db_arr[i] = np.mean(sinr_dB[i][UE_ind])
+# x = np.arange(num_categories)
+# bar_width = 0.35
+# x_labels = ['Scenario 1', 'Scenario 2', 'Scenario 3']
+# plt.figure()
+# plt.bar(x, np.asarray(mean_snr_db_arr), width=bar_width, label='MU MIMO', color='#4F81BD')
+# plt.xticks(x, x_labels)
+# plt.grid(True)
+# plt.ylabel('SINR')
+# plt.title('SINR (dB)')
+# plt.savefig("results/plots/SINR_MU_MIMO")
 
 ############################### End-to-end average BER ######################################
 
