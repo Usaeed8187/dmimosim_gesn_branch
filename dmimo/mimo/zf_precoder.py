@@ -5,7 +5,7 @@ import sionna
 from sionna.utils import flatten_dims
 from sionna.ofdm import RemoveNulledSubcarriers
 
-from .zf_precoding import sumimo_zf_precoder, mumimo_zf_precoder
+from .zf_precoding import sumimo_zf_precoder, sumimo_zf_precoder_modified, mumimo_zf_precoder
 
 
 class ZFPrecoder(Layer):
@@ -66,6 +66,10 @@ class ZFPrecoder(Layer):
         if len(inputs) == 2:
             # not using rank adaptation
             x, h = inputs
+            sinr_calculation = False
+        elif len(inputs) == 3:
+            x, h, ue_ranks = inputs
+            sinr_calculation = True
         elif len(inputs) == 4:
             # specify user Rx antennas indices and streams (rank)
             x, h, ue_indices, ue_ranks = inputs
@@ -110,22 +114,29 @@ class ZFPrecoder(Layer):
         h_pc_desired = tf.cast(h_pc_desired, self._dtype)
 
         # Rx antenna indices for MU-MIMO
-        if ue_rank_adapt is False:
-            x_precoded, g = sumimo_zf_precoder(x_precoded,
-                                               h_pc_desired,
-                                               return_precoding_matrix=True)
+        if sinr_calculation:
+            if ue_rank_adapt is False:
+                x_precoded, g = sumimo_zf_precoder_modified(x_precoded,
+                                                h_pc_desired,
+                                                ue_ranks,
+                                                return_precoding_matrix=True)
         else:
-            # check rx_indices and rx_ranks
-            num_rx_ant = [len(val) for val in ue_indices]
-            total_rx_ant = np.sum(num_rx_ant)
-            assert total_rx_ant == h_pc_desired.shape[4], "total number of UE antennas must match channel coefficients"
-            assert all(ue_ranks <= num_rx_ant), "UE rank should not exceed number of antennas"
+            if ue_rank_adapt is False:
+                x_precoded, g = sumimo_zf_precoder(x_precoded,
+                                                h_pc_desired,
+                                                return_precoding_matrix=True)
+            else:
+                # check rx_indices and rx_ranks
+                num_rx_ant = [len(val) for val in ue_indices]
+                total_rx_ant = np.sum(num_rx_ant)
+                assert total_rx_ant == h_pc_desired.shape[4], "total number of UE antennas must match channel coefficients"
+                assert all(ue_ranks <= num_rx_ant), "UE rank should not exceed number of antennas"
 
-            x_precoded, g = mumimo_zf_precoder(x_precoded,
-                                               h_pc_desired,
-                                               ue_indices,
-                                               ue_ranks,
-                                               return_precoding_matrix=True)
+                x_precoded, g = mumimo_zf_precoder(x_precoded,
+                                                h_pc_desired,
+                                                ue_indices,
+                                                ue_ranks,
+                                                return_precoding_matrix=True)
 
         # Transpose output to desired shape:
         # [batch_size, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]

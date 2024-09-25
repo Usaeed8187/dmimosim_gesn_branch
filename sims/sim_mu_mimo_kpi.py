@@ -8,6 +8,33 @@ This scripts should be called from the "tests" folder
 import sys
 import os
 sys.path.append(os.path.join('..'))
+source_dir = '/home/data/ns3_channels_q4/'
+destination_dir = 'ns3/'
+if not os.path.exists(destination_dir):
+    os.makedirs(destination_dir)
+for root, dirs, files in os.walk(source_dir):
+    # Construct the relative path to replicate the directory structure
+    relative_path = os.path.relpath(root, source_dir)
+    destination_subdir = os.path.join(destination_dir, relative_path)
+
+    # Create the subdirectory in the destination if it doesn't exist
+    if not os.path.exists(destination_subdir):
+        os.makedirs(destination_subdir)
+    
+    # Create symlinks for each file in the current directory
+    for file in files:
+        source_file = os.path.join(root, file)
+        destination_file = os.path.join(destination_subdir, file)
+
+        # If the symlink already exists, remove it
+        if os.path.exists(destination_file):
+            os.remove(destination_file)
+
+        # Create the symlink
+        os.symlink(source_file, destination_file)
+        print(f"Symlink created for {source_file} -> {destination_file}")
+
+
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -28,7 +55,7 @@ if __name__ == "__main__":
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 8
     mobility = 'low_mobility'
-    drop_idx = '3'
+    drop_idx = '2'
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))

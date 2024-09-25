@@ -219,22 +219,36 @@ class MU_MIMO(Model):
         # SINR calculation
         if self.cfg.precoding_method != "None":
             
+            sinr_calculation = True
             sinr_dB_arr = np.zeros((self.cfg.num_rx_ue_sel+1, self.batch_size))
             dmimo_chans._add_noise = False
 
+            num_UE_Ant = 2
+            num_BS_Ant = 4
+
             for node_idx in range(self.cfg.num_rx_ue_sel+1):
+
+                x_precoded_sinr, _ = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_ranks[0]])
+                y_sinr = dmimo_chans([x_precoded_sinr, self.cfg.first_slot_idx])
+                
                 if node_idx == 0:
-                    
+
                     if self.cfg.precoding_method == "ZF":
-                        zeros_slice = tf.zeros_like(x_rg[:, :, 4:, ...])
-                        x_rg_tmp = tf.concat([x_rg[:, :, :4, ...], zeros_slice], axis=2)
-                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi])
+                        num_BS_streams = self.cfg.ue_ranks[0]*2
+                        zeros_slice = tf.zeros_like(x_rg[:, :, num_BS_streams:, ...])
+                        x_rg_tmp = tf.concat([x_rg[:, :, :num_BS_streams, ...], zeros_slice], axis=2)
+                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
                     else:
                         ValueError("unsupported precoding method for SINR calculation")
                     
-                    sig_all = y[:,:,:4, :,:]
+                    if self.cfg.ue_ranks[0] == 1:
+                        ant_indices = np.arange(0, num_BS_Ant,2)
+                    elif self.cfg.ue_ranks[0] ==2:
+                        ant_indices = np.arange(num_BS_Ant)
+
+                    sig_all = tf.gather(y_sinr, ant_indices, axis=-3)
                     sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
-                    sig_intended = sig_intended[:,:,:4, :,:]
+                    sig_intended = tf.gather(sig_intended, ant_indices, axis=-3)
                     sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
                     interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
                     rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,:4,:], axis=(1,2,3)) / 10)
@@ -245,20 +259,25 @@ class MU_MIMO(Model):
                     print("BS sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
 
                 else:
-                    num_UE_Ant = 2
-                    num_BS_Ant = 4
-                    ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant)
+
+                    if self.cfg.ue_ranks[0] == 1:
+                        ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant, 2)
+                    elif self.cfg.ue_ranks[0] ==2:
+                        ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant)
+
+                    
+                    stream_indices = np.arange(self.cfg.ue_ranks[0]*2 + (node_idx-1)*self.cfg.ue_ranks[0], self.cfg.ue_ranks[0]*2 + node_idx*self.cfg.ue_ranks[0])
 
                     if self.cfg.precoding_method == "ZF":
-                        mask = tf.reduce_any(tf.equal(tf.range(tf.shape(x_rg)[2])[..., tf.newaxis], ant_indices), axis=-1)
+                        mask = tf.reduce_any(tf.equal(tf.range(x_rg.shape[2])[..., tf.newaxis], stream_indices), axis=-1)
                         mask = tf.cast(mask, x_rg.dtype)
                         mask = tf.reshape(mask, [1, 1, -1, 1, 1])
                         x_rg_tmp = x_rg * mask
-                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi])
+                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
                     else:
                         ValueError("unsupported precoding method for SINR calculation")
                     
-                    sig_all = tf.gather(y, ant_indices, axis=2)
+                    sig_all = tf.gather(y_sinr, ant_indices, axis=2)
                     sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
                     sig_intended = tf.gather(sig_intended, ant_indices, axis=2)
                     sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
@@ -268,7 +287,7 @@ class MU_MIMO(Model):
                     sinr_linear = sig_pow / (interf_pow + noise_pow)
 
                     if tf.reduce_any(tf.equal(sinr_linear, 0)):
-                        sinr_linear = rx_snr_linear
+                        sinr_linear = rx_snr_linear / 2
                     
                     sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
                     

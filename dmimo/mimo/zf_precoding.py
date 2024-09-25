@@ -45,6 +45,51 @@ def sumimo_zf_precoder(x, h, return_precoding_matrix=False):
         return x_precoded, g
     else:
         return x_precoded
+    
+def sumimo_zf_precoder_modified(x, h, ue_ranks, return_precoding_matrix=False):
+    """
+    SU/MU-MIMO precoding using ZF method, treating all receiving antennas as independent ones. 
+    This function picks antennas according to the selected UEs, instead of picking the first num_streams_per_tx antennas
+
+    :param x: data stream symbols
+    :param h: channel coefficients
+    :param return_precoding_matrix: return precoding matrix
+    :return: precoded data symbols
+    """
+
+    # Input dimensions:
+    # x has shape: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx]
+    # h has shape: [batch_size, num_tx, num_ofdm_symbols, fft_size, num_rx_ant, num_tx_ant]
+    num_streams_per_tx = x.shape[-1]
+    num_rx_ant, num_tx_ant = h.shape[-2:]
+    assert num_streams_per_tx <= num_rx_ant, \
+        "Number of stream should not be larger than number of Tx/Rx antennas"
+
+    # Use only the first num_streams_per_tx antennas
+    if num_streams_per_tx < num_rx_ant and ue_ranks == 1:
+        ants_idx = np.arange(0,h.shape[-2],2)
+        h = tf.gather(h, ants_idx, axis=-2)
+    elif num_streams_per_tx < num_rx_ant and ue_ranks == 2:
+        h = h[..., :num_streams_per_tx, :]
+
+    # Compute pseudo inverse for precoding
+    g = tf.matmul(h, h, adjoint_b=True)
+    g = tf.matmul(h, matrix_inv(g), adjoint_a=True)
+
+    # Normalize each column to unit power
+    norm = tf.sqrt(tf.reduce_sum(tf.abs(g)**2, axis=-2, keepdims=True))
+    g = g/tf.cast(norm, g.dtype)
+
+    # Expand last dim of `x` for precoding
+    x_precoded = tf.expand_dims(x, -1)
+
+    # Precode
+    x_precoded = tf.squeeze(tf.matmul(g, x_precoded), -1)
+
+    if return_precoding_matrix:
+        return x_precoded, g
+    else:
+        return x_precoded
 
 
 def mumimo_zf_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False):
