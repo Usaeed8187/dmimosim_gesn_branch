@@ -7,6 +7,15 @@ This scripts should be called from the "tests" folder
 # add system folder for the dmimo library
 import sys
 import os
+
+import matplotlib.pyplot as plt
+import numpy as np
+import tensorflow as tf
+
+from dmimo.config import SimConfig
+from dmimo.mu_mimo_kpi import sim_mu_mimo_all
+
+
 sys.path.append(os.path.join('..'))
 source_dir = '/home/data/ns3_channels_q4/'
 destination_dir = 'ns3/'
@@ -32,37 +41,45 @@ for root, dirs, files in os.walk(source_dir):
 
         # Create the symlink
         os.symlink(source_file, destination_file)
-        print(f"Symlink created for {source_file} -> {destination_file}")
+        # print(f"Symlink created for {source_file} -> {destination_file}")
 
 
+script_name = sys.argv[0]
+arguments = sys.argv[1:]
 
-import matplotlib.pyplot as plt
-import numpy as np
-import tensorflow as tf
+print(f"Script Name: {script_name}")
+print(f"Arguments: {arguments}")
 
-from dmimo.config import SimConfig
-from dmimo.mu_mimo_kpi import sim_mu_mimo_all
+if len(arguments) > 0:
+    mobility = arguments[0]
+    drop_idx = arguments[1]
+    rx_ues_arr = arguments[2:]
+    rx_ues_arr = np.array(rx_ues_arr, dtype=int)
+    
+    print("Current mobility: {} \n Current drop: {} \n".format(mobility, drop_idx))
+    print("rx_ues_arr: ", rx_ues_arr)
+    print("rx_ues_arr[0]: ", rx_ues_arr[0])
 
 # Main function
 if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 100        # total number of slots in ns-3 channels
+    cfg.total_slots = 94        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 8
-    mobility = 'low_mobility'
-    drop_idx = '2'
+    # mobility = 'medium_mobility'
+    # drop_idx = '3'
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    rx_ues_arr = [1,2,4,6]
+    # rx_ues_arr = [1,2,4,6]    
 
     ber = np.zeros(np.size(rx_ues_arr ))
     ldpc_ber = np.zeros(np.size(rx_ues_arr ))

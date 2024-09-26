@@ -442,11 +442,12 @@ plt.savefig("results/plots/BLER_MU_MIMO")
 # plt.legend()
 # plt.savefig("results/plots/prob_outage_MU_MIMO")
 
+# Method 3 for phase 2 probability of outage (plotting all mobilities and only the UE selection we used for the "best" throughput). Using BLER instead of BER
 threshold = 0.15
 outage_probability = np.zeros(len(mobilities))
 ue_idx = 2
 for mobility_idx in range(np.size(mobilities)):
-    prob = np.sum(uncoded_ber_list[mobility_idx][ue_idx] > threshold) / np.size(uncoded_ber_list[mobility_idx][ue_idx]) * 100
+    prob = np.sum(ldpc_ber_list[mobility_idx][ue_idx] > threshold) / np.size(uncoded_ber_list[mobility_idx][ue_idx]) * 100
     outage_probability[mobility_idx] = prob
 num_categories = len(mobilities)
 x = np.arange(num_categories)

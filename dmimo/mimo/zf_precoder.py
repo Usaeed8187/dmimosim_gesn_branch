@@ -77,6 +77,7 @@ class ZFPrecoder(Layer):
                 ue_rank_adapt = True
                 if np.size(np.array(ue_ranks)) == 1:
                     ue_ranks = np.repeat(ue_ranks, len(ue_indices), axis=0)
+            sinr_calculation = False
         else:
             ValueError("calling BD precoder with incorrect params")
 
