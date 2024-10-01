@@ -13,3 +13,4 @@ from .zf_precoding import sumimo_zf_precoder, mumimo_zf_precoder
 from .node_selection import update_node_selection
 from .rank_adaptation import rankAdaptation
 from .link_adaptation import linkAdaptation
+from .quantized_CSI_feedback import quantized_CSI_feedback
