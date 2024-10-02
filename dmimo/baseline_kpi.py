@@ -15,7 +15,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo
-from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation, quantized_CSI_feedback
+from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation, CSI_feedback
 from dmimo.mimo import ZFPrecoder
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
@@ -173,16 +173,11 @@ class Baseline(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
 
-        generate_CSI_feedback = quantized_CSI_feedback(method='5G')
-        [PMI, CQI, RI] = generate_CSI_feedback(h_freq_csi) 
-
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
         elif self.cfg.precoding_method == "SVD":
             x_precoded, g = self.svd_precoder([x_rg, h_freq_csi])
-        elif self.cfg.precoding_method == "5G_codebook":
-            x_precoded, g = NULL #self.5G_codebook_precoder([x_rg, h_freq_csi])
         else:
             ValueError("unsupported precoding method")
 
