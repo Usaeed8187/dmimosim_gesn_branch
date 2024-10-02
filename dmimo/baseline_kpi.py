@@ -173,11 +173,16 @@ class Baseline(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
 
+        generate_CSI_feedback = CSI_feedback(cfg.CSI_feedback_method, method='5G')
+        [PMI, CQI, RI] = generate_CSI_feedback(h_freq_csi) 
+
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
         elif self.cfg.precoding_method == "SVD":
             x_precoded, g = self.svd_precoder([x_rg, h_freq_csi])
+        elif self.cfg.precoding_method == "5G_codebook":
+            x_precoded, g = NULL #self.5G_codebook_precoder([x_rg, h_freq_csi])
         else:
             ValueError("unsupported precoding method")
 
