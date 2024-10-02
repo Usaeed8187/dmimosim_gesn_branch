@@ -16,7 +16,8 @@ from sionna.utils.metrics import compute_ber, compute_bler
 from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.channel import standard_rc_pred_freq_mimo
-from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
+from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, SLNRPrecoder, SLNREqualizer
+from dmimo.mimo import rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
@@ -110,9 +111,14 @@ class MU_MIMO(Model):
         self.rg_mapper = ResourceGridMapper(self.rg)
 
         # The zero forcing and block diagonalization precoder
-        self.bd_precoder = BDPrecoder(self.rg, sm, return_effective_channel=True)
-        self.zf_precoder = ZFPrecoder(self.rg, sm, return_effective_channel=True)
-        self.bd_equalizer = BDEqualizer(self.rg, sm)
+        if self.cfg.precoding_method == "ZF":
+            self.zf_precoder = ZFPrecoder(self.rg, sm, return_effective_channel=True)
+        elif self.cfg.precoding_method == "BD":
+            self.bd_precoder = BDPrecoder(self.rg, sm, return_effective_channel=True)
+            self.bd_equalizer = BDEqualizer(self.rg, sm)
+        elif self.cfg.precoding_method == "SLNR":
+            self.slnr_precoder = SLNRPrecoder(self.rg, sm, return_effective_channel=True)
+            self.slnr_equalizer = SLNREqualizer(self.rg, sm)
 
         # The LS channel estimator will provide channel estimates and error variances
         self.ls_estimator = LSChannelEstimator(self.rg, interpolation_type="lin")
@@ -160,6 +166,9 @@ class MU_MIMO(Model):
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
         elif self.cfg.precoding_method == "BD":
             x_precoded, g = self.bd_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
+        elif self.cfg.precoding_method == "SLNR":
+            nvar = 5e-2  # TODO optimize value
+            x_precoded, g = self.slnr_precoder([x_rg, h_freq_csi, nvar, self.cfg.ue_indices, self.cfg.ue_ranks])
         else:
             ValueError("unsupported precoding method")
 
@@ -178,6 +187,8 @@ class MU_MIMO(Model):
 
         if self.cfg.precoding_method == "BD":
             y = self.bd_equalizer([y, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
+        elif self.cfg.precoding_method == "SLNR":
+            y = self.slnr_equalizer([y, h_freq_csi, nvar, self.cfg.ue_indices, self.cfg.ue_ranks])
 
         # LS channel estimation with linear interpolation
         no = 0.1  # initial noise estimation (tunable param)
