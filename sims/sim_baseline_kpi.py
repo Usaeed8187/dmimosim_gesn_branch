@@ -50,13 +50,13 @@ if __name__ == "__main__":
     # Testing with rank and link adaptation
     #############################################
 
-    cfg.rank_adapt = False
-    cfg.link_adapt = False
+    cfg.rank_adapt = True
+    cfg.link_adapt = True
     cfg.csi_prediction = False
 
-    cfg.num_tx_streams = 4
-    cfg.modulation_order = 2
-    cfg.code_rate = 0.5
+    # cfg.num_tx_streams = 4
+    # cfg.modulation_order = 2
+    # cfg.code_rate = 0.5
 
     cfg.precoding_method = "ZF"
     rst_zf = sim_baseline_all(cfg)
