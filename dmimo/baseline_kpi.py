@@ -173,11 +173,11 @@ class Baseline(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
 
-        debug = True
-        if debug:
-            self.cfg.num_tx_streams = 4
-        debug = False
-        generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams)
+        # debug = True
+        # if debug:
+        #     self.cfg.num_tx_streams = 4
+        # debug = False
+        generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
         [PMI, _, _] = generate_CSI_feedback(h_freq_csi) 
 
         # apply precoding to OFDM grids

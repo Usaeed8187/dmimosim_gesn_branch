@@ -9,6 +9,8 @@ class quantized_CSI_feedback(Layer):
     def __init__(self,
                 method,
                 num_tx_streams,
+                architecture,
+                snrdb,
                 dtype=tf.complex64,
                 **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
@@ -19,15 +21,22 @@ class quantized_CSI_feedback(Layer):
             self.N_2 = 1 # Number of quantization points in the vertical dimension
             self.O_1 = 4 # Horizontal oversampling factor
             self.O_2 = 1 # Vertical oversampling factor
-            self.num_tx_streams = num_tx_streams
+        self.num_tx_streams = num_tx_streams
+        self.architecture = architecture
         
+        snr_linear = 10**(snrdb/10)
+        self.snr_linear = np.mean(snr_linear)
+
+        self.num_BS_Ant = 4
+        self.num_UE_Ant = 2
+
 
     def call(self, h_est):
         
         if self.method == '5G':
 
             codebook = self.cal_codebook(h_est)
-            PMI = self.cal_PMI(codebook)
+            PMI = self.cal_PMI(codebook, h_est)
             CQI = None
             RI = None
 
@@ -39,6 +48,48 @@ class quantized_CSI_feedback(Layer):
             raise Exception(f"The {self.method} CSI feedback mechanism has not been implemented. The simulator supports 5G standard CSI feedback and RVQ CSI feedback only.")
         
         return CSI_feedback_report
+    
+    def cal_PMI(self, codebook, h_est):
+
+        N_t = h_est.shape[4]
+        N_r = h_est.shape[2]
+
+        num_rx_nodes = int((N_r - self.num_BS_Ant)/self.num_UE_Ant) + 1
+
+        
+        if self.architecture == 'baseline':
+
+            num_codebook_elements = np.product(codebook.shape[:-2])
+            codebook = codebook.reshape(-1, codebook.shape[-2], codebook.shape[-1])
+
+            for codebook_idx in range(num_codebook_elements):
+
+                h_eff = self.calculate_effective_channel(h_est, codebook[codebook_idx,...])
+
+                snr_linear = np.sum(self.snr_linear)
+                n_var = self.cal_n_var(h_eff, snr_linear)
+
+                mmse_inv = tf.matmul(h_eff, h_eff, adjoint_b=True)/rank_idx + n_var
+
+                per_stream_sinr = self.compute_sinr(h_eff, mmse_inv, n_var)
+
+                avg_sinr = self.eesm_average(per_stream_sinr, 0.25, 4)
+
+                curr_streams_rate = self.A_info * np.log2(1 + self.B_info * avg_sinr)
+                per_precoder_rate[rank_idx - 1] = np.sum(curr_streams_rate)
+
+
+
+        return PMI
+
+    def calculate_effective_channel(self, h_est, precoding_matrix):
+    
+        h_est_reshaped = tf.transpose(h_est, [0, 1, 3, 5, 6, 2, 4])
+        h_est_reshaped = tf.cast(h_est_reshaped, dtype=precoding_matrix.dtype)
+
+        h_eff = tf.matmul(h_est_reshaped, precoding_matrix)
+
+        return h_eff
 
     def cal_codebook(self, h_est):
         """
@@ -225,10 +276,4 @@ class quantized_CSI_feedback(Layer):
         v_l_m = v_l_m.reshape(-1, 1)
 
         return v_l_m
-    
-    def cal_PMI(self, codebook):
-        
-        PMI = 1
-
-        return PMI
 
