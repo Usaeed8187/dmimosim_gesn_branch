@@ -76,7 +76,7 @@ class quantized_CSI_feedback(Layer):
                 m_all = i_12
                 n_all = i_2
 
-                W_lmn = np.zeros((len(l_all), len(m_all), len(n_all), N_t, self.num_tx_streams), dtype=complex)
+                W = np.zeros((len(l_all), len(m_all), len(n_all), N_t, self.num_tx_streams), dtype=complex)
 
                 for l in l_all:
                     for m in m_all:
@@ -87,20 +87,116 @@ class quantized_CSI_feedback(Layer):
 
                             phi_n = np.exp(1j * np.pi * n / 2)
 
-                            W_lmn[l,m,n,...] = np.vstack((v_lm, phi_n * v_lm))
+                            W[l,m,n,...] = np.vstack((v_lm, phi_n * v_lm))
 
-                W = 1/np.sqrt(P_CSI_RS) * W_lmn
+                W = 1/np.sqrt(P_CSI_RS) * W
 
             elif self.num_tx_streams == 2:
 
                 i_11 = np.arange(0, self.N_1 * self.O_1)
                 i_12 = np.arange(0, self.N_2 * self.O_2)
                 i_13 = np.arange(0,2)
+                k_1 = np.array((0, self.O_1))
+                k_2 = np.array((0, 0))
                 i_2 = np.arange(0,2)
 
                 l_all = i_11
                 m_all = i_12
                 n_all = i_2
+
+                W = np.zeros((len(l_all), len(m_all), len(i_13), len(n_all), N_t, self.num_tx_streams), dtype=complex)
+
+                for l in l_all:
+                    for m in m_all:
+                        for i_13_idx in i_13:
+                            
+
+                            l_ = l + k_1[i_13_idx]
+                            m_ = m + k_2[i_13_idx]
+
+                            v_lm = self.compute_v_lm(l, m)
+                            v_l_m_ = self.compute_v_lm(l_, m_)
+                            
+                            for n in n_all:
+
+                                phi_n = np.exp(1j * np.pi * n / 2)
+                                
+                                col_1 = np.vstack((v_lm, phi_n * v_lm))
+                                col_2 = np.vstack((v_l_m_, -phi_n * v_l_m_))
+                                W[l,m,i_13_idx,n,...] = np.hstack((col_1, col_2))
+                
+                W = 1/np.sqrt(2 * P_CSI_RS) * W
+            
+            elif self.num_tx_streams == 3:
+
+                i_11 = np.arange(0, self.N_1 * self.O_1)
+                i_12 = np.arange(0, self.N_2 * self.O_2)
+                k_1 = self.O_1
+                k_2 = 0
+                i_2 = np.arange(0,2)
+
+                l_all = i_11
+                m_all = i_12
+                n_all = i_2
+
+                W = np.zeros((len(l_all), len(m_all), len(n_all), N_t, self.num_tx_streams), dtype=complex)
+
+                for l in l_all:
+                    for m in m_all:                            
+
+                        l_ = l + k_1
+                        m_ = m + k_2
+
+                        v_lm = self.compute_v_lm(l, m)
+                        v_l_m_ = self.compute_v_lm(l_, m_)
+                        
+                        for n in n_all:
+
+                            phi_n = np.exp(1j * np.pi * n / 2)
+                            
+                            col_1 = np.vstack((v_lm, phi_n * v_lm))
+                            col_2 = np.vstack((v_l_m_, phi_n * v_l_m_))
+                            col_3 = np.vstack((v_lm, -phi_n * v_lm))
+                            W[l,m,n,...] = np.hstack((col_1, col_2, col_3))
+                
+                W = 1/np.sqrt(3 * P_CSI_RS) * W
+            
+            elif self.num_tx_streams == 4:
+
+                i_11 = np.arange(0, self.N_1 * self.O_1)
+                i_12 = np.arange(0, self.N_2 * self.O_2)
+                k_1 = self.O_1
+                k_2 = 0
+                i_2 = np.arange(0,2)
+
+                l_all = i_11
+                m_all = i_12
+                n_all = i_2
+
+                W = np.zeros((len(l_all), len(m_all), len(n_all), N_t, self.num_tx_streams), dtype=complex)
+
+                for l in l_all:
+                    for m in m_all:                            
+
+                        l_ = l + k_1
+                        m_ = m + k_2
+
+                        v_lm = self.compute_v_lm(l, m)
+                        v_l_m_ = self.compute_v_lm(l_, m_)
+                        
+                        for n in n_all:
+
+                            phi_n = np.exp(1j * np.pi * n / 2)
+                            
+                            col_1 = np.vstack((v_lm, phi_n * v_lm))
+                            col_2 = np.vstack((v_l_m_, phi_n * v_l_m_))
+                            col_3 = np.vstack((v_lm, -phi_n * v_lm))
+                            col_4 = np.vstack((v_l_m_, -phi_n * v_l_m_))
+                            W[l,m,n,...] = np.hstack((col_1, col_2, col_3, col_4))
+                
+                W = 1/np.sqrt(4 * P_CSI_RS) * W
+            else:
+                raise Exception(f"5G standard PMI feedback for {self.num_tx_streams} spatial streams has not been implemented. The simulator supports 1-4 spatial streams only.")
 
         else:
             raise Exception(f"5G standard PMI feedback for {N_t} x {N_r} MIMO order has not been implemented. The simulator supports MIMO orders 4x2 and 4x4 only.")

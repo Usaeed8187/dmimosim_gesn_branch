@@ -175,7 +175,7 @@ class Baseline(Model):
 
         debug = True
         if debug:
-            self.cfg.num_tx_streams = 1
+            self.cfg.num_tx_streams = 4
         debug = False
         generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams)
         [PMI, _, _] = generate_CSI_feedback(h_freq_csi) 
