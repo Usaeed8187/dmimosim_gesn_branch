@@ -36,11 +36,10 @@ class quantized_CSI_feedback(Layer):
         if self.method == '5G':
 
             codebook = self.cal_codebook(h_est)
-            PMI = self.cal_PMI(codebook, h_est)
-            CQI = None
-            RI = None
+            PMI, rate_for_selected_precoder, precoding_matrix = self.cal_PMI(codebook, h_est)
 
-            CSI_feedback_report = [PMI, CQI, RI]
+            CSI_feedback_report = [PMI, rate_for_selected_precoder, precoding_matrix]
+        
         elif self.method == 'RVQ':
 
             CSI_feedback_report = cal_RVQ_CSI(h_est)
@@ -85,7 +84,7 @@ class quantized_CSI_feedback(Layer):
             PMI = np.where(per_precoder_rate == np.max(per_precoder_rate))[0][0]
             rate_for_selected_precoder = per_precoder_rate[PMI]
 
-        return [PMI, rate_for_selected_precoder]
+        return [PMI, rate_for_selected_precoder, codebook[PMI,...]]
 
     def calculate_effective_channel(self, h_est, precoding_matrix):
     

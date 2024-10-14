@@ -178,15 +178,15 @@ class Baseline(Model):
         #     self.cfg.num_tx_streams = 4
         # debug = False
         generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
-        [PMI, rate_for_selected_precoder] = generate_CSI_feedback(h_freq_csi) 
+        [PMI, rate_for_selected_precoder, precoding_matrix] = generate_CSI_feedback(h_freq_csi)
+        
+        h_freq_csi_reconstructed = precoding_matrix
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
         elif self.cfg.precoding_method == "SVD":
             x_precoded, g = self.svd_precoder([x_rg, h_freq_csi])
-        elif self.cfg.precoding_method == "5G_codebook":
-            x_precoded, g = NULL #self.5G_codebook_precoder([x_rg, h_freq_csi])
         else:
             ValueError("unsupported precoding method")
 
@@ -284,9 +284,11 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
     if link_adaptation.use_mmse_eesm_method:
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = mcs_feedback_report[1]
+        sinr_assumed = mcs_feedback_report[2]
 
         cfg.modulation_order = int(np.min(qam_order_arr))
         cfg.code_rate = np.min(code_rate_arr)
+        cfg.sinr_assumed = sinr_assumed
 
         print("\n", "Bits per stream (baseline) = ", cfg.modulation_order, "\n")
         print("\n", "Code-rate per stream (baseline) = ", cfg.code_rate, "\n")
