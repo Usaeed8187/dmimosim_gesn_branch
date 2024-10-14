@@ -179,8 +179,12 @@ class Baseline(Model):
         # debug = False
         generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
         [PMI, rate_for_selected_precoder, precoding_matrix] = generate_CSI_feedback(h_freq_csi)
-        
-        h_freq_csi_reconstructed = precoding_matrix
+
+        rx_sig_pow = self.cfg.n_var * 10**(self.cfg.snr_assumed/10)
+        tx_sig_pow = 10**(self.cfg.bs_txpwr_dbm/10)
+        S = np.diag(np.sqrt(rx_sig_pow / tx_sig_pow))
+
+        h_freq_csi_reconstructed = S @ precoding_matrix
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
@@ -262,6 +266,15 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
         rate = rank_feedback_report[1]
 
         cfg.num_tx_streams = int(rank)
+
+        h_eff = rank_adaptation.calculate_effective_channel(rank, h_est)
+        snr_linear = 10**(rx_snr_db/10)
+        snr_linear = np.sum(snr_linear, axis=(2))
+        snr_linear = np.mean(snr_linear)
+
+        n_var = rank_adaptation.cal_n_var(h_eff, snr_linear)
+
+        cfg.n_var = n_var
         
         print("\n", "rank (baseline) = ", rank, "\n")
         print("\n", "rate (baseline) = ", rate, "\n")
@@ -284,11 +297,11 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
     if link_adaptation.use_mmse_eesm_method:
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = mcs_feedback_report[1]
-        sinr_assumed = mcs_feedback_report[2]
+        snr_assumed = mcs_feedback_report[2]
 
         cfg.modulation_order = int(np.min(qam_order_arr))
         cfg.code_rate = np.min(code_rate_arr)
-        cfg.sinr_assumed = sinr_assumed
+        cfg.snr_assumed = snr_assumed
 
         print("\n", "Bits per stream (baseline) = ", cfg.modulation_order, "\n")
         print("\n", "Code-rate per stream (baseline) = ", cfg.code_rate, "\n")
@@ -314,6 +327,7 @@ def sim_baseline(cfg: SimConfig):
     # dMIMO channels from ns-3 simulator
     ns3cfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3cfg, "Baseline", add_noise=True)
+    cfg.bs_txpwr_dbm = ns3cfg.bs_txpwr_dbm
 
     # Create Baseline simulation
     baseline = Baseline(cfg)
