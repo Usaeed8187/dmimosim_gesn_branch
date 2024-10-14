@@ -178,7 +178,7 @@ class Baseline(Model):
         #     self.cfg.num_tx_streams = 4
         # debug = False
         generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
-        [PMI, _, _] = generate_CSI_feedback(h_freq_csi) 
+        [PMI, rate_for_selected_precoder] = generate_CSI_feedback(h_freq_csi) 
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
