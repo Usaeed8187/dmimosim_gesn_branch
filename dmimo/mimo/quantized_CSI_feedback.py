@@ -23,6 +23,21 @@ class quantized_CSI_feedback(Layer):
             self.N_2 = 1 # Number of quantization points in the vertical dimension
             self.O_1 = 4 # Horizontal oversampling factor
             self.O_2 = 1 # Vertical oversampling factor
+        elif self.method == 'RVQ':
+            #Initialization for the RVQ quantization
+            # This can be any even division of these but in our case it should always be the full number of bits. 
+            self.codebook_size=int(2**total_bits)
+            self.bits_per_codeword=total_bits
+            self.num_codewords = total_bits // self.bits_per_codeword
+            
+            #VectorLength=data.shape[3]*2 generally its the number of TX times 2 RX antennas since all nodes have 2 RX antennas. 
+            # Generate random codebook (complex numbers), you can use a uniform distribution but I have seen reference that guassian is better for channels. 
+            self.codebook = np.random.randn(self.codebook_size,VectorLength) + 1j * np.random.randn(self.codebook_size,VectorLength)
+            max_abs_values = np.abs(self.codebook).max(axis=1, keepdims=True)
+
+            # The channel gain will in nearly all cases be ranging in magnitude from 0 to 1 so I normalize the maximum magnitude of each codebook vector to mag 1. 
+            self.codebook = self.codebook / max_abs_values
+        
         self.num_tx_streams = num_tx_streams
         self.architecture = architecture
         
@@ -31,20 +46,6 @@ class quantized_CSI_feedback(Layer):
 
         self.num_BS_Ant = 4
         self.num_UE_Ant = 2
-
-        #Initialization for the RVQ quantization
-        # This can be any even division of these but in our case it should always be the full number of bits. 
-        self.codebook_size=int(2**total_bits)
-        self.bits_per_codeword=total_bits
-        self.num_codewords = total_bits // self.bits_per_codeword
-        
-        #VectorLength=data.shape[3]*2 generally its the number of TX times 2 RX antennas since all nodes have 2 RX antennas. 
-        # Generate random codebook (complex numbers), you can use a uniform distribution but I have seen reference that guassian is better for channels. 
-        self.codebook = np.random.randn(self.codebook_size,VectorLength) + 1j * np.random.randn(self.codebook_size,VectorLength)
-        max_abs_values = np.abs(self.codebook).max(axis=1, keepdims=True)
-
-        # The channel gain will in nearly all cases be ranging in magnitude from 0 to 1 so I normalize the maximum magnitude of each codebook vector to mag 1. 
-        self.codebook = self.codebook / max_abs_values
 
     def call(self, h_est):
         
@@ -507,9 +508,9 @@ class quantized_CSI_feedback(Layer):
         h_freq_csi_reconstructed = tf.convert_to_tensor(repeated_array)
 
         if self.architecture == 'baseline':
-            padding = 4 - h_freq_csi_reconstructed.shape[2]
+            padding = self.num_BS_Ant - h_freq_csi_reconstructed.shape[2]
         elif self.architecture == 'dMIMO_phase1':
-            padding = 2 - h_freq_csi_reconstructed.shape[2]
+            padding = self.num_UE_Ant - h_freq_csi_reconstructed.shape[2]
         else:
             padding = 0
 
