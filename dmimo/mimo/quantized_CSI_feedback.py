@@ -36,9 +36,9 @@ class quantized_CSI_feedback(Layer):
         if self.method == '5G':
 
             codebook = self.cal_codebook(h_est)
-            PMI, rate_for_selected_precoder, precoding_matrix = self.cal_PMI(codebook, h_est)
+            PMI, rate_for_selected_precoder, precoding_matrices = self.cal_PMI(codebook, h_est)
             
-            CSI_feedback_report = [PMI, rate_for_selected_precoder, precoding_matrix]
+            CSI_feedback_report = [PMI, rate_for_selected_precoder, precoding_matrices]
         
         elif self.method == 'RVQ':
 
@@ -63,7 +63,7 @@ class quantized_CSI_feedback(Layer):
             num_codebook_elements = np.product(codebook.shape[:-2])
             codebook = codebook.reshape(-1, codebook.shape[-2], codebook.shape[-1])
 
-            per_precoder_rate = np.zeros((num_codebook_elements))
+            per_precoder_rate = np.zeros((h_est.shape[-1],num_codebook_elements))
 
             PMI = np.zeros((h_est.shape[-1]),dtype=int)
             rate_for_selected_precoder = np.zeros((h_est.shape[-1]))
@@ -83,11 +83,15 @@ class quantized_CSI_feedback(Layer):
 
                 curr_codebook_rate = A_info * np.log2(1 + B_info * avg_sinr)
                 per_precoder_rate[:, codebook_idx] = np.sum(curr_codebook_rate, axis=-1)
-        
-            PMI[n] = np.where(per_precoder_rate == np.max(per_precoder_rate))[0][0]
-            rate_for_selected_precoder[n] = per_precoder_rate[PMI[n]]
 
-        return [PMI, rate_for_selected_precoder, codebook[PMI,...]]
+            precoding_matrices = np.zeros((h_est.shape[-1], codebook.shape[1], codebook.shape[2]), dtype=complex)
+
+            for n in range(h_est.shape[-1]):
+                PMI[n] = np.where(per_precoder_rate[n, :] == np.max(per_precoder_rate[n, :]))[0][0]
+                rate_for_selected_precoder[n] = per_precoder_rate[n, PMI[n]]
+                precoding_matrices[n, ...] = codebook[PMI[n]]
+
+        return [PMI, rate_for_selected_precoder, precoding_matrices]
 
     def calculate_effective_channel(self, h_est, precoding_matrix):
     
@@ -342,12 +346,38 @@ class quantized_CSI_feedback(Layer):
 
         return v_l_m
 
-    def reconstruct_channel(self, precoding_matrix, snr_assumed_dBm, n_var, bs_txpwr_dbm):
+    def reconstruct_channel(self, precoding_matrices, snr_assumed_dBm, n_var, bs_txpwr_dbm):
 
         rx_sig_pow = n_var * 10**(snr_assumed_dBm/10)
         tx_sig_pow = 10**(bs_txpwr_dbm/10)
         s = np.sqrt(rx_sig_pow / tx_sig_pow)
 
-        h_freq_csi_reconstructed = precoding_matrix * s
+        h_freq_csi_reconstructed = precoding_matrices * s
+
+        reshaped_array = h_freq_csi_reconstructed.transpose(2, 1, 0)
+        reshaped_array = reshaped_array[np.newaxis, np.newaxis, :, np.newaxis, :, np.newaxis, :]
+        repeated_array = np.repeat(reshaped_array, 14, axis=5)
+        h_freq_csi_reconstructed = tf.convert_to_tensor(repeated_array)
+
+        if self.architecture == 'baseline':
+            padding = 4 - h_freq_csi_reconstructed.shape[2]
+        elif self.architecture == 'dMIMO_phase1':
+            padding = 2 - h_freq_csi_reconstructed.shape[2]
+        else:
+            padding = 0
+
+        
+
+        padding_mask = [
+            [0, 0],  # No padding on the 1st dimension
+            [0, 0],  # No padding on the 2nd dimension
+            [0, padding],  # Pad the 3rd dimension from 2 to 4 (2 zeros after)
+            [0, 0],  # No padding on the 4th dimension
+            [0, 0],  # No padding on the 5th dimension
+            [0, 0],  # No padding on the 6th dimension
+            [0, 0],  # No padding on the 7th dimension
+        ]
+
+        h_freq_csi_reconstructed = tf.pad(h_freq_csi_reconstructed, padding_mask)
 
         return h_freq_csi_reconstructed

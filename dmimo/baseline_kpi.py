@@ -175,8 +175,8 @@ class Baseline(Model):
 
         # Generate PMI feedback and reconstruct the channel at the gNB (based on PMI and CQI, CQI taken from link adaptation)
         generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
-        [PMI, rate_for_selected_precoder, precoding_matrix] = generate_CSI_feedback(h_freq_csi)
-        h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrix, self.cfg.snr_assumed, self.cfg.n_var, self.cfg.bs_txpwr_dbm)
+        [PMI, rate_for_selected_precoder, precoding_matrices] = generate_CSI_feedback(h_freq_csi)
+        h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrices, self.cfg.snr_assumed, self.cfg.n_var, self.cfg.bs_txpwr_dbm)
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
