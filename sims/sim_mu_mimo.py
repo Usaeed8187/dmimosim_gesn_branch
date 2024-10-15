@@ -49,7 +49,7 @@ if __name__ == "__main__":
     os.makedirs(os.path.join("../results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    for num_rx_antennas in [8, 10, 12]:
+    for num_rx_antennas in [6]:
         # Test case 1:  no rank adaptation, assuming 2 antennas per UE and treating BS as two UEs
         cfg.num_tx_streams = num_rx_antennas
         cfg.num_rx_ue_sel = (num_rx_antennas - 4) // 2

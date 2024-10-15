@@ -17,7 +17,7 @@ from dmimo.config import Ns3Config, SimConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
 from dmimo.channel import standard_rc_pred_freq_mimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, SLNRPrecoder, SLNREqualizer
-from dmimo.mimo import rankAdaptation, linkAdaptation
+from dmimo.mimo import rankAdaptation, linkAdaptation, quantized_CSI_feedback
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
@@ -331,6 +331,16 @@ def sim_mu_mimo(cfg: SimConfig):
                                                            slot_idx=cfg.first_slot_idx - cfg.csi_delay,
                                                            cfo_sigma=cfo_val(cfg, cfg.cfo_sigma),
                                                            sto_sigma=sto_val(cfg, cfg.sto_sigma))
+        _, rx_snr_db = dmimo_chans.load_channel(slot_idx=cfg.first_slot_idx - cfg.csi_delay, batch_size=cfg.num_slots_p2)
+
+    #Channel Estimate Quantization
+    #For now the number of feedback bits per RX Node(in this case meaning sets of 2RX antennas) is hard coded to 10 bits
+    if cfg._CSI_feedback_method=='RVQ':
+        generate_CSI_feedback = quantized_CSI_feedback(method='RVQ', num_tx_streams=cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db,total_bits=10,VectorLength=h_freq_csi.shape[4]*2)
+        CSI_feedback_report = generate_CSI_feedback(h_freq_csi) 
+        Reconstructed_Channel = generate_CSI_feedback.Reconstruction(CSI_feedback_report)
+        #convert channel to tensor 
+        h_freq_csi=tf.convert_to_tensor(Reconstructed_Channel)
 
     # Rank and link adaptation
     if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:

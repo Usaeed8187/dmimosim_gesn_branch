@@ -174,9 +174,17 @@ class Baseline(Model):
             return h_freq_csi, rx_snr_db
 
         # Generate PMI feedback and reconstruct the channel at the gNB (based on PMI and CQI, CQI taken from link adaptation)
-        generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
-        [PMI, rate_for_selected_precoder, precoding_matrix] = generate_CSI_feedback(h_freq_csi)
-        h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrix, self.cfg.snr_assumed, self.cfg.n_var, self.cfg.bs_txpwr_dbm)
+        if self.cfg._CSI_feedback_method =='5G':
+            generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
+            [PMI, rate_for_selected_precoder, precoding_matrix] = generate_CSI_feedback(h_freq_csi)
+            h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrix, self.cfg.snr_assumed, self.cfg.n_var, self.cfg.bs_txpwr_dbm)
+        
+            
+        #RVQ is not used for baseline simulations it is only added for simple debugging. 
+        elif self.cfg._CSI_feedback_method =='RVQ':
+            generate_CSI_feedback = quantized_CSI_feedback(method='RVQ', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db,total_bits=4,VectorLength=h_freq_csi.shape[4]*2)
+            CSI_feedback_report = generate_CSI_feedback(h_freq_csi) 
+            Reconstructed_Channel = generate_CSI_feedback.Reconstruction(CSI_feedback_report)
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
