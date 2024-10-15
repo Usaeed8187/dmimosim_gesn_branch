@@ -173,24 +173,16 @@ class Baseline(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
 
-        # debug = True
-        # if debug:
-        #     self.cfg.num_tx_streams = 4
-        # debug = False
+        # Generate PMI feedback and reconstruct the channel at the gNB (based on PMI and CQI, CQI taken from link adaptation)
         generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', snrdb=rx_snr_db)
         [PMI, rate_for_selected_precoder, precoding_matrix] = generate_CSI_feedback(h_freq_csi)
-
-        rx_sig_pow = self.cfg.n_var * 10**(self.cfg.snr_assumed/10)
-        tx_sig_pow = 10**(self.cfg.bs_txpwr_dbm/10)
-        S = np.diag(np.sqrt(rx_sig_pow / tx_sig_pow))
-
-        h_freq_csi_reconstructed = S @ precoding_matrix
+        h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrix, self.cfg.snr_assumed, self.cfg.n_var, self.cfg.bs_txpwr_dbm)
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
-            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
+            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi_reconstructed])
         elif self.cfg.precoding_method == "SVD":
-            x_precoded, g = self.svd_precoder([x_rg, h_freq_csi])
+            x_precoded, g = self.svd_precoder([x_rg, h_freq_csi_reconstructed])
         else:
             ValueError("unsupported precoding method")
 

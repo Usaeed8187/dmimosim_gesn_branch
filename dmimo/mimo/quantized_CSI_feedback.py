@@ -37,7 +37,7 @@ class quantized_CSI_feedback(Layer):
 
             codebook = self.cal_codebook(h_est)
             PMI, rate_for_selected_precoder, precoding_matrix = self.cal_PMI(codebook, h_est)
-
+            
             CSI_feedback_report = [PMI, rate_for_selected_precoder, precoding_matrix]
         
         elif self.method == 'RVQ':
@@ -65,6 +65,9 @@ class quantized_CSI_feedback(Layer):
 
             per_precoder_rate = np.zeros((num_codebook_elements))
 
+            PMI = np.zeros((h_est.shape[-1]),dtype=int)
+            rate_for_selected_precoder = np.zeros((h_est.shape[-1]))
+            
             for codebook_idx in range(num_codebook_elements):
 
                 h_eff = self.calculate_effective_channel(h_est, codebook[codebook_idx,...])
@@ -79,10 +82,10 @@ class quantized_CSI_feedback(Layer):
                 avg_sinr = self.eesm_average(per_stream_sinr, 0.25, 4)
 
                 curr_codebook_rate = A_info * np.log2(1 + B_info * avg_sinr)
-                per_precoder_rate[codebook_idx] = np.sum(curr_codebook_rate)
-            
-            PMI = np.where(per_precoder_rate == np.max(per_precoder_rate))[0][0]
-            rate_for_selected_precoder = per_precoder_rate[PMI]
+                per_precoder_rate[:, codebook_idx] = np.sum(curr_codebook_rate, axis=-1)
+        
+            PMI[n] = np.where(per_precoder_rate == np.max(per_precoder_rate))[0][0]
+            rate_for_selected_precoder[n] = per_precoder_rate[PMI[n]]
 
         return [PMI, rate_for_selected_precoder, codebook[PMI,...]]
 
@@ -147,8 +150,8 @@ class quantized_CSI_feedback(Layer):
         else:
             raise ValueError('Supported modulation sizes are 2, 4, and 6 only.')
 
-        N = int(np.size(sinr) / sinr.shape[-1])
-        exp_sum = np.sum(np.exp(-sinr / beta), axis=(0,1,2,3,4,5))
+        N = int(np.size(sinr) / (sinr.shape[-1] * sinr.shape[-3]))
+        exp_sum = np.sum(np.exp(-sinr / beta), axis=(0,1,2,3,5))
         exp_sum = 1 / N * exp_sum
 
         if np.any(exp_sum == 0):
@@ -160,7 +163,7 @@ class quantized_CSI_feedback(Layer):
 
     def cal_codebook(self, h_est):
         """
-        Computes PMI for 4x2 and 4x4 MIMO configuration (format N_t x N_r)
+        Computes PMI codebook for 4x2 and 4x4 MIMO configuration (format N_t x N_r)
         Consult 3GPP TS 38.214 Section 5 for details
         """
 
@@ -175,11 +178,6 @@ class quantized_CSI_feedback(Layer):
                 i_11 = np.arange(0, self.N_1 * self.O_1)
                 i_12 = np.arange(0, self.N_2 * self.O_2)
                 i_2 = np.arange(0,4)
-
-                # u_m = self.compute_u_m(i_12)
-                # # v_l_m = 
-                # # W_i11_i12_i2 = 
-                # W = 1/np.sqrt(P_CSI_RS) * W
 
 
         elif N_t == 4 and N_r == 4:
@@ -344,3 +342,12 @@ class quantized_CSI_feedback(Layer):
 
         return v_l_m
 
+    def reconstruct_channel(self, precoding_matrix, snr_assumed_dBm, n_var, bs_txpwr_dbm):
+
+        rx_sig_pow = n_var * 10**(snr_assumed_dBm/10)
+        tx_sig_pow = 10**(bs_txpwr_dbm/10)
+        s = np.sqrt(rx_sig_pow / tx_sig_pow)
+
+        h_freq_csi_reconstructed = precoding_matrix * s
+
+        return h_freq_csi_reconstructed
