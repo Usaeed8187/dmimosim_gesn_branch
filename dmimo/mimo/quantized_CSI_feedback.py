@@ -11,6 +11,8 @@ class quantized_CSI_feedback(Layer):
                 num_tx_streams,
                 architecture,
                 snrdb,
+                total_bits,
+                VectorLength,
                 dtype=tf.complex64,
                 **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
@@ -30,6 +32,19 @@ class quantized_CSI_feedback(Layer):
         self.num_BS_Ant = 4
         self.num_UE_Ant = 2
 
+        #Initialization for the RVQ quantization
+        # This can be any even division of these but in our case it should always be the full number of bits. 
+        self.codebook_size=int(2**total_bits)
+        self.bits_per_codeword=total_bits
+        self.num_codewords = total_bits // self.bits_per_codeword
+        
+        #VectorLength=data.shape[3]*2 generally its the number of TX times 2 RX antennas since all nodes have 2 RX antennas. 
+        # Generate random codebook (complex numbers), you can use a uniform distribution but I have seen reference that guassian is better for channels. 
+        self.codebook = np.random.randn(self.codebook_size,VectorLength) + 1j * np.random.randn(self.codebook_size,VectorLength)
+        max_abs_values = np.abs(self.codebook).max(axis=1, keepdims=True)
+
+        # The channel gain will in nearly all cases be ranging in magnitude from 0 to 1 so I normalize the maximum magnitude of each codebook vector to mag 1. 
+        self.codebook = self.codebook / max_abs_values
 
     def call(self, h_est):
         
@@ -41,8 +56,7 @@ class quantized_CSI_feedback(Layer):
             CSI_feedback_report = [PMI, rate_for_selected_precoder, precoding_matrices]
         
         elif self.method == 'RVQ':
-
-            CSI_feedback_report = cal_RVQ_CSI(h_est)
+            CSI_feedback_report  = self.VectorQuantizationLoader(h_est)
         else:
             raise Exception(f"The {self.method} CSI feedback mechanism has not been implemented. The simulator supports 5G standard CSI feedback and RVQ CSI feedback only.")
         
@@ -345,6 +359,139 @@ class quantized_CSI_feedback(Layer):
         v_l_m = v_l_m.reshape(-1, 1)
 
         return v_l_m
+    
+    def quantize(self, data):
+        """
+        Quantizes each data vector using multiple random vectors and stores the indices in binary format.
+        Args:
+            data (ndarray): Input data to compress (NxD matrix, complex).
+
+        Returns:
+            codebook (ndarray): The random codebook used for quantization (complex).
+            binary_encoded_indices (list of str): List of binary representations of the indices for each data vector.
+        """
+        binary_encoded_indices = []
+        residuals = data
+        binary_index = ""
+        
+        #This is incase we ever had a case where we want to feedback two seperate codewords rather than only one with all X bits. 
+        #Generally it will be that all bits are used for a single codebook index to increase the number of codebook entries. 
+        for j in range(self.num_codewords):
+            #Use for Euclidian Distance
+            #best_distance = float('inf')
+            #Use for Inner Cosine Distance 
+            best_distance = float('-inf')
+            best_index = -1
+
+            # Find the closest vector in the codebook
+            for i_codebook in range(self.codebook.shape[0]):
+                ##Vector matching metrics.
+                
+                #Euclidian Distance
+                 
+                #distance = np.linalg.norm(np.abs(residuals.flatten()) - np.abs(self.codebook[i_codebook]))
+                
+                #if distance < best_distance:
+                #    best_index = i_codebook
+                #    best_distance = distance
+                    
+                #Inner Cosine Distance
+                distance=np.abs(np.dot(np.squeeze(residuals),self.codebook[i_codebook]))
+
+                if distance > best_distance:
+                    best_index = i_codebook
+                    best_distance = distance
+
+            #Update the residual
+            residuals = residuals - self.codebook[best_index]
+
+            # Convert the index to binary representation (padded to the specified number of bits)
+            binary_codeword = format(best_index, f'0{self.bits_per_codeword}b')
+            binary_index += binary_codeword  # Concatenate binary codewords
+
+        binary_encoded_indices.append(binary_index)
+
+        return binary_encoded_indices
+
+    def VectorQuantizationLoader(self,H):
+        #Segments the channel into chunks then passes the chunks to the codebook quantizer
+        
+        #Index the channel into chunks then feed into the random vector_quantization
+        #define the array of the right size then make the nested list
+        binary_encoded_indices=np.zeros((H.shape[0],1,int((H.shape[2]/2)),14,int(np.round(H.shape[6]/12))))
+        binary_string_indices = [[[[['' for _ in range(binary_encoded_indices.shape[4])]
+                            for _ in range(binary_encoded_indices.shape[3])]
+                            for _ in range(binary_encoded_indices.shape[2])]
+                            for _ in range(binary_encoded_indices.shape[1])]
+                            for _ in range(binary_encoded_indices.shape[0])]
+        
+        #Store this for use in the reconstruction, it is just used to make sure the reconstructed channel has the same shape. 
+        self.H=H
+        
+        #For each subframe
+        for i_BatchIndex in range(H.shape[0]):
+            #For each symbol
+            for i_SymbolIndex in range(H.shape[5]):
+                #For each RX Node
+                for i_RxNodeIndex in np.arange(0,H.shape[2],2):
+                    #Segment the channel into all TX to a particular RX Node
+                    
+                    H_perRxNode=np.squeeze(H[i_BatchIndex,0,i_RxNodeIndex:i_RxNodeIndex+2,0,:,i_SymbolIndex,:])
+                    
+                    # For each RBG we produce one quantized value.     
+                    for i_RBG in np.arange(0,H.shape[6],12):
+                        #Accounts for the fact that we feedback 512 but 512/12 is not divisible so for the final RBG we take only what is left
+                        if i_RBG+12 > H_perRxNode.shape[2]:
+                            H_RBG=H_perRxNode[:,:,i_RBG:]
+                        else:
+                            H_RBG=H_perRxNode[:,:,i_RBG:i_RBG+12]
+                            
+                        #Take mean over the RBG
+                        H_RBG=np.mean(H_RBG,2)
+                        
+                        #Reshape the final per node channels into one vector. 
+                        H_RBGVector=np.reshape(H_RBG,(-1,1))
+
+                        #Quantizing the complex vector and storing in a list
+                        binary_string_indices[i_BatchIndex][0][int(i_RxNodeIndex/2)][i_SymbolIndex][int(i_RBG/12)] = self.quantize(H_RBGVector)
+        
+        return binary_string_indices
+    
+    def Reconstruction(self,binary_string_indices,):
+        #Define the full matrix we will construct 
+        H_Reconstructed=np.zeros_like(self.H)
+        
+        #For each subframe
+        for i_BatchIndex in range(self.H.shape[0]):
+            #For each symbol
+            for i_SymbolIndex in range(self.H.shape[5]):
+                #For each RX Node
+                for i_RxNodeIndex in np.arange(0,self.H.shape[2],2):
+                    #Segment the channel into all TX to a particular RX Node
+                    
+                    for i_RBG in np.arange(0,self.H.shape[6],12):
+                        #repeats incase we seperate the total bits into multiple codewords. we normally dont but I have the functionality.
+                        for i_NumCodewords in range(self.num_codewords):
+                            #Pull the particular binary string
+                            BinaryString=binary_string_indices[i_BatchIndex][0][int(i_RxNodeIndex/2)][i_SymbolIndex][int(i_RBG/12)]
+                            #Process and strip the string and conver it to integer codebook index
+                            BinaryString=str(BinaryString[(self.bits_per_codeword*i_NumCodewords):(self.bits_per_codeword*i_NumCodewords+1)])
+                            Codebook_Index=int(BinaryString.strip("[]'\""),2)
+                            
+                            #Pull the correct index and reshape into the correct channel shape
+                            H_Vector=self.codebook[Codebook_Index]
+                            H_PerNode=np.reshape(H_Vector,(2,self.H.shape[4]))
+                            
+                            #Handling for non divisble subcarriers. 
+                            if (i_RBG+1)+12 > self.H.shape[6]:
+                                H_Reconstructed[i_BatchIndex,0,i_RxNodeIndex:i_RxNodeIndex+2,0,:,i_SymbolIndex,i_RBG:]+=np.tile(np.expand_dims(H_PerNode, axis=-1), (1, 1, self.H.shape[6]-(i_RBG)))
+                            else:
+                                H_Reconstructed[i_BatchIndex,0,i_RxNodeIndex:i_RxNodeIndex+2,0,:,i_SymbolIndex,i_RBG:(i_RBG+12)]+=np.tile(np.expand_dims(H_PerNode, axis=-1), (1, 1, 12))
+                
+                        
+        
+        return H_Reconstructed
+
 
     def reconstruct_channel(self, precoding_matrices, snr_assumed_dBm, n_var, bs_txpwr_dbm):
 

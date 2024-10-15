@@ -143,6 +143,7 @@ class SU_MIMO(Model):
         x = self.mapper(d)
         x_rg = self.rg_mapper(x)
 
+
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
