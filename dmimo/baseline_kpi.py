@@ -15,8 +15,10 @@ from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo
-from dmimo.mimo import SVDPrecoder, SVDEqualizer, rankAdaptation, linkAdaptation, quantized_CSI_feedback
+from dmimo.mimo import SVDPrecoder, SVDEqualizer
 from dmimo.mimo import ZFPrecoder
+from dmimo.mimo import fiveGPrecoder
+from dmimo.mimo import rankAdaptation, linkAdaptation, quantized_CSI_feedback
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val
 
 
@@ -112,6 +114,9 @@ class Baseline(Model):
         # The zero forcing precoder
         self.zf_precoder = ZFPrecoder(self.rg, sm, return_effective_channel=True)
 
+        # The 5G SU MIMO precoder
+        self.fiveG_precoder = fiveGPrecoder(architecture='baseline')
+
         # SVD-based precoder and equalizer
         self.svd_precoder = SVDPrecoder(self.rg, sm, return_effective_channel=True)
         self.svd_equalizer = SVDEqualizer(self.rg, sm)
@@ -178,9 +183,9 @@ class Baseline(Model):
             generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', 
                                                             snrdb=rx_snr_db, total_bits=4,VectorLength=h_freq_csi.shape[4]*2)
             [PMI, rate_for_selected_precoder, precoding_matrices] = generate_CSI_feedback(h_freq_csi)
-            h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrices, self.cfg.snr_assumed, self.cfg.n_var, self.cfg.bs_txpwr_dbm)  
+            h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrices, self.cfg.cqi_snr, self.cfg.n_var, self.cfg.bs_txpwr_dbm)  
             
-        #RVQ is not used for baseline simulations it is only added for simple debugging. 
+        #RVQ is not used for baseline simulations it is only added for simple debugging.
         elif self.cfg._CSI_feedback_method =='RVQ':
             generate_CSI_feedback = quantized_CSI_feedback(method='RVQ', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', 
                                                             snrdb=rx_snr_db, total_bits=4,VectorLength=h_freq_csi.shape[4]*2)
@@ -192,6 +197,8 @@ class Baseline(Model):
             x_precoded, g = self.zf_precoder([x_rg, h_freq_csi_reconstructed])
         elif self.cfg.precoding_method == "SVD":
             x_precoded, g = self.svd_precoder([x_rg, h_freq_csi_reconstructed])
+        elif self.cfg.precoding_method == "5G":
+            x_precoded = self.fiveG_precoder([x_rg, precoding_matrices, self.cfg.cqi_snr])
         else:
             ValueError("unsupported precoding method")
 
@@ -298,11 +305,11 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
     if link_adaptation.use_mmse_eesm_method:
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = mcs_feedback_report[1]
-        snr_assumed = mcs_feedback_report[2]
+        cqi_snr = mcs_feedback_report[2]
 
         cfg.modulation_order = int(np.min(qam_order_arr))
         cfg.code_rate = np.min(code_rate_arr)
-        cfg.snr_assumed = snr_assumed
+        cfg.cqi_snr = cqi_snr
 
         print("\n", "Bits per stream (baseline) = ", cfg.modulation_order, "\n")
         print("\n", "Code-rate per stream (baseline) = ", cfg.code_rate, "\n")
@@ -366,6 +373,7 @@ def sim_baseline_all(cfg: SimConfig):
     """
 
     total_cycles = 0
+    slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
     uncoded_ber, ldpc_ber, goodput, throughput, bitrate = 0, 0, 0, 0, 0
 
     ranks_list = []
@@ -388,7 +396,6 @@ def sim_baseline_all(cfg: SimConfig):
 
         ranks_list.append(additional_KPIs[0])
 
-    slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
     goodput = goodput / (total_cycles * slot_time * 1e6)  # Mbps
     throughput = throughput / (total_cycles * slot_time * 1e6)  # Mbps
     bitrate = bitrate / (total_cycles * slot_time * 1e6)  # Mbps

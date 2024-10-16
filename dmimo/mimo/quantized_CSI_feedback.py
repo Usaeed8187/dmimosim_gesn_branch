@@ -105,6 +105,8 @@ class quantized_CSI_feedback(Layer):
                 PMI[n] = np.where(per_precoder_rate[n, :] == np.max(per_precoder_rate[n, :]))[0][0]
                 rate_for_selected_precoder[n] = per_precoder_rate[n, PMI[n]]
                 precoding_matrices[n, ...] = codebook[PMI[n]]
+            
+            precoding_matrices = precoding_matrices[np.newaxis, ...]
 
         return [PMI, rate_for_selected_precoder, precoding_matrices]
 
@@ -495,15 +497,17 @@ class quantized_CSI_feedback(Layer):
 
 
     def reconstruct_channel(self, precoding_matrices, snr_assumed_dBm, n_var, bs_txpwr_dbm):
-
+        
         rx_sig_pow = n_var * 10**(snr_assumed_dBm/10)
         tx_sig_pow = 10**(bs_txpwr_dbm/10)
         s = np.sqrt(rx_sig_pow / tx_sig_pow)
 
+        # [num_rx, num_ofdm_symbols, fft_size, num_tx_ant, num_streams_per_tx]
         h_freq_csi_reconstructed = precoding_matrices * s
 
-        reshaped_array = h_freq_csi_reconstructed.transpose(2, 1, 0)
-        reshaped_array = reshaped_array[np.newaxis, np.newaxis, :, np.newaxis, :, np.newaxis, :]
+        # [batch_size, num_rx, num_streams_per_rx, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
+        reshaped_array = h_freq_csi_reconstructed.transpose(0, 3, 2, 1)
+        reshaped_array = reshaped_array[:, np.newaxis, :, np.newaxis, :, np.newaxis, :]
         repeated_array = np.repeat(reshaped_array, 14, axis=5)
         h_freq_csi_reconstructed = tf.convert_to_tensor(repeated_array)
 
@@ -513,8 +517,6 @@ class quantized_CSI_feedback(Layer):
             padding = self.num_UE_Ant - h_freq_csi_reconstructed.shape[2]
         else:
             padding = 0
-
-        
 
         padding_mask = [
             [0, 0],  # No padding on the 1st dimension
@@ -526,6 +528,7 @@ class quantized_CSI_feedback(Layer):
             [0, 0],  # No padding on the 7th dimension
         ]
 
+        # [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
         h_freq_csi_reconstructed = tf.pad(h_freq_csi_reconstructed, padding_mask)
 
         return h_freq_csi_reconstructed

@@ -19,6 +19,18 @@ gpu_num = 0  # Use "" to use the CPU, Use 0 to select first GPU
 os.environ["CUDA_VISIBLE_DEVICES"] = f"{gpu_num}"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
+script_name = sys.argv[0]
+arguments = sys.argv[1:]
+
+print(f"Script Name: {script_name}")
+print(f"Arguments: {arguments}")
+
+if len(arguments) > 0:
+    mobility = arguments[0]
+    drop_idx = arguments[1]
+    
+    print("Current mobility: {} \n Current drop: {} \n".format(mobility, drop_idx))
+
 # Main function
 if __name__ == "__main__":
 
@@ -30,7 +42,8 @@ if __name__ == "__main__":
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     mobility = 'low_mobility'
-    cfg.ns3_folder = "ns3/channels_" + mobility + '/'
+    drop_idx = '1'
+    cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("results", folder_name), exist_ok=True)
@@ -58,7 +71,7 @@ if __name__ == "__main__":
     # cfg.modulation_order = 2
     # cfg.code_rate = 0.5
 
-    cfg.precoding_method = "ZF"
+    cfg.precoding_method = "5G"
     rst_zf = sim_baseline_all(cfg)
     ber = rst_zf[0]
     ldpc_ber = rst_zf[1]
@@ -71,11 +84,14 @@ if __name__ == "__main__":
     uncoded_ber_list = rst_zf[7]
     
     if cfg.csi_prediction:
-        np.savez("results/{}/baseline_results_pred.npz".format(folder_name),
+        np.savez("results/channels_multiple_baseline/{}/baseline_results_pred.npz".format(folder_name),
                     ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
                     ldpc_ber_list=ldpc_ber_list)
     else:
-        np.savez("results/{}/baseline_results.npz".format(folder_name),
+        save_folder = "results/channels_multiple_baseline/{}".format(folder_name)
+        if not os.path.exists(save_folder):
+            os.makedirs(save_folder)
+        np.savez(save_folder + "/baseline_results.npz",
                     ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
                     ldpc_ber_list=ldpc_ber_list)
 
