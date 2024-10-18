@@ -71,7 +71,7 @@ if __name__ == "__main__":
     # cfg.modulation_order = 2
     # cfg.code_rate = 0.5
 
-    cfg.precoding_method = "5G"
+    cfg.precoding_method = "5G_ZF"
     rst_zf = sim_baseline_all(cfg)
     ber = rst_zf[0]
     ldpc_ber = rst_zf[1]

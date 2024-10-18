@@ -115,7 +115,7 @@ class Baseline(Model):
         self.zf_precoder = ZFPrecoder(self.rg, sm, return_effective_channel=True)
 
         # The 5G SU MIMO precoder
-        self.fiveG_precoder = fiveGPrecoder(architecture='baseline')
+        self.fiveG_precoder = fiveGPrecoder(self.rg, sm, architecture='baseline')
 
         # SVD-based precoder and equalizer
         self.svd_precoder = SVDPrecoder(self.rg, sm, return_effective_channel=True)
@@ -183,7 +183,7 @@ class Baseline(Model):
             generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', 
                                                             snrdb=rx_snr_db, total_bits=4,VectorLength=h_freq_csi.shape[4]*2)
             [PMI, rate_for_selected_precoder, precoding_matrices] = generate_CSI_feedback(h_freq_csi)
-            h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrices, self.cfg.cqi_snr, self.cfg.n_var, self.cfg.bs_txpwr_dbm)  
+            # h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrices, self.cfg.cqi_snr, self.cfg.n_var, self.cfg.bs_txpwr_dbm)  
             
         #RVQ is not used for baseline simulations it is only added for simple debugging.
         elif self.cfg._CSI_feedback_method =='RVQ':
@@ -194,11 +194,11 @@ class Baseline(Model):
 
         # apply precoding to OFDM grids
         if self.cfg.precoding_method == "ZF":
-            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi_reconstructed])
+            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
         elif self.cfg.precoding_method == "SVD":
-            x_precoded, g = self.svd_precoder([x_rg, h_freq_csi_reconstructed])
-        elif self.cfg.precoding_method == "5G":
-            x_precoded = self.fiveG_precoder([x_rg, precoding_matrices, self.cfg.cqi_snr])
+            x_precoded, g = self.svd_precoder([x_rg, h_freq_csi])
+        elif "5G" in self.cfg.precoding_method:
+            x_precoded = self.fiveG_precoder([x_rg, precoding_matrices, self.cfg.cqi_snr, self.cfg.n_var, self.cfg.bs_txpwr_dbm, self.cfg.precoding_method])
         else:
             ValueError("unsupported precoding method")
 
