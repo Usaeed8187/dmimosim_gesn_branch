@@ -284,8 +284,8 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
 
         cfg.n_var = n_var
         
-        print("\n", "rank (baseline) = ", rank, "\n")
-        print("\n", "rate (baseline) = ", rate, "\n")
+        # print("\n", "rank (baseline) = ", rank, "\n")
+        # print("\n", "rate (baseline) = ", rate, "\n")
 
     else:
         rank = rank_feedback_report
@@ -311,8 +311,8 @@ def do_rank_link_adaptation(cfg, h_est=None, rx_snr_db=None, start_slot_idx=None
         cfg.code_rate = np.min(code_rate_arr)
         cfg.cqi_snr = cqi_snr
 
-        print("\n", "Bits per stream (baseline) = ", cfg.modulation_order, "\n")
-        print("\n", "Code-rate per stream (baseline) = ", cfg.code_rate, "\n")
+        # print("\n", "Bits per stream (baseline) = ", cfg.modulation_order, "\n")
+        # print("\n", "Code-rate per stream (baseline) = ", cfg.code_rate, "\n")
     else:
         qam_order_arr = mcs_feedback_report[0]
         code_rate_arr = []

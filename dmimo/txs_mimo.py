@@ -16,6 +16,8 @@ from dmimo.config import SimConfig
 from dmimo.channel import lmmse_channel_estimation
 from dmimo.mimo import ZFPrecoder
 
+from dmimo.mimo import quantized_CSI_feedback
+
 
 class TxSquad(Model):
     """
@@ -153,6 +155,12 @@ class TxSquad(Model):
         else:
             # LMMSE channel estimation
             h_freq_csi, err_var_csi = lmmse_channel_estimation(txs_chans, self.rg_csi, slot_idx=self.cfg.first_slot_idx)
+
+
+        if self.cfg._CSI_feedback_method =='5G':
+            generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', 
+                                                            snrdb=rx_snr_db, total_bits=4,VectorLength=h_freq_csi.shape[4]*2)
+            [PMI, rate_for_selected_precoder, precoding_matrices] = generate_CSI_feedback(h_freq_csi)
 
         # Apply basic ZF precoder (optimized precoder will be added later)
         x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
