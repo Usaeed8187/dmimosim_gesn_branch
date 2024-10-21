@@ -26,7 +26,7 @@ class SimConfig(CarrierConfig, MCSConfig):
         self._cfo_sigma = 0.0                   # standard deviation of CFO in Hz
         self._rank_adapt = True                 # turn on rank adaptation
         self._link_adapt = True                 # turn on link adaptation
-        self._enable_txsquad = True            # enable simulation of TxSquad transmission
+        self._enable_txsquad = False            # enable simulation of TxSquad transmission
         self._enable_rxsquad = False            # enable simulation of TxSquad transmission
         self._CSI_feedback_method = '5G'        # which CSI feedback method to use. choices: '5G', 'RVQ'
         super().__init__(**kwargs)
