@@ -363,7 +363,7 @@ class quantized_CSI_feedback(Layer):
 
         return v_l_m
     
-    def quantize(self, data):
+    def quantize(self, data,i_RxNodeIndex):
         """
         Quantizes each data vector using multiple random vectors and stores the indices in binary format.
         Args:
@@ -399,7 +399,7 @@ class quantized_CSI_feedback(Layer):
                 #    best_distance = distance
                     
                 #Inner Cosine Distance
-                distance=np.abs(np.dot(np.squeeze(residuals),self.codebook[i_codebook]))
+                distance=np.abs(np.dot(np.squeeze(residuals),self.codebook[i_codebook,:,i_RxNodeIndex]))
 
                 if distance > best_distance:
                     best_index = i_codebook
@@ -456,7 +456,7 @@ class quantized_CSI_feedback(Layer):
                         H_RBGVector=np.reshape(H_RBG,(-1,1))
 
                         #Quantizing the complex vector and storing in a list
-                        binary_string_indices[i_BatchIndex][0][int(i_RxNodeIndex/2)][i_SymbolIndex][int(i_RBG/12)] = self.quantize(H_RBGVector)
+                        binary_string_indices[i_BatchIndex][0][int(i_RxNodeIndex/2)][i_SymbolIndex][int(i_RBG/12)] = self.quantize(H_RBGVector,int(i_RxNodeIndex/2))
         
         return binary_string_indices
     
@@ -482,7 +482,7 @@ class quantized_CSI_feedback(Layer):
                             Codebook_Index=int(BinaryString.strip("[]'\""),2)
                             
                             #Pull the correct index and reshape into the correct channel shape
-                            H_Vector=self.codebook[Codebook_Index]
+                            H_Vector=self.codebook[Codebook_Index,:,int(i_RxNodeIndex/2)]
                             H_PerNode=np.reshape(H_Vector,(2,self.H.shape[4]))
                             
                             #Handling for non divisble subcarriers. 
