@@ -32,11 +32,15 @@ class quantized_CSI_feedback(Layer):
             
             #VectorLength=data.shape[3]*2 generally its the number of TX times 2 RX antennas since all nodes have 2 RX antennas. 
             # Generate random codebook (complex numbers), you can use a uniform distribution but I have seen reference that guassian is better for channels. 
-            self.codebook = np.random.randn(self.codebook_size,VectorLength) + 1j * np.random.randn(self.codebook_size,VectorLength)
+            #self.codebook = np.random.randn(self.codebook_size,VectorLength) + 1j * np.random.randn(self.codebook_size,VectorLength)
+            self.codebook = np.random.normal(loc=0.0, scale=1.0, size=(self.codebook_size,VectorLength,12)) + 1j * np.random.normal(loc=0.0, scale=1.0, size=(self.codebook_size,VectorLength,12))
             max_abs_values = np.abs(self.codebook).max(axis=1, keepdims=True)
 
-            # The channel gain will in nearly all cases be ranging in magnitude from 0 to 1 so I normalize the maximum magnitude of each codebook vector to mag 1. 
-            self.codebook = self.codebook / max_abs_values
+            #The channel gain will in nearly all cases be ranging in magnitude from 0 to 1 so I normalize the maximum magnitude of each codebook vector to mag 1. 
+            #self.codebook = self.codebook / max_abs_values
+            
+            #normalizing the vector magnitudes
+            self.codebook=self.codebook /np.linalg.norm(self.codebook, axis=1, keepdims=True)
         
         self.num_tx_streams = num_tx_streams
         self.architecture = architecture
@@ -380,39 +384,29 @@ class quantized_CSI_feedback(Layer):
         #This is incase we ever had a case where we want to feedback two seperate codewords rather than only one with all X bits. 
         #Generally it will be that all bits are used for a single codebook index to increase the number of codebook entries. 
         for j in range(self.num_codewords):
-            #Use for Euclidian Distance
-            #best_distance = float('inf')
-            #Use for Inner Cosine Distance 
-            best_distance = float('-inf')
-            best_index = -1
 
-            # Find the closest vector in the codebook
-            for i_codebook in range(self.codebook.shape[0]):
-                ##Vector matching metrics.
-                
-                #Euclidian Distance
-                 
-                #distance = np.linalg.norm(np.abs(residuals.flatten()) - np.abs(self.codebook[i_codebook]))
-                
-                #if distance < best_distance:
-                #    best_index = i_codebook
-                #    best_distance = distance
-                    
-                #Inner Cosine Distance
-                distance=np.abs(np.dot(np.squeeze(residuals),self.codebook[i_codebook,:,i_RxNodeIndex]))
+            residuals_squeezed = tf.squeeze(tf.cast(residuals,dtype=tf.complex128))
+            
+            dot_products = tf.abs(tf.tensordot(residuals_squeezed, self.codebook[:,:,i_RxNodeIndex], axes=[[0], [1]]))
 
-                if distance > best_distance:
-                    best_index = i_codebook
-                    best_distance = distance
+            # Compute the norms in one operation
+            residual_norm = tf.norm(residuals_squeezed)
+            codebook_norms = tf.norm(self.codebook[:,:,i_RxNodeIndex], axis=1)
+
+            # Calculate the cosine distances
+            distances = tf.abs(dot_products / (tf.abs(residual_norm) * tf.abs(codebook_norms)))
+
+            #Select best distance 
+            best_index = int(tf.argmax(distances))
 
             #Update the residual
-            residuals = residuals - self.codebook[best_index]
+            residuals = residuals - self.codebook[best_index,:,i_RxNodeIndex]
 
             # Convert the index to binary representation (padded to the specified number of bits)
             binary_codeword = format(best_index, f'0{self.bits_per_codeword}b')
             binary_index += binary_codeword  # Concatenate binary codewords
 
-        binary_encoded_indices.append(binary_index)
+            binary_encoded_indices.append(binary_index)
 
         return binary_encoded_indices
 
@@ -455,12 +449,15 @@ class quantized_CSI_feedback(Layer):
                         #Reshape the final per node channels into one vector. 
                         H_RBGVector=np.reshape(H_RBG,(-1,1))
 
+                        #Normalize the channel to the same normalization used for the codebook
+                        H_RBGVector=H_RBGVector/np.linalg.norm(H_RBGVector, axis=0, keepdims=True)
+                        
                         #Quantizing the complex vector and storing in a list
                         binary_string_indices[i_BatchIndex][0][int(i_RxNodeIndex/2)][i_SymbolIndex][int(i_RBG/12)] = self.quantize(H_RBGVector,int(i_RxNodeIndex/2))
         
         return binary_string_indices
     
-    def Reconstruction(self,binary_string_indices,):
+    def Reconstruction(self,binary_string_indices):
         #Define the full matrix we will construct 
         H_Reconstructed=np.zeros_like(self.H)
         
