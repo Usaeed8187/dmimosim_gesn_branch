@@ -41,8 +41,8 @@ if __name__ == "__main__":
     cfg.csi_delay = 2           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    # mobility = 'low_mobility'
-    # drop_idx = '1'
+    mobility = 'low_mobility'
+    drop_idx = '1'
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
@@ -88,7 +88,7 @@ if __name__ == "__main__":
                     ber=ber, ldpc_ber=ldpc_ber, goodput=goodput, throughput=throughput, bitrate=bitrate, ranks=ranks, uncoded_ber_list=uncoded_ber_list,
                     ldpc_ber_list=ldpc_ber_list)
     else:
-        save_folder = "results/channels_multiple_baseline/{}".format(folder_name)
+        save_folder = "results/channels_multiple_baseline/{}/{}".format(cfg.precoding_method, folder_name)
         if not os.path.exists(save_folder):
             os.makedirs(save_folder)
         np.savez(save_folder + "/baseline_results.npz",

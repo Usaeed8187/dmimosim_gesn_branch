@@ -15,6 +15,7 @@ from sionna.utils.metrics import compute_ber, compute_bler
 from dmimo.config import SimConfig
 from dmimo.channel import lmmse_channel_estimation
 from dmimo.mimo import ZFPrecoder
+from dmimo.mimo import fiveGPrecoder
 
 from dmimo.mimo import quantized_CSI_feedback
 
@@ -114,6 +115,9 @@ class TxSquad(Model):
         # The zero forcing precoder precodes the transmitter stream towards the intended antennas
         self.zf_precoder = ZFPrecoder(rg, sm, return_effective_channel=True)
 
+        # The 5G Phase 1 MIMO precoder
+        self.fiveG_precoder = fiveGPrecoder(rg, sm, architecture='dMIMO_phase1')
+
         # The LS channel estimator will provide channel estimates and error variances
         self.ls_estimator = LSChannelEstimator(rg, interpolation_type="lin")
 
@@ -158,12 +162,19 @@ class TxSquad(Model):
 
 
         if self.cfg._CSI_feedback_method =='5G':
-            generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', 
-                                                            snrdb=rx_snr_db, total_bits=4,VectorLength=h_freq_csi.shape[4]*2)
+            refer_sinr_db = np.array([4.3, 10.3, 22.7])
+            CQI = int(self.num_bits_per_symbol / (self.num_streams_per_tx * 2))
+            rx_snr_db = refer_sinr_db[CQI-1]
+
+            generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.num_streams_per_tx, architecture='dMIMO_phase1', 
+                                                            snrdb=rx_snr_db, total_bits=None,VectorLength=None)
             [PMI, rate_for_selected_precoder, precoding_matrices] = generate_CSI_feedback(h_freq_csi)
 
-        # Apply basic ZF precoder (optimized precoder will be added later)
-        x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
+        # Precoding
+        if self.cfg.phase_1_precoding_method == "ZF": # Apply basic ZF precoder
+            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
+        elif "5G" in self.cfg.phase_1_precoding_method:
+            x_precoded = self.fiveG_precoder([x_rg, precoding_matrices, np.array((rx_snr_db, rx_snr_db)), self.cfg.n_var, self.cfg.bs_txpwr_dbm, self.cfg.phase_1_precoding_method])
 
         # apply dMIMO channels to the resource grid in the frequency domain.
         y = txs_chans([x_precoded, self.cfg.first_slot_idx])

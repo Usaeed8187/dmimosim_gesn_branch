@@ -39,7 +39,7 @@ class quantized_CSI_feedback(Layer):
             self.codebook = self.codebook / max_abs_values
         
         self.num_tx_streams = num_tx_streams
-        self.architecture = architecture
+        self.architecture = architecture # 'baseline', 'dMIMO_phase1'
         
         snr_linear = 10**(snrdb/10)
         self.snr_linear = np.mean(snr_linear)
@@ -49,10 +49,33 @@ class quantized_CSI_feedback(Layer):
 
     def call(self, h_est):
         
-        if self.method == '5G':
+        if self.method == '5G' and self.architecture == 'baseline':
 
             codebook = self.cal_codebook(h_est)
             PMI, rate_for_selected_precoder, precoding_matrices = self.cal_PMI(codebook, h_est)
+            
+            CSI_feedback_report = [PMI, rate_for_selected_precoder, precoding_matrices]
+        
+        elif self.method == '5G' and self.architecture == 'dMIMO_phase1':
+
+            num_rx_ues = int(h_est.shape[2]/self.num_UE_Ant)
+
+            PMI = []
+            rate_for_selected_precoder = []
+            precoding_matrices = []
+
+            for rx_ue_idx in range(num_rx_ues):
+
+                rx_ue_ant_idx = np.arange(rx_ue_idx*self.num_UE_Ant, (rx_ue_idx+1)*self.num_UE_Ant)
+                codebook = self.cal_codebook(tf.gather(h_est, rx_ue_ant_idx, axis=2))
+                PMI_temp, rate_for_selected_precoder_temp, precoding_matrices_temp = self.cal_PMI(codebook, tf.gather(h_est, rx_ue_ant_idx, axis=2))
+                PMI.append(PMI_temp)
+                rate_for_selected_precoder.append(rate_for_selected_precoder_temp)
+                precoding_matrices.append(precoding_matrices_temp)
+            
+            PMI = np.asarray(PMI)
+            rate_for_selected_precoder = np.asarray(rate_for_selected_precoder)
+            precoding_matrices = np.asarray(precoding_matrices)
             
             CSI_feedback_report = [PMI, rate_for_selected_precoder, precoding_matrices]
         
@@ -74,6 +97,41 @@ class quantized_CSI_feedback(Layer):
         B_info = 0.73
 
         if self.architecture == 'baseline':
+
+            num_codebook_elements = np.product(codebook.shape[:-2])
+            codebook = codebook.reshape(-1, codebook.shape[-2], codebook.shape[-1])
+
+            per_precoder_rate = np.zeros((h_est.shape[-1],num_codebook_elements))
+
+            PMI = np.zeros((h_est.shape[-1]),dtype=int)
+            rate_for_selected_precoder = np.zeros((h_est.shape[-1]))
+            
+            for codebook_idx in range(num_codebook_elements):
+
+                h_eff = self.calculate_effective_channel(h_est, codebook[codebook_idx,...])
+
+                snr_linear = np.sum(self.snr_linear)
+                n_var = self.cal_n_var(h_eff, snr_linear)
+
+                mmse_inv = tf.matmul(h_eff, h_eff, adjoint_b=True)/self.num_tx_streams + n_var
+
+                per_stream_sinr = self.compute_sinr(h_eff, mmse_inv, n_var)
+
+                avg_sinr = self.eesm_average(per_stream_sinr, 0.25, 4)
+
+                curr_codebook_rate = A_info * np.log2(1 + B_info * avg_sinr)
+                per_precoder_rate[:, codebook_idx] = np.sum(curr_codebook_rate, axis=-1)
+
+            precoding_matrices = np.zeros((h_est.shape[-1], codebook.shape[1], codebook.shape[2]), dtype=complex)
+
+            for n in range(h_est.shape[-1]):
+                PMI[n] = np.where(per_precoder_rate[n, :] == np.max(per_precoder_rate[n, :]))[0][0]
+                rate_for_selected_precoder[n] = per_precoder_rate[n, PMI[n]]
+                precoding_matrices[n, ...] = codebook[PMI[n]]
+            
+            precoding_matrices = precoding_matrices[np.newaxis, ...]
+
+        elif self.architecture == 'dMIMO_phase1':
 
             num_codebook_elements = np.product(codebook.shape[:-2])
             codebook = codebook.reshape(-1, codebook.shape[-2], codebook.shape[-1])
@@ -192,16 +250,7 @@ class quantized_CSI_feedback(Layer):
         N_r = h_est.shape[2]
         P_CSI_RS = N_t
 
-        if N_t == 4 and N_r == 2:
-            
-            if self.num_tx_streams == 1:
-                
-                i_11 = np.arange(0, self.N_1 * self.O_1)
-                i_12 = np.arange(0, self.N_2 * self.O_2)
-                i_2 = np.arange(0,4)
-
-
-        elif N_t == 4 and N_r == 4:
+        if N_t == 4:
 
             if self.num_tx_streams == 1:
                 

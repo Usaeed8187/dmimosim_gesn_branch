@@ -369,6 +369,15 @@ def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_
         cfg.num_tx_streams = int(rank)*(cfg.num_rx_ue_sel+2)
         cfg.ue_ranks = [rank]
 
+        h_eff = rank_adaptation.calculate_effective_channel(rank, h_est)
+        snr_linear = 10**(rx_snr_db/10)
+        snr_linear = np.sum(snr_linear, axis=(2))
+        snr_linear = np.mean(snr_linear)
+
+        n_var = rank_adaptation.cal_n_var(h_eff, snr_linear)
+
+        cfg.n_var = n_var
+
         # cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2
         # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
         
@@ -427,6 +436,7 @@ def sim_mu_mimo(cfg: SimConfig):
     # dMIMO channels from ns-3 simulator
     ns3cfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
     dmimo_chans = dMIMOChannels(ns3cfg, "dMIMO", add_noise=True)
+    cfg.bs_txpwr_dbm = ns3cfg.bs_txpwr_dbm
 
     # UE selection
     if cfg.enable_ue_selection is True:

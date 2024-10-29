@@ -183,7 +183,6 @@ class Baseline(Model):
             generate_CSI_feedback = quantized_CSI_feedback(method='5G', num_tx_streams=self.cfg.num_tx_streams, architecture='baseline', 
                                                             snrdb=rx_snr_db, total_bits=4,VectorLength=h_freq_csi.shape[4]*2)
             [PMI, rate_for_selected_precoder, precoding_matrices] = generate_CSI_feedback(h_freq_csi)
-            # h_freq_csi_reconstructed = generate_CSI_feedback.reconstruct_channel(precoding_matrices, self.cfg.cqi_snr, self.cfg.n_var, self.cfg.bs_txpwr_dbm)  
             
         #RVQ is not used for baseline simulations it is only added for simple debugging.
         elif self.cfg._CSI_feedback_method =='RVQ':

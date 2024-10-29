@@ -39,27 +39,35 @@ for mobility_idx in range(np.size(mobilities)):
     temp_bitrate = []
 
     throughput_all_drops = []
+    ldpc_ber_list_all_drops = []
 
     for drop_idx in np.arange(1, num_drops+1):
         
         try:
             if prediction_results:
-                file_path = "results/channels_multiple_baseline/channels_{}_{}/baseline_results_pred.npz".format(curr_mobility, drop_idx)
+                file_path = "results/channels_multiple_baseline/ZF/channels_{}_{}/baseline_results_pred.npz".format(curr_mobility, drop_idx)
             else:
-                file_path = "results/channels_multiple_baseline/channels_{}_{}/baseline_results.npz".format(curr_mobility, drop_idx)
+                file_path = "results/channels_multiple_baseline/ZF/channels_{}_{}/baseline_results.npz".format(curr_mobility, drop_idx)
             data = np.load(file_path)
         except:
             continue
 
         throughput_all_drops.append(data['throughput'])
+        ldpc_ber_list_all_drops.append(data['ldpc_ber_list'])
 
     throughput.append(np.mean(throughput_all_drops, axis=0))
+    ldpc_ber_list.append(np.mean(ldpc_ber_list_all_drops))
 
 
 ############################### Throughput ######################################
 
 print('Throughput: \n',  np.asarray(throughput))
 print('Number of drops evaluated:', len(throughput_all_drops))
+
+############################### BLER ######################################
+
+print('BLER: \n',  np.asarray(ldpc_ber_list))
+print('Number of drops evaluated:', len(ldpc_ber_list_all_drops))
 
 
 hold = 1

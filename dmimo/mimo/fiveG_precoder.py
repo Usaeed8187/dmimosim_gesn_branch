@@ -7,7 +7,7 @@ from sionna.ofdm import RemoveNulledSubcarriers
 
 from dmimo.mimo import ZFPrecoder
 
-from .fiveG_precoding import baseline_fiveG_precoder, dMIMO_p1_fiveG_precoder
+from .fiveG_precoding import baseline_fiveG_precoder, dMIMO_p1_fiveG_max_min_precoder
 
 
 class fiveGPrecoder(Layer):
@@ -61,21 +61,19 @@ class fiveGPrecoder(Layer):
 
         # Precoding
         if self.architecture == 'baseline' and self.precoding_method == '5G_no_channel_reconstruction':
-            x_precoded = baseline_fiveG_precoder(x_precoded,
-                                            precoding_matrices)
+            x_precoded = baseline_fiveG_precoder(x_precoded,precoding_matrices)
         elif self.architecture == 'baseline' and self.precoding_method == '5G_ZF':
             h_freq_csi_reconstructed = self.reconstruct_channel(precoding_matrices, cqi_snr, n_var, bs_txpwr_dbm)
             zf_precoder = ZFPrecoder(self.rg, self.sm, return_effective_channel=False)
             x_precoded = zf_precoder([x, h_freq_csi_reconstructed])
-        elif self.architecture == 'dMIMO_p1':
-            x_precoded = dMIMO_p1_fiveG_precoder(x_precoded,
-                                            precoding_matrices)
+        elif self.architecture == 'dMIMO_phase1' and self.precoding_method == '5G_max_min':
+            h_freq_csi_reconstructed = self.reconstruct_channel(precoding_matrices, cqi_snr, n_var, bs_txpwr_dbm)
+            x_precoded = dMIMO_p1_fiveG_max_min_precoder(x_precoded, h_freq_csi_reconstructed)
 
         # Transpose output to desired shape:
         # [batch_size, num_tx, num_tx_ant, num_ofdm_symbols, fft_size]
         if self.precoding_method != '5G_ZF':
             x_precoded = tf.transpose(x_precoded, [0, 1, 4, 2, 3])
-
 
         return x_precoded
 
@@ -91,8 +89,13 @@ class fiveGPrecoder(Layer):
 
         h_freq_csi_reconstructed = precoding_matrices * s
 
-        h_freq_csi_reconstructed = tf.transpose(h_freq_csi_reconstructed, [0, 1, 5, 4, 2, 3])
-        h_freq_csi_reconstructed = h_freq_csi_reconstructed[:, :, :, np.newaxis, ...]
+        if len(h_freq_csi_reconstructed.shape) == 6:
+            h_freq_csi_reconstructed = tf.transpose(h_freq_csi_reconstructed, [0, 1, 5, 4, 2, 3])
+            h_freq_csi_reconstructed = h_freq_csi_reconstructed[:, :, :, np.newaxis, ...]
+        elif len(h_freq_csi_reconstructed.shape) == 7:
+            h_freq_csi_reconstructed = tf.transpose(h_freq_csi_reconstructed, [0, 1, 6, 3, 5, 2, 4])
+        else:
+            raise Exception(f"Unsupported input dimensions.")
 
         if self.architecture == 'baseline':
             padding = self.num_BS_Ant - h_freq_csi_reconstructed.shape[2]

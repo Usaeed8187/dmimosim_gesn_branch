@@ -7,28 +7,29 @@ class SimConfig(CarrierConfig, MCSConfig):
 
     def __init__(self, **kwargs):
         self._name = "Simulation Configuration"
-        self._enable_ue_selection = True        # Enable Tx/Rx UE selection
-        self._num_tx_ue_sel = 8                 # number of Tx UE selected
-        self._num_rx_ue_sel = 8                 # number of Rx UE selected
-        self._start_slot_idx = 15               # start slot index for simulation
-        self._csi_delay = 2                     # CSI estimation delay
-        self._first_slot_idx = 0                # first slot index for phase 2 in simulation
-        self._num_slots_p1 = 1                  # number of slots in phase 1/3
-        self._num_slots_p2 = 3                  # number of slots in phase 2
-        self._total_slots = 50                  # total slots of ns-3 channels
-        self._ns3_folder = "../ns3/channels"    # data folder for ns-3 channels
-        self._precoding_method = "ZF"           # precoding method
-        self._ue_indices = None                 # UE antennas indices for MU-MIMO precoding
-        self._ue_ranks = None                   # UE ranks for MU-MIMO precoding
-        self._perfect_csi = False               # Use perfect CSI for debugging
-        self._csi_prediction = False            # Use CSI prediction
-        self._sto_sigma = 0.0                   # standard deviation of STO in nanoseconds
-        self._cfo_sigma = 0.0                   # standard deviation of CFO in Hz
-        self._rank_adapt = True                 # turn on rank adaptation
-        self._link_adapt = True                 # turn on link adaptation
-        self._enable_txsquad = False            # enable simulation of TxSquad transmission
-        self._enable_rxsquad = False            # enable simulation of TxSquad transmission
-        self._CSI_feedback_method = '5G'        # which CSI feedback method to use. choices: '5G', 'RVQ'
+        self._enable_ue_selection = True                # Enable Tx/Rx UE selection
+        self._num_tx_ue_sel = 8                         # number of Tx UE selected
+        self._num_rx_ue_sel = 8                         # number of Rx UE selected
+        self._start_slot_idx = 15                       # start slot index for simulation
+        self._csi_delay = 2                             # CSI estimation delay
+        self._first_slot_idx = 0                        # first slot index for phase 2 in simulation
+        self._num_slots_p1 = 1                          # number of slots in phase 1/3
+        self._num_slots_p2 = 3                          # number of slots in phase 2
+        self._total_slots = 50                          # total slots of ns-3 channels
+        self._ns3_folder = "../ns3/channels"            # data folder for ns-3 channels
+        self._precoding_method = "ZF"                   # precoding method for phase 2
+        self._phase_1_precoding_method = "5G_max_min"   # precoding method for phase 1
+        self._ue_indices = None                         # UE antennas indices for MU-MIMO precoding
+        self._ue_ranks = None                           # UE ranks for MU-MIMO precoding
+        self._perfect_csi = False                       # Use perfect CSI for debugging
+        self._csi_prediction = False                    # Use CSI prediction
+        self._sto_sigma = 0.0                           # standard deviation of STO in nanoseconds
+        self._cfo_sigma = 0.0                           # standard deviation of CFO in Hz
+        self._rank_adapt = True                         # turn on rank adaptation
+        self._link_adapt = True                         # turn on link adaptation
+        self._enable_txsquad = True                     # enable simulation of TxSquad transmission
+        self._enable_rxsquad = False                    # enable simulation of TxSquad transmission
+        self._CSI_feedback_method = '5G'                # which CSI feedback method to use. choices: '5G', 'RVQ'
         super().__init__(**kwargs)
 
     @property
@@ -118,6 +119,14 @@ class SimConfig(CarrierConfig, MCSConfig):
     @precoding_method.setter
     def precoding_method(self, val):
         self._precoding_method = val
+
+    @property
+    def phase_1_precoding_method(self):
+        return self._phase_1_precoding_method
+
+    @phase_1_precoding_method.setter
+    def phase_1_precoding_method(self, val):
+        self._phase_1_precoding_method = val
 
     @property
     def ue_indices(self):
