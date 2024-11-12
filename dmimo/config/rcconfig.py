@@ -10,7 +10,7 @@ class RCConfig(Config):
         self._num_neurons = 16  # 256, 16, 8
         self._W_tran_sparsity = 0.4  # 0.1, 0.4
         self._W_tran_radius = 0.5
-        self._input_scale = 0.8 
+        self._input_scale = 0.1
         self._initial_forget_length = 0
         self._max_forget_length = 1
         self._forget_length_search_step = 1
@@ -22,8 +22,7 @@ class RCConfig(Config):
         self._DF_rls = False
         self._history_len = 3 # number of subframes that we use to train
         self._prediction_on = True
-        self._treatment = 'SISO' # SISO, vectorized_MIMO, piece_wise_vectorized_MIMO, TODO: piece_wise_MIMO not currently implemented
-
+        self._treatment = 'SISO' # SISO, vectorized_MIMO, piece_wise_vectorized_MIMO, TODO: piece_wise_vectorized_MIMO not currently implemented
 
         super().__init__(**kwargs)
 

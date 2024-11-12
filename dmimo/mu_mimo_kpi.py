@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import Model
+import matplotlib.pyplot as plt
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
 from sionna.mimo import StreamManagement
@@ -14,7 +15,7 @@ from sionna.utils import BinarySource
 from sionna.utils.metrics import compute_ber, compute_bler
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig
-from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo
+from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_mimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val, compute_UE_wise_BER, compute_UE_wise_SER
@@ -166,14 +167,72 @@ class MU_MIMO(Model):
             h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
                                                              batch_size=self.batch_size)
         elif self.cfg.csi_prediction is True:
-            rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
+            if self.cfg.predictor == 'standard_rc':
+                rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
+            elif self.cfg.predictor == 'gesn':
+                rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
+                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair')
+            
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)
             h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
                                                                 self.rg_csi, dmimo_chans)
             # Do channel prediction
-            h_freq_csi = rc_predictor.rc_siso_predict(h_freq_csi_history)
+            h_freq_csi = rc_predictor.predict(h_freq_csi_history)
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
+
+            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                             batch_size=self.batch_size)
+            h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
+            h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
+
+            h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
+            h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
+            
+            pred_nmse = rc_predictor.cal_nmse(h_freq_csi_true, h_freq_csi_outdated)
+            outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true, h_freq_csi)
+
+            print("outdated_nmse: ", outdated_nmse)
+            print("pred_nmse (GESN): ", pred_nmse)
+
+            debug = True
+            if debug:
+                rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
+                h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
+                h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                    batch_size=self.batch_size)
+                pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true, h_freq_csi_vanilla)
+                print("pred_nmse (Vanilla): ", pred_nmse, "\n")
+            debug = False
+
+            # Test plots
+            plot = False
+            if plot:
+                h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                             batch_size=self.batch_size)
+                h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
+                h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
+
+                h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
+                h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
+
+                h_freq_csi_predicted = h_freq_csi
+
+                debug_rx_ant = 0
+                debug_tx_ant = 2
+                debug_ofdm_sym = 1
+                
+                plt.figure()
+                plt.plot(np.real(h_freq_csi_predicted[debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Predicted Channel")
+                plt.plot(np.real(h_freq_csi_outdated[-1, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Outdated Channel")
+                plt.plot(np.real(h_freq_csi_true[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Ground Truth Channel")
+                plt.legend()
+                plt.savefig('prediction_comparison')
+                plt.show()
+            plot = False
+
+            h_freq_csi = rc_predictor.rb_demapper(h_freq_csi)
+
         else:
             # LMMSE channel estimation
             h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
@@ -217,88 +276,89 @@ class MU_MIMO(Model):
         y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
 
         # SINR calculation
-        if self.cfg.precoding_method != "None":
+        # if self.cfg.precoding_method != "None":
             
-            sinr_calculation = True
-            sinr_dB_arr = np.zeros((self.cfg.num_rx_ue_sel+1, self.batch_size))
-            dmimo_chans._add_noise = False
+        #     sinr_calculation = True
+        #     sinr_dB_arr = np.zeros((self.cfg.num_rx_ue_sel+1, self.batch_size))
+        #     dmimo_chans._add_noise = False
 
-            num_UE_Ant = 2
-            num_BS_Ant = 4
+        #     num_UE_Ant = 2
+        #     num_BS_Ant = 4
 
-            for node_idx in range(self.cfg.num_rx_ue_sel+1):
+        #     for node_idx in range(self.cfg.num_rx_ue_sel+1):
 
-                x_precoded_sinr, _ = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_ranks[0]])
-                y_sinr = dmimo_chans([x_precoded_sinr, self.cfg.first_slot_idx])
+        #         x_precoded_sinr, _ = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_ranks[0]])
+        #         y_sinr = dmimo_chans([x_precoded_sinr, self.cfg.first_slot_idx])
                 
-                if node_idx == 0:
+        #         if node_idx == 0:
 
-                    if self.cfg.precoding_method == "ZF":
-                        num_BS_streams = self.cfg.ue_ranks[0]*2
-                        zeros_slice = tf.zeros_like(x_rg[:, :, num_BS_streams:, ...])
-                        x_rg_tmp = tf.concat([x_rg[:, :, :num_BS_streams, ...], zeros_slice], axis=2)
-                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
-                    else:
-                        ValueError("unsupported precoding method for SINR calculation")
+        #             if self.cfg.precoding_method == "ZF":
+        #                 num_BS_streams = self.cfg.ue_ranks[0]*2
+        #                 zeros_slice = tf.zeros_like(x_rg[:, :, num_BS_streams:, ...])
+        #                 x_rg_tmp = tf.concat([x_rg[:, :, :num_BS_streams, ...], zeros_slice], axis=2)
+        #                 x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
+        #             else:
+        #                 ValueError("unsupported precoding method for SINR calculation")
                     
-                    if self.cfg.ue_ranks[0] == 1:
-                        ant_indices = np.arange(0, num_BS_Ant,2)
-                    elif self.cfg.ue_ranks[0] ==2:
-                        ant_indices = np.arange(num_BS_Ant)
+        #             if self.cfg.ue_ranks[0] == 1:
+        #                 ant_indices = np.arange(0, num_BS_Ant,2)
+        #             elif self.cfg.ue_ranks[0] ==2:
+        #                 ant_indices = np.arange(num_BS_Ant)
 
-                    sig_all = tf.gather(y_sinr, ant_indices, axis=-3)
-                    sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
-                    sig_intended = tf.gather(sig_intended, ant_indices, axis=-3)
-                    sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
-                    interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
-                    rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,:4,:], axis=(1,2,3)) / 10)
-                    noise_pow = sig_pow / rx_snr_linear
-                    sinr_linear = sig_pow / (interf_pow + noise_pow)
-                    sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
+        #             sig_all = tf.gather(y_sinr, ant_indices, axis=-3)
+        #             sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
+        #             sig_intended = tf.gather(sig_intended, ant_indices, axis=-3)
+        #             sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
+        #             interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
+        #             rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,:4,:], axis=(1,2,3)) / 10)
+        #             noise_pow = sig_pow / rx_snr_linear
+        #             sinr_linear = sig_pow / (interf_pow + noise_pow)
+        #             sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
 
-                    print("BS sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
+        #             print("BS sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
 
-                else:
+        #         else:
 
-                    if self.cfg.ue_ranks[0] == 1:
-                        ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant, 2)
-                    elif self.cfg.ue_ranks[0] ==2:
-                        ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant)
-
-                    
-                    stream_indices = np.arange(self.cfg.ue_ranks[0]*2 + (node_idx-1)*self.cfg.ue_ranks[0], self.cfg.ue_ranks[0]*2 + node_idx*self.cfg.ue_ranks[0])
-
-                    if self.cfg.precoding_method == "ZF":
-                        mask = tf.reduce_any(tf.equal(tf.range(x_rg.shape[2])[..., tf.newaxis], stream_indices), axis=-1)
-                        mask = tf.cast(mask, x_rg.dtype)
-                        mask = tf.reshape(mask, [1, 1, -1, 1, 1])
-                        x_rg_tmp = x_rg * mask
-                        x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
-                    else:
-                        ValueError("unsupported precoding method for SINR calculation")
-                    
-                    sig_all = tf.gather(y_sinr, ant_indices, axis=2)
-                    sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
-                    sig_intended = tf.gather(sig_intended, ant_indices, axis=2)
-                    sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
-                    interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
-                    rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,ant_indices,:], axis=(1,2,3)) / 10)
-                    noise_pow = sig_pow / rx_snr_linear
-                    sinr_linear = sig_pow / (interf_pow + noise_pow)
-
-                    if tf.reduce_any(tf.equal(sinr_linear, 0)):
-                        sinr_linear = rx_snr_linear / 2
-                    
-                    sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
-                    
-                    print("UE ", node_idx-1, " sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
+        #             if self.cfg.ue_ranks[0] == 1:
+        #                 ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant, 2)
+        #             elif self.cfg.ue_ranks[0] ==2:
+        #                 ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant)
 
                     
-                    if (sinr_dB_arr[node_idx, :] == np.inf).any():
-                        hold = 1
+        #             stream_indices = np.arange(self.cfg.ue_ranks[0]*2 + (node_idx-1)*self.cfg.ue_ranks[0], self.cfg.ue_ranks[0]*2 + node_idx*self.cfg.ue_ranks[0])
 
-        else:
-            sinr_dB_arr = None
+        #             if self.cfg.precoding_method == "ZF":
+        #                 mask = tf.reduce_any(tf.equal(tf.range(x_rg.shape[2])[..., tf.newaxis], stream_indices), axis=-1)
+        #                 mask = tf.cast(mask, x_rg.dtype)
+        #                 mask = tf.reshape(mask, [1, 1, -1, 1, 1])
+        #                 x_rg_tmp = x_rg * mask
+        #                 x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
+        #             else:
+        #                 ValueError("unsupported precoding method for SINR calculation")
+                    
+        #             sig_all = tf.gather(y_sinr, ant_indices, axis=2)
+        #             sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
+        #             sig_intended = tf.gather(sig_intended, ant_indices, axis=2)
+        #             sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
+        #             interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
+        #             rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,ant_indices,:], axis=(1,2,3)) / 10)
+        #             noise_pow = sig_pow / rx_snr_linear
+        #             sinr_linear = sig_pow / (interf_pow + noise_pow)
+
+        #             if tf.reduce_any(tf.equal(sinr_linear, 0)):
+        #                 sinr_linear = rx_snr_linear / 2
+                    
+        #             sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
+                    
+        #             print("UE ", node_idx-1, " sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
+
+                    
+        #             if (sinr_dB_arr[node_idx, :] == np.inf).any():
+        #                 hold = 1
+
+        # else:
+        #     sinr_dB_arr = None
+        sinr_dB_arr = None
 
         # make proper shape
         y = y[:, :, :self.num_rxs_ant, :, :]

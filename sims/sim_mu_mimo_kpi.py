@@ -70,16 +70,17 @@ if __name__ == "__main__":
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.num_tx_ue_sel = 8
-    mobility = 'medium_mobility'
-    drop_idx = '3'
+    cfg.num_tx_ue_sel = 1
+    mobility = 'high_mobility'
+    drop_idx = '7'
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("results", folder_name), exist_ok=True)
     print("Using channels in {}".format(folder_name))
 
-    rx_ues_arr = [1,2,4,6]    
+    # rx_ues_arr = [1,2,4,6]
+    rx_ues_arr = [1]
 
     ber = np.zeros(np.size(rx_ues_arr ))
     ldpc_ber = np.zeros(np.size(rx_ues_arr ))
@@ -94,22 +95,13 @@ if __name__ == "__main__":
     uncoded_ber_list = []
     sinr_dB = []
 
-
-    # cfg.num_rx_ue_sel = 7  # TODO consolidate params
-    # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
-    # cfg.ue_ranks = [2]  # same rank for all UEs
-    # cfg.modulation_order = 2
-
-    # Modulation order: 2/4/6 for QPSK/16QAM/64QAM
-    # modulation_orders = [2, 4, 6]
-
     #############################################
     # Testing with rank and link adaptation
     #############################################
 
     cfg.rank_adapt = True
     cfg.link_adapt = True
-    cfg.csi_prediction = False
+    cfg.csi_prediction = True
 
     for ue_arr_idx in range(np.size(rx_ues_arr)):
 
@@ -130,7 +122,8 @@ if __name__ == "__main__":
         ranks.append(rst_bd[8])
         uncoded_ber_list.append(rst_bd[9])
         ldpc_ber_list.append(rst_bd[10])
-        sinr_dB.append(np.concatenate(rst_bd[11]))
+        if rst_bd[11] is not None:
+            sinr_dB.append(np.concatenate(rst_bd[11]))
 
         if cfg.csi_prediction:
             np.savez("results/channels_multiple_mu_mimo/results/{}/mu_mimo_results_UE_{}_pred.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),

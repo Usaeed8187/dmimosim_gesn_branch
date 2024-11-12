@@ -27,9 +27,10 @@ class SimConfig(CarrierConfig, MCSConfig):
         self._cfo_sigma = 0.0                           # standard deviation of CFO in Hz
         self._rank_adapt = True                         # turn on rank adaptation
         self._link_adapt = True                         # turn on link adaptation
-        self._enable_txsquad = True                     # enable simulation of TxSquad transmission
+        self._enable_txsquad = False                    # enable simulation of TxSquad transmission
         self._enable_rxsquad = False                    # enable simulation of TxSquad transmission
         self._CSI_feedback_method = '5G'                # which CSI feedback method to use. choices: '5G', 'RVQ'
+        self._predictor = 'gesn' # standard_rc, gesn
         super().__init__(**kwargs)
 
     @property
@@ -215,3 +216,11 @@ class SimConfig(CarrierConfig, MCSConfig):
     @CSI_feedback_method.setter
     def CSI_feedback_method(self, val):
         self._CSI_feedback_method = val
+
+    @property
+    def predictor(self):
+        return self._predictor
+
+    @predictor.setter
+    def predictor(self, val):
+        self._predictor = val

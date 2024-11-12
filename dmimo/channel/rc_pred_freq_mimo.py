@@ -11,6 +11,7 @@ class standard_rc_pred_freq_mimo:
         
         ns3_config = Ns3Config()
         rc_config = RCConfig()
+        self.rc_config = rc_config
 
         self.nfft = 512  # TODO: remove hardcoded param value
         self.num_rx_ant = num_rx_ant  # TODO: use node selection mask
@@ -166,6 +167,13 @@ class standard_rc_pred_freq_mimo:
         chan_pred = tf.convert_to_tensor(chan_pred)
         return chan_pred
     
+    def predict(self, h_freq_csi_history):
+        if self.rc_config.treatment == 'SISO':
+            return self.rc_siso_predict(h_freq_csi_history)
+        else:
+            raise ValueError("\n The method specified is functional atm")
+        
+    
     def rc_siso_predict(self, h_freq_csi_history):
         
         if tf.rank(h_freq_csi_history).numpy() == 8:
@@ -295,6 +303,7 @@ class standard_rc_pred_freq_mimo:
         return pred_channel
 
     def cal_nmse(self, H, H_hat):
+        H_hat = tf.cast(H_hat, dtype=H.dtype)
         mse = np.sum(np.abs(H - H_hat) ** 2)
         normalization_factor = np.sum((np.abs(H) + np.abs(H_hat)) ** 2)
         nmse = mse / normalization_factor
