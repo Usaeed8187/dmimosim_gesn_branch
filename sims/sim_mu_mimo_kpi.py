@@ -102,6 +102,7 @@ if __name__ == "__main__":
     cfg.rank_adapt = True
     cfg.link_adapt = True
     cfg.csi_prediction = True
+    cfg.predictor = 'gesn'
 
     for ue_arr_idx in range(np.size(rx_ues_arr)):
 

@@ -5,13 +5,14 @@ import tensorflow as tf
 from dmimo.config import Ns3Config, RCConfig
 from dmimo.channel import lmmse_channel_estimation
 import matplotlib.pyplot as plt
+import itertools
 
 class gesn_pred_freq_mimo:
 
     def __init__(self, architecture, len_features=None, num_rx_ant=8, num_tx_ant=8, max_adjacency='all', method='per_node_pair'):
         
         ns3_config = Ns3Config()
-        rc_config = RCConfig()
+        self.rc_config = RCConfig()
 
         self.syms_per_subframe = 14
         self.nfft = 512  # TODO: remove hardcoded param value
@@ -34,22 +35,22 @@ class gesn_pred_freq_mimo:
         else:
             raise ValueError("\n The architecture specified is not defined")
 
-        self.sparsity = rc_config.W_tran_sparsity
-        self.spectral_radius = rc_config.W_tran_radius
-        self.max_forget_length = rc_config.max_forget_length
-        self.initial_forget_length = rc_config.initial_forget_length
-        self.forget_length = rc_config.initial_forget_length
-        self.forget_length_search_step = rc_config.forget_length_search_step
-        self.input_scale = rc_config.input_scale
-        self.window_length = rc_config.window_length
-        self.learning_delay = rc_config.learning_delay
-        self.reg = rc_config.regularization
-        self.enable_window = rc_config.enable_window
-        self.history_len = rc_config.history_len
+        self.sparsity = self.rc_config.W_tran_sparsity
+        self.spectral_radius = self.rc_config.W_tran_radius
+        self.max_forget_length = self.rc_config.max_forget_length
+        self.initial_forget_length = self.rc_config.initial_forget_length
+        self.forget_length = self.rc_config.initial_forget_length
+        self.forget_length_search_step = self.rc_config.forget_length_search_step
+        self.input_scale = self.rc_config.input_scale
+        self.window_length = self.rc_config.window_length
+        self.learning_delay = self.rc_config.learning_delay
+        self.reg = self.rc_config.regularization
+        self.enable_window = self.rc_config.enable_window
+        self.history_len = self.rc_config.history_len
 
         seed = 10
         self.RS = np.random.RandomState(seed)
-        self.type = rc_config.type # 'real', 'complex'
+        self.type = self.rc_config.type # 'real', 'complex'
 
         # Calculate weight matrix dimensions
         if method == 'per_antenna_pair':
@@ -61,15 +62,18 @@ class gesn_pred_freq_mimo:
             self.num_tx_nodes = int((self.N_t - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
             self.num_rx_nodes = int((self.N_r - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
             self.N_v = self.num_tx_nodes * self.num_rx_nodes                                            # number of vertices in the graph
-            if len_features == None:
-                self.N_f = self.N_RB * ns3_config.num_bs_ant * ns3_config.num_bs_ant                    # length of feature vector for each vertex
+            if self.rc_config.treatment == 'SISO':
+                self.N_f = self.N_RB                                                                        # length of feature vector for each vertex
             else:
-                self.N_f = len_features                                                                 # length of feature vector for each vertex
+                if len_features == None:
+                    self.N_f = self.N_RB * ns3_config.num_bs_ant * ns3_config.num_bs_ant                    # length of feature vector for each vertex
+                else:
+                    self.N_f = len_features                                                                 # length of feature vector for each vertex
 
         else:
             raise ValueError("\n The GESN method specified is not defined")
-        self.N_n = rc_config.num_neurons * self.N_v
-        self.N_n_per_vertex = rc_config.num_neurons
+        self.N_n = self.rc_config.num_neurons * self.N_v
+        self.N_n_per_vertex = self.rc_config.num_neurons
         if self.enable_window:
             self.N_in = self.N_f * self.window_length
         else:
@@ -89,7 +93,7 @@ class gesn_pred_freq_mimo:
         self.init_weights()
 
         self.train_rls = False
-        self.DF_rls = rc_config.DF_rls
+        self.DF_rls = self.rc_config.DF_rls
 
         if self.train_rls or self.DF_rls:
             # for RLS algorithm
@@ -102,7 +106,7 @@ class gesn_pred_freq_mimo:
             # self.RLS_w = 1 / (1 + np.exp(-(self.EbNo - 11)))
 
             # self.RLS_lambda = 0.99999
-            self.RLS_lambda = rc_config.RLS_lambda
+            self.RLS_lambda = self.rc_config.RLS_lambda
             self.RLS_w = 1
 
     def get_csi_history(self, first_slot_idx, csi_delay, rg_csi, dmimo_chans):
@@ -146,6 +150,136 @@ class gesn_pred_freq_mimo:
 
 
     def predict(self, h_freq_csi_history):
+
+        if self.rc_config.treatment == 'SISO':
+            channel_pred = self.siso_predict(h_freq_csi_history)
+        elif self.rc_config.treatment == 'MIMO':
+            channel_pred = self.mimo_predict(h_freq_csi_history)
+        else:
+            raise ValueError("\n Only SISO and MIMO treatment has been defined.")
+        
+        return channel_pred
+
+    def generate_antenna_selections(self, num_transmitters, num_receivers):
+        """
+        Generate all possible antenna selections for transmitters and receivers and convert one-hot encoding to indices.
+
+        :param num_transmitters: Number of transmitters
+        :param num_receivers: Number of receivers
+        :return: List of all possible selections with indices
+        """
+        # Define number of antennas for transmitters and receivers
+        tx_antennas = [4 if i == 0 else 2 for i in range(num_transmitters)]
+        rx_antennas = [4 if i == 0 else 2 for i in range(num_receivers)]
+
+        # Generate one-hot encoding options for each transmitter and receiver
+        tx_selections = [list(np.eye(ant, dtype=int)) for ant in tx_antennas]
+        rx_selections = [list(np.eye(ant, dtype=int)) for ant in rx_antennas]
+        
+        # Create all possible combinations of selections
+        all_combinations = itertools.product(
+            itertools.product(*tx_selections),
+            itertools.product(*rx_selections)
+        )
+        
+        # Convert one-hot encodings to indices
+        selections = []
+        tx_offsets = [sum(tx_antennas[:i]) for i in range(num_transmitters)]
+        rx_offsets = [sum(rx_antennas[:i]) for i in range(num_receivers)]
+
+        for tx_choice, rx_choice in all_combinations:
+            tx_indices = [
+                offset + np.argmax(choice) for offset, choice in zip(tx_offsets, tx_choice)
+            ]
+            rx_indices = [
+                offset + np.argmax(choice) for offset, choice in zip(rx_offsets, rx_choice)
+            ]
+            selections.append({
+                "transmitter_indices": tx_indices,
+                "receiver_indices": rx_indices
+            })
+        
+        return selections
+
+
+    def siso_predict(self, h_freq_csi_history):
+
+        h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
+        h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
+
+        num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
+        h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
+        h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
+
+        num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
+
+        antenna_selections = self.generate_antenna_selections(self.num_tx_nodes, self.num_rx_nodes)
+
+        channel_train_input_list = []
+        channel_train_gt_list = []
+        channel_test_input_list = []
+
+        N_r = h_freq_csi_history_reshaped.shape[1]
+        N_t = h_freq_csi_history_reshaped.shape[2]
+
+        for i in range(len(antenna_selections)):
+                
+            tx_ant_idx = antenna_selections[i]['transmitter_indices']
+            rx_ant_idx = antenna_selections[i]['receiver_indices']
+            
+            channel_train_input_list.append(h_freq_csi_history_reshaped[:num_training_steps,rx_ant_idx, :, :][:, tx_ant_idx, :])
+            channel_train_gt_list.append(h_freq_csi_history_reshaped[-num_training_steps:,rx_ant_idx, :, :][:, tx_ant_idx, :])
+            channel_test_input_list.append(h_freq_csi_history_reshaped[-self.syms_per_subframe:,rx_ant_idx,...][:, tx_ant_idx, :]) # TRY: If this doesn't work, try making them all 2x2 matrices
+
+        pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
+
+        channel_pred_temp = self.test_train_predict(channel_test_input_list)
+
+        channel_pred = tf.convert_to_tensor(channel_pred_temp)
+        return channel_pred
+    
+    def siso_predict_tmp(self, h_freq_csi_history):
+
+        h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
+        h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
+
+        num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
+        h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
+        h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
+
+        num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
+
+        channel_train_input_list = []
+        channel_train_gt_list = []
+        channel_test_input_list = []
+
+        for tx_node_idx in range(self.num_tx_nodes):
+            for rx_node_idx in range(self.num_rx_nodes):
+                
+                if tx_node_idx == 0:
+                    tx_ant_idx = np.arange(0,self.num_bs_ant)
+                else:
+                    tx_ant_idx = np.arange(self.num_bs_ant + (tx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (tx_node_idx)*self.num_ue_ant)
+                tx_ant_idx = tx_ant_idx[0]
+                
+                if rx_node_idx == 0:
+                    rx_ant_idx = np.arange(0,self.num_bs_ant)
+                else:
+                    rx_ant_idx = np.arange(self.num_bs_ant + (rx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (rx_node_idx)*self.num_ue_ant)
+                rx_ant_idx = rx_ant_idx[0]
+                
+                channel_train_input_list.append(h_freq_csi_history_reshaped[:num_training_steps,rx_ant_idx, :, :][:, tx_ant_idx, :])
+                channel_train_gt_list.append(h_freq_csi_history_reshaped[-num_training_steps:,rx_ant_idx, :, :][:, tx_ant_idx, :])
+                channel_test_input_list.append(h_freq_csi_history_reshaped[-self.syms_per_subframe:,rx_ant_idx,...][:, tx_ant_idx, :]) # TRY: If this doesn't work, try making them all 2x2 matrices
+
+        pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
+
+        channel_pred_temp = self.test_train_predict(channel_test_input_list)
+
+        channel_pred = tf.convert_to_tensor(channel_pred_temp)
+        return channel_pred
+    
+    def mimo_predict(self, h_freq_csi_history):
 
         h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
         h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
@@ -226,7 +360,7 @@ class gesn_pred_freq_mimo:
         self.W_in = 2 * (self.RS.rand(self.N_n_per_vertex, self.N_in) - 0.5)
         self.W_tran = np.concatenate([self.W_N, self.W_in], axis=1)
 
-        self.W_out = self.RS.randn(self.N_out, self.N_n_per_vertex * self.max_adjacency) + 1j * self.RS.randn(self.N_out, self.N_n_per_vertex * self.max_adjacency)
+        self.W_out = self.RS.randn(self.N_out, (self.N_n_per_vertex + self.N_in) * self.N_v) + 1j * self.RS.randn(self.N_out, (self.N_n_per_vertex + self.N_in) * self.N_v)
 
     def sparse_mat(self, m, n):
         if self.type == 'real':
@@ -259,14 +393,21 @@ class gesn_pred_freq_mimo:
         for vertex_idx in range(self.N_v):
 
             curr_state_inds = np.arange(vertex_idx*self.N_n_per_vertex, (vertex_idx+1)*self.N_n_per_vertex)
+            curr_W_out_inds = np.arange(vertex_idx*(self.N_n_per_vertex + self.N_in), (vertex_idx+1)*(self.N_n_per_vertex + self.N_in))
             curr_target = target[vertex_idx]
             curr_target = curr_target.reshape(curr_target.shape[0],-1).transpose(1,0)
+            
+            if self.rc_config.treatment == 'SISO':
+                curr_output_inds = np.arange(vertex_idx*self.N_RB, (vertex_idx+1)*self.N_RB)
+            elif self.rc_config.treatment == 'MIMO':
+                curr_output_inds = np.arange(vertex_idx*self.num_bs_ant*self.num_bs_ant*self.N_RB, (vertex_idx+1)*self.num_bs_ant*self.num_bs_ant*self.N_RB)
 
-            curr_output_inds = np.arange(vertex_idx*self.num_bs_ant*self.num_bs_ant*self.N_RB, (vertex_idx+1)*self.num_bs_ant*self.num_bs_ant*self.N_RB)
+            curr_input = input[vertex_idx].transpose()
+            S_2D = np.concatenate([internal_states_history[curr_state_inds,:], curr_input], axis=0)
 
-            self.W_out[np.ix_(curr_output_inds[:curr_target.shape[0]], curr_state_inds)] = curr_target @ self.reg_p_inv(internal_states_history[curr_state_inds,:]) # TRY: concatenate state vector with input
+            self.W_out[np.ix_(curr_output_inds[:curr_target.shape[0]], curr_W_out_inds)] = curr_target @ self.reg_p_inv(S_2D)
 
-            pred_channel[curr_output_inds[:curr_target.shape[0]], :] = self.W_out[np.ix_(curr_output_inds[:curr_target.shape[0]], curr_state_inds)] @ internal_states_history[curr_state_inds,:]
+            pred_channel[curr_output_inds[:curr_target.shape[0]], :] = self.W_out[np.ix_(curr_output_inds[:curr_target.shape[0]], curr_W_out_inds)] @ S_2D
 
         return pred_channel
 
@@ -293,13 +434,20 @@ class gesn_pred_freq_mimo:
         for vertex_idx in range(self.N_v):
 
             curr_state_inds = np.arange(vertex_idx*self.N_n_per_vertex, (vertex_idx+1)*self.N_n_per_vertex)
+            curr_W_out_inds = np.arange(vertex_idx*(self.N_n_per_vertex + self.N_in), (vertex_idx+1)*(self.N_n_per_vertex + self.N_in))
 
             curr_input = Y_2D_org[vertex_idx]
-            curr_output_inds = np.arange(vertex_idx*self.num_bs_ant*self.num_bs_ant*self.N_RB, (vertex_idx+1)*self.num_bs_ant*self.num_bs_ant*self.N_RB)
+            if self.rc_config.treatment == 'SISO':
+                curr_output_inds = np.arange(vertex_idx*self.N_RB, (vertex_idx+1)*self.N_RB)
+            elif self.rc_config.treatment == 'MIMO':
+                curr_output_inds = np.arange(vertex_idx*self.num_bs_ant*self.num_bs_ant*self.N_RB, (vertex_idx+1)*self.num_bs_ant*self.num_bs_ant*self.N_RB)
             len_curr_input_features = curr_input[0,...].reshape(-1).shape[0]
             curr_output_inds = curr_output_inds[:len_curr_input_features]
 
-            curr_output = self.W_out[np.ix_(curr_output_inds, curr_state_inds)] @ internal_states_history[curr_state_inds,:]
+            curr_input = Y_2D_org[vertex_idx].transpose()
+            S_2D = np.concatenate([internal_states_history[curr_state_inds,:], curr_input], axis=0)
+
+            curr_output = self.W_out[np.ix_(curr_output_inds, curr_W_out_inds)] @ S_2D
             pred_channel.append(curr_output)
 
         # curr_channel_pred = self.W_out @ S_2D

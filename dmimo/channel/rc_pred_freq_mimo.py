@@ -15,6 +15,7 @@ class standard_rc_pred_freq_mimo:
 
         self.nfft = 512  # TODO: remove hardcoded param value
         self.num_rx_ant = num_rx_ant  # TODO: use node selection mask
+        self.subcarriers_per_RB = 12
         
         if architecture == 'baseline':
             self.N_t = ns3_config.num_bs_ant
@@ -440,3 +441,23 @@ class standard_rc_pred_freq_mimo:
 
     def complex_tanh(self, Y):
         return np.tanh(np.real(Y)) + 1j * np.tanh(np.imag(Y))
+
+    def rb_mapper(self, H):
+
+        num_full_rbs = self.nfft // self.subcarriers_per_RB
+        remainder_subcarriers = self.nfft % self.subcarriers_per_RB
+
+        # Initialize an array to store the averaged RBs
+        rb_data = np.zeros((H.shape[0], H.shape[1], H.shape[2], num_full_rbs + 1, 14), dtype=complex)
+
+        # Compute mean across each full RB
+        for rb in range(num_full_rbs):
+            start = rb * self.subcarriers_per_RB
+            end = start + self.subcarriers_per_RB
+            rb_data[:, :, :, rb, :] = np.mean(H[:, :, :, start:end, :], axis=3)
+
+        # Calculate the mean for the remaining subcarriers
+        if remainder_subcarriers > 0:
+            rb_data[:, :, :, -1, :] = np.mean(H[:, :, :, -remainder_subcarriers:, :], axis=3)
+        
+        return rb_data
