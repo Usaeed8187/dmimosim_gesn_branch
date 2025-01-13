@@ -7,7 +7,7 @@ class RCConfig(Config):
 
     def __init__(self, **kwargs):
         self._name = "RC Configuration"
-        self._num_neurons = 64  # 256, 16, 8
+        self._num_neurons = 16  # 256, 16, 8
         self._W_tran_sparsity = 0.4  # 0.1, 0.4
         self._W_tran_radius = 0.5
         self._input_scale = 0.1

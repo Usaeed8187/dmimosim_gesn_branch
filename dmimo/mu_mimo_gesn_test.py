@@ -171,7 +171,7 @@ class MU_MIMO(Model):
                 rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
             elif self.cfg.predictor == 'gesn':
                 rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
-                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair')
+                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair', num_neurons=16)
             
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)
@@ -191,29 +191,10 @@ class MU_MIMO(Model):
             
             num_tx_nodes = int((self.num_txs_ant - 4)/2) + 1
             num_rx_nodes = int((self.num_rxs_ant - 4)/2) + 1
-            
-            h_freq_csi_true_siso = np.zeros((np.concatenate((np.array([num_tx_nodes*num_rx_nodes]), h_freq_csi_true.shape[-2:]))),dtype=complex)
-            h_freq_csi_outdated_siso = np.zeros((np.concatenate((np.array([num_tx_nodes*num_rx_nodes]), h_freq_csi_true.shape[-2:]))),dtype=complex)
-            
-            for tx_node_idx in range(num_tx_nodes):
-                for rx_node_idx in range(num_rx_nodes):
-                    if tx_node_idx == 0:
-                        tx_ant_idx = np.arange(0,4)
-                    else:
-                        tx_ant_idx = np.arange(4 + (tx_node_idx-1)*2,4 + (tx_node_idx)*2)
-                    tx_ant_idx = tx_ant_idx[0]
-                    if rx_node_idx == 0:
-                        rx_ant_idx = np.arange(0,4)
-                    else:
-                        rx_ant_idx = np.arange(4 + (rx_node_idx-1)*2,4 + (rx_node_idx)*2)
-                    rx_ant_idx = rx_ant_idx[0]
-                    vertex_idx = tx_node_idx * num_rx_nodes + rx_node_idx
-                    h_freq_csi_true_siso[vertex_idx,...] = h_freq_csi_true[0, rx_ant_idx, tx_ant_idx, ...]
-                    h_freq_csi_outdated_siso[vertex_idx,...] = h_freq_csi_outdated[0, rx_ant_idx, tx_ant_idx, ...]
-            
+                        
             # pred_nmse_training = rc_predictor.cal_nmse(h_freq_csi_true_siso, h_freq_csi_training)
-            pred_nmse_testing = rc_predictor.cal_nmse(h_freq_csi_true_siso, h_freq_csi)
-            outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true_siso, h_freq_csi_outdated_siso)
+            pred_nmse_testing = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
+            outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_outdated[0,...])
 
             print("outdated_nmse: ", outdated_nmse)
             # print("pred_nmse_training (GESN training): ", pred_nmse_training)
@@ -221,11 +202,11 @@ class MU_MIMO(Model):
 
             debug = True
             if debug:
-                rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
+                rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
                 h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
                 h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                                     batch_size=self.batch_size)
-                pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true, h_freq_csi_vanilla)
+                pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
                 print("pred_nmse (Vanilla): ", pred_nmse, "\n")
             debug = False
 
@@ -245,11 +226,10 @@ class MU_MIMO(Model):
 
                 debug_rx_ant = 0
                 debug_tx_ant = 0
-                debug_corresponding_vertex_ind = 0
                 debug_ofdm_sym = 1
                 
                 plt.figure()
-                plt.plot(np.real(h_freq_csi_predicted_gesn[debug_corresponding_vertex_ind, :, debug_ofdm_sym]), label="GESN Predicted Channel")
+                plt.plot(np.real(h_freq_csi_predicted_gesn[debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="GESN Predicted Channel")
                 plt.plot(np.real(h_freq_csi_predicted_vanilla[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Vanilla ESN Predicted Channel")
                 plt.plot(np.real(h_freq_csi_outdated[-1, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Outdated Channel")
                 plt.plot(np.real(h_freq_csi_true[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Ground Truth Channel")
@@ -266,10 +246,15 @@ class MU_MIMO(Model):
                                                                slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
                                                                cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
-
+        
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
+        
+        pred_nmse_gesn = pred_nmse_testing
+        pred_nmse_vanilla = pred_nmse
 
+        return [pred_nmse_gesn, pred_nmse_vanilla]
+        
         h_freq_csi_all = h_freq_csi
 
         # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
@@ -554,43 +539,44 @@ def sim_mu_mimo(cfg: SimConfig):
         assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
 
     # MU-MIMO transmission (P2)
-    dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat, sinr_dB_arr = mu_mimo(dmimo_chans, info_bits)
-    ranks_list.append(int(cfg.num_tx_streams / (cfg.num_rx_ue_sel+2)))
+    # dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat, sinr_dB_arr = mu_mimo(dmimo_chans, info_bits)
+    [pred_nmse_gesn, pred_nmse_vanilla] = mu_mimo(dmimo_chans, info_bits)
+    # ranks_list.append(int(cfg.num_tx_streams / (cfg.num_rx_ue_sel+2)))
 
     # Update average error statistics
-    info_bits = tf.reshape(info_bits, dec_bits.shape)
-    coded_ber = compute_ber(info_bits, dec_bits).numpy()
-    coded_bler = compute_bler(info_bits, dec_bits).numpy()
+    # info_bits = tf.reshape(info_bits, dec_bits.shape)
+    # coded_ber = compute_ber(info_bits, dec_bits).numpy()
+    # coded_bler = compute_bler(info_bits, dec_bits).numpy()
 
-    # Update per-node error statistics
-    num_tx_streams_per_node = int(cfg.num_tx_streams/(cfg.num_rx_ue_sel+2))
-    node_wise_ber, node_wise_bler = compute_UE_wise_BER(info_bits, dec_bits, num_tx_streams_per_node, cfg.num_tx_streams)
+    # # Update per-node error statistics
+    # num_tx_streams_per_node = int(cfg.num_tx_streams/(cfg.num_rx_ue_sel+2))
+    # node_wise_ber, node_wise_bler = compute_UE_wise_BER(info_bits, dec_bits, num_tx_streams_per_node, cfg.num_tx_streams)
     
 
-    # RxSquad transmission (P3)
-    if cfg.enable_rxsquad is True:
-        rxcfg = cfg.clone()
-        rxcfg.csi_delay = 0
-        rxcfg.perfect_csi = True
-        rx_squad = RxSquad(rxcfg, mu_mimo.num_bits_per_frame)
-        # print("RxSquad using modulation order {} for {} streams / {}".format(
-        #     rx_squad.num_bits_per_symbol, mu_mimo.num_streams_per_tx, mu_mimo.mapper.constellation.num_bits_per_symbol))
-        rxscfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
-        rxs_chans = dMIMOChannels(rxscfg, "RxSquad", add_noise=True)
-        received_bits, rxs_ber, rxs_bler, rxs_ber_max, rxs_bler_max = rx_squad(rxs_chans, dec_bits)
-        print("BER: {}  BLER: {}".format(rxs_ber, rxs_bler))
-        assert rxs_ber <= 1e-3 and rxs_ber_max <= 1e-2, "RxSquad transmission BER too high"
+    # # RxSquad transmission (P3)
+    # if cfg.enable_rxsquad is True:
+    #     rxcfg = cfg.clone()
+    #     rxcfg.csi_delay = 0
+    #     rxcfg.perfect_csi = True
+    #     rx_squad = RxSquad(rxcfg, mu_mimo.num_bits_per_frame)
+    #     # print("RxSquad using modulation order {} for {} streams / {}".format(
+    #     #     rx_squad.num_bits_per_symbol, mu_mimo.num_streams_per_tx, mu_mimo.mapper.constellation.num_bits_per_symbol))
+    #     rxscfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
+    #     rxs_chans = dMIMOChannels(rxscfg, "RxSquad", add_noise=True)
+    #     received_bits, rxs_ber, rxs_bler, rxs_ber_max, rxs_bler_max = rx_squad(rxs_chans, dec_bits)
+    #     print("BER: {}  BLER: {}".format(rxs_ber, rxs_bler))
+    #     assert rxs_ber <= 1e-3 and rxs_ber_max <= 1e-2, "RxSquad transmission BER too high"
 
-    # Goodput and throughput estimation
-    goodbits = (1.0 - coded_ber) * mu_mimo.num_bits_per_frame
-    userbits = (1.0 - coded_bler) * mu_mimo.num_bits_per_frame
-    ratedbits = (1.0 - uncoded_ser) * mu_mimo.num_uncoded_bits_per_frame
+    # # Goodput and throughput estimation
+    # goodbits = (1.0 - coded_ber) * mu_mimo.num_bits_per_frame
+    # userbits = (1.0 - coded_bler) * mu_mimo.num_bits_per_frame
+    # ratedbits = (1.0 - uncoded_ser) * mu_mimo.num_uncoded_bits_per_frame
 
-    node_wise_goodbits = (1.0 - node_wise_ber) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
-    node_wise_userbits = (1.0 - node_wise_bler) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
-    node_wise_ratedbits = (1.0 - node_wise_uncoded_ser) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
+    # node_wise_goodbits = (1.0 - node_wise_ber) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
+    # node_wise_userbits = (1.0 - node_wise_bler) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
+    # node_wise_ratedbits = (1.0 - node_wise_uncoded_ser) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
 
-    return [uncoded_ber, coded_ber], [goodbits, userbits, ratedbits], [node_wise_goodbits, node_wise_userbits, node_wise_ratedbits, ranks_list, sinr_dB_arr]
+    return pred_nmse_gesn, pred_nmse_vanilla
 
 
 def sim_mu_mimo_all(cfg: SimConfig):
@@ -599,51 +585,25 @@ def sim_mu_mimo_all(cfg: SimConfig):
     """
 
     total_cycles = 0
-    uncoded_ber, ldpc_ber, goodput, throughput, bitrate = 0, 0, 0, 0, 0
-    nodewise_goodput = []
-    nodewise_throughput = []
-    nodewise_bitrate = []
-    ranks_list = []
-    ldpc_ber_list = []
-    uncoded_ber_list = []
-    sinr_dB_list = []
+    
+    pred_nmse_gesn = []
+    pred_nmse_vanilla = []
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
 
         print("first_slot_idx: ", first_slot_idx, "\n")
 
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        bers, bits, additional_KPIs = sim_mu_mimo(cfg)
-        
-        uncoded_ber += bers[0]
-        ldpc_ber += bers[1]
-        uncoded_ber_list.append(bers[0])
-        ldpc_ber_list.append(bers[1])
-        
-        goodput += bits[0]
-        throughput += bits[1]
-        bitrate += bits[2]
-        
-        nodewise_goodput.append(additional_KPIs[0])
-        nodewise_throughput.append(additional_KPIs[1])
-        nodewise_bitrate.append(additional_KPIs[2])
-        ranks_list.append(additional_KPIs[3])
-        sinr_dB_list.append(additional_KPIs[4])
-        
+        try:
+            curr_pred_nmse_gesn, curr_pred_nmse_vanilla = sim_mu_mimo(cfg)
 
-    slot_time = cfg.slot_duration  # default 1ms subframe/slot duration
-    overhead = cfg.num_slots_p2/(cfg.num_slots_p1 + cfg.num_slots_p2)
-    goodput = goodput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
-    throughput = throughput / (total_cycles * slot_time * 1e6) * overhead  # Mbps
-    bitrate = bitrate / (total_cycles * slot_time * 1e6) * overhead  # Mbps
+            pred_nmse_gesn.append(curr_pred_nmse_gesn)
+            pred_nmse_vanilla.append(curr_pred_nmse_vanilla)
 
-    nodewise_goodput = np.concatenate(nodewise_goodput) / (slot_time * 1e6) * overhead  # Mbps
-    nodewise_throughput = np.concatenate(nodewise_throughput) / (slot_time * 1e6) * overhead  # Mbps
-    nodewise_bitrate = np.concatenate(nodewise_bitrate) / (slot_time * 1e6) * overhead  # Mbps
-    ranks = np.concatenate(ranks_list)
-    if sinr_dB_list[0] is not None:
-        sinr_dB = np.concatenate(sinr_dB_list)
-    else:
-        sinr_dB = None
+        except:
+            print("Continued \n")
+            continue
 
-    return [uncoded_ber/total_cycles, ldpc_ber/total_cycles, goodput, throughput, bitrate, nodewise_goodput, nodewise_throughput, nodewise_bitrate, ranks, uncoded_ber_list, ldpc_ber_list, sinr_dB]
+
+
+    return pred_nmse_gesn, pred_nmse_vanilla

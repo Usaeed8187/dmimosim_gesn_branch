@@ -9,7 +9,7 @@ import itertools
 
 class gesn_pred_freq_mimo:
 
-    def __init__(self, architecture, len_features=None, num_rx_ant=8, num_tx_ant=8, max_adjacency='all', method='per_node_pair'):
+    def __init__(self, architecture, len_features=None, num_rx_ant=8, num_tx_ant=8, max_adjacency='all', method='per_node_pair', num_neurons=None):
         
         ns3_config = Ns3Config()
         self.rc_config = RCConfig()
@@ -72,8 +72,13 @@ class gesn_pred_freq_mimo:
 
         else:
             raise ValueError("\n The GESN method specified is not defined")
-        self.N_n = self.rc_config.num_neurons * self.N_v
-        self.N_n_per_vertex = self.rc_config.num_neurons
+        if num_neurons is None:
+            self.N_n = self.rc_config.num_neurons * self.N_v
+            self.N_n_per_vertex = self.rc_config.num_neurons
+        else:
+            self.N_n = num_neurons * self.N_v
+            self.N_n_per_vertex = num_neurons
+
         if self.enable_window:
             self.N_in = self.N_f * self.window_length
         else:
@@ -215,27 +220,39 @@ class gesn_pred_freq_mimo:
 
         antenna_selections = self.generate_antenna_selections(self.num_tx_nodes, self.num_rx_nodes)
 
-        channel_train_input_list = []
-        channel_train_gt_list = []
-        channel_test_input_list = []
-
         N_r = h_freq_csi_history_reshaped.shape[1]
         N_t = h_freq_csi_history_reshaped.shape[2]
 
+        channel_pred = np.zeros(h_freq_csi_history_reshaped[:self.syms_per_subframe,...].shape, dtype=complex)
+
+        # Loop over all possible graphs
         for i in range(len(antenna_selections)):
-                
+            
+            # Find antenna elements of current graph
             tx_ant_idx = antenna_selections[i]['transmitter_indices']
             rx_ant_idx = antenna_selections[i]['receiver_indices']
             
-            channel_train_input_list.append(h_freq_csi_history_reshaped[:num_training_steps,rx_ant_idx, :, :][:, tx_ant_idx, :])
-            channel_train_gt_list.append(h_freq_csi_history_reshaped[-num_training_steps:,rx_ant_idx, :, :][:, tx_ant_idx, :])
-            channel_test_input_list.append(h_freq_csi_history_reshaped[-self.syms_per_subframe:,rx_ant_idx,...][:, tx_ant_idx, :]) # TRY: If this doesn't work, try making them all 2x2 matrices
+            # Get input-label pair for training data and input for testing data
+            curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
+            channel_train_input_list = [curr_channels[:num_training_steps, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+            channel_train_gt_list = [curr_channels[-num_training_steps:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+            channel_test_input_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
 
-        pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
+            # Train the model
+            pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
 
-        channel_pred_temp = self.test_train_predict(channel_test_input_list)
+            # Generate output from trained model
+            channel_pred_temp = self.test_train_predict(channel_test_input_list)
 
-        channel_pred = tf.convert_to_tensor(channel_pred_temp)
+            # Store output
+            for count_rx, rx in enumerate(rx_ant_idx):
+                for count_tx, tx in enumerate(tx_ant_idx):
+                    node_idx = count_rx * self.num_tx_nodes + count_tx
+
+                    channel_pred[:, rx, tx, :] = channel_pred_temp[node_idx].transpose()
+
+        channel_pred = tf.convert_to_tensor(channel_pred)
+        channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
         return channel_pred
     
     def siso_predict_tmp(self, h_freq_csi_history):

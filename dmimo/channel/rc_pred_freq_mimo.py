@@ -7,15 +7,18 @@ from dmimo.channel import lmmse_channel_estimation
 
 class standard_rc_pred_freq_mimo:
 
-    def __init__(self, architecture, num_rx_ant=8):
+    def __init__(self, architecture, num_rx_ant=8, num_neurons=None):
         
         ns3_config = Ns3Config()
         rc_config = RCConfig()
         self.rc_config = rc_config
 
-        self.nfft = 512  # TODO: remove hardcoded param value
         self.num_rx_ant = num_rx_ant  # TODO: use node selection mask
+
+        self.nfft_full = 512  # TODO: remove hardcoded param value
         self.subcarriers_per_RB = 12
+        # self.nfft = int(np.ceil(self.nfft_full / self.subcarriers_per_RB))
+        self.nfft = self.nfft_full
         
         if architecture == 'baseline':
             self.N_t = ns3_config.num_bs_ant
@@ -32,8 +35,11 @@ class standard_rc_pred_freq_mimo:
         if rc_config.treatment == 'SISO':
             self.N_t = 1
             self.N_r = 1
-
-        self.N_n = rc_config.num_neurons
+        
+        if num_neurons is None:
+            self.N_n = rc_config.num_neurons
+        else:
+            self.N_n = num_neurons
         self.sparsity = rc_config.W_tran_sparsity
         self.spectral_radius = rc_config.W_tran_radius
         self.max_forget_length = rc_config.max_forget_length
@@ -170,6 +176,8 @@ class standard_rc_pred_freq_mimo:
     
     def predict(self, h_freq_csi_history):
         if self.rc_config.treatment == 'SISO':
+            h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
+            h_freq_csi_history = self.rb_demapper(h_freq_csi_history)
             return self.rc_siso_predict(h_freq_csi_history)
         else:
             raise ValueError("\n The method specified is functional atm")
@@ -444,20 +452,28 @@ class standard_rc_pred_freq_mimo:
 
     def rb_mapper(self, H):
 
-        num_full_rbs = self.nfft // self.subcarriers_per_RB
-        remainder_subcarriers = self.nfft % self.subcarriers_per_RB
+        num_full_rbs = self.nfft_full // self.subcarriers_per_RB
+        remainder_subcarriers = self.nfft_full % self.subcarriers_per_RB
 
         # Initialize an array to store the averaged RBs
-        rb_data = np.zeros((H.shape[0], H.shape[1], H.shape[2], num_full_rbs + 1, 14), dtype=complex)
+        rb_data = np.zeros(H.shape, dtype=complex)
+        rb_data = rb_data[..., :(num_full_rbs+1)]
 
         # Compute mean across each full RB
         for rb in range(num_full_rbs):
             start = rb * self.subcarriers_per_RB
             end = start + self.subcarriers_per_RB
-            rb_data[:, :, :, rb, :] = np.mean(H[:, :, :, start:end, :], axis=3)
+            rb_data[..., rb] = np.mean(H[..., start:end], axis=-1)
 
         # Calculate the mean for the remaining subcarriers
         if remainder_subcarriers > 0:
-            rb_data[:, :, :, -1, :] = np.mean(H[:, :, :, -remainder_subcarriers:, :], axis=3)
+            rb_data[..., -1] = np.mean(H[..., -remainder_subcarriers:], axis=-1)
         
         return rb_data
+    
+    def rb_demapper(self, H):
+
+        demapped_H = tf.repeat(H, repeats=np.ceil(self.nfft/H.shape[-1]), axis=-1)
+        demapped_H = demapped_H[..., :self.nfft]
+
+        return demapped_H

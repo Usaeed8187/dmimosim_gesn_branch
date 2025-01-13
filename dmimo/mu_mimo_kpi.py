@@ -171,7 +171,7 @@ class MU_MIMO(Model):
                 rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
             elif self.cfg.predictor == 'gesn':
                 rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
-                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair')
+                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair', num_neurons=16)
             
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)
@@ -191,29 +191,10 @@ class MU_MIMO(Model):
             
             num_tx_nodes = int((self.num_txs_ant - 4)/2) + 1
             num_rx_nodes = int((self.num_rxs_ant - 4)/2) + 1
-            
-            h_freq_csi_true_siso = np.zeros((np.concatenate((np.array([num_tx_nodes*num_rx_nodes]), h_freq_csi_true.shape[-2:]))),dtype=complex)
-            h_freq_csi_outdated_siso = np.zeros((np.concatenate((np.array([num_tx_nodes*num_rx_nodes]), h_freq_csi_true.shape[-2:]))),dtype=complex)
-            
-            for tx_node_idx in range(num_tx_nodes):
-                for rx_node_idx in range(num_rx_nodes):
-                    if tx_node_idx == 0:
-                        tx_ant_idx = np.arange(0,4)
-                    else:
-                        tx_ant_idx = np.arange(4 + (tx_node_idx-1)*2,4 + (tx_node_idx)*2)
-                    tx_ant_idx = tx_ant_idx[0]
-                    if rx_node_idx == 0:
-                        rx_ant_idx = np.arange(0,4)
-                    else:
-                        rx_ant_idx = np.arange(4 + (rx_node_idx-1)*2,4 + (rx_node_idx)*2)
-                    rx_ant_idx = rx_ant_idx[0]
-                    vertex_idx = tx_node_idx * num_rx_nodes + rx_node_idx
-                    h_freq_csi_true_siso[vertex_idx,...] = h_freq_csi_true[0, rx_ant_idx, tx_ant_idx, ...]
-                    h_freq_csi_outdated_siso[vertex_idx,...] = h_freq_csi_outdated[0, rx_ant_idx, tx_ant_idx, ...]
-            
+                        
             # pred_nmse_training = rc_predictor.cal_nmse(h_freq_csi_true_siso, h_freq_csi_training)
-            pred_nmse_testing = rc_predictor.cal_nmse(h_freq_csi_true_siso, h_freq_csi)
-            outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true_siso, h_freq_csi_outdated_siso)
+            pred_nmse_testing = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
+            outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_outdated[0,...])
 
             print("outdated_nmse: ", outdated_nmse)
             # print("pred_nmse_training (GESN training): ", pred_nmse_training)
@@ -221,11 +202,11 @@ class MU_MIMO(Model):
 
             debug = True
             if debug:
-                rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
+                rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
                 h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
                 h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                                     batch_size=self.batch_size)
-                pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true, h_freq_csi_vanilla)
+                pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
                 print("pred_nmse (Vanilla): ", pred_nmse, "\n")
             debug = False
 
@@ -245,11 +226,10 @@ class MU_MIMO(Model):
 
                 debug_rx_ant = 0
                 debug_tx_ant = 0
-                debug_corresponding_vertex_ind = 0
                 debug_ofdm_sym = 1
                 
                 plt.figure()
-                plt.plot(np.real(h_freq_csi_predicted_gesn[debug_corresponding_vertex_ind, :, debug_ofdm_sym]), label="GESN Predicted Channel")
+                plt.plot(np.real(h_freq_csi_predicted_gesn[debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="GESN Predicted Channel")
                 plt.plot(np.real(h_freq_csi_predicted_vanilla[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Vanilla ESN Predicted Channel")
                 plt.plot(np.real(h_freq_csi_outdated[-1, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Outdated Channel")
                 plt.plot(np.real(h_freq_csi_true[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Ground Truth Channel")
@@ -266,10 +246,13 @@ class MU_MIMO(Model):
                                                                slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
                                                                cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
-
+        
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
-
+        
+        pred_nmse_gesn = pred_nmse_testing
+        pred_nmse_vanilla = pred_nmse
+        
         h_freq_csi_all = h_freq_csi
 
         # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
