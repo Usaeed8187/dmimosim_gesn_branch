@@ -9,7 +9,18 @@ import itertools
 
 class gesn_pred_freq_mimo:
 
-    def __init__(self, architecture, len_features=None, num_rx_ant=8, num_tx_ant=8, max_adjacency='all', method='per_node_pair', num_neurons=None):
+    def __init__(self, 
+                architecture, 
+                len_features=None, 
+                num_rx_ant=8, 
+                num_tx_ant=8, 
+                max_adjacency='all', 
+                method='per_node_pair', 
+                num_neurons=None,
+                cp_len=64,
+                num_subcarriers=512,
+                subcarrier_spacing=15e3,
+                edge_weighting_method='model_based'):
         
         ns3_config = Ns3Config()
         self.rc_config = RCConfig()
@@ -47,6 +58,10 @@ class gesn_pred_freq_mimo:
         self.reg = self.rc_config.regularization
         self.enable_window = self.rc_config.enable_window
         self.history_len = self.rc_config.history_len
+        self.edge_weighting_method = edge_weighting_method
+        self.cp_len = cp_len
+        self.num_subcarriers = num_subcarriers
+        self.subcarrier_spacing = subcarrier_spacing
 
         seed = 10
         self.RS = np.random.RandomState(seed)
@@ -62,6 +77,7 @@ class gesn_pred_freq_mimo:
             self.num_tx_nodes = int((self.N_t - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
             self.num_rx_nodes = int((self.N_r - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
             self.N_v = self.num_tx_nodes * self.num_rx_nodes                                            # number of vertices in the graph
+            self.N_e = int((self.N_v*(self.N_v-1))/2)                                                   # number of edges in the graph (assumes fully connected)
             if self.rc_config.treatment == 'SISO':
                 self.N_f = self.N_RB                                                                        # length of feature vector for each vertex
             else:
@@ -89,7 +105,7 @@ class gesn_pred_freq_mimo:
         # Initialize adjacency matrix (currently static for all time steps)
         if max_adjacency == 'all':
             self.max_adjacency = self.N_v
-        elif max_adjacency == 'k_nearest_neighbors':
+        elif max_adjacency == 'k_nearest_neighbours':
             raise ValueError("\n The knn clustering method has not yet been implemented")
         else:
             self.max_adjacency = max_adjacency
@@ -238,6 +254,9 @@ class gesn_pred_freq_mimo:
             channel_train_gt_list = [curr_channels[-num_training_steps:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
             channel_test_input_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
 
+            # Weight graph edges
+            self.adjacency_matrix = self.cal_edge_weights(edge_weighting_method=self.edge_weighting_method, csi_history=curr_channels)
+
             # Train the model
             pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
 
@@ -254,6 +273,44 @@ class gesn_pred_freq_mimo:
         channel_pred = tf.convert_to_tensor(channel_pred)
         channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
         return channel_pred
+    
+    def cal_edge_weights(self, edge_weighting_method, csi_history):
+        
+        if edge_weighting_method == 'none':
+            adjacency_matrix = np.ones((self.N_v, self.N_v)) - np.eye(self.N_v)
+        elif edge_weighting_method == 'model_based':
+            # Calculate delays:
+            h_time_csi = np.fft.ifft(csi_history, axis=-1)
+            power = np.abs(h_time_csi) ** 2
+            range_power = np.max(power, axis=-1) - np.min(power, axis=-1)
+            threshold = np.min(power, axis=-1) + 0.1 * range_power
+            threshold = threshold[..., np.newaxis]
+            significant_taps = power > threshold
+            
+            # Generate all combinations of TX and RX antennas
+            num_rx_antennas = h_time_csi.shape[1]
+            num_tx_antennas = h_time_csi.shape[2]
+            antenna_combinations = list(itertools.product(range(num_rx_antennas), range(num_tx_antennas)))
+            adjacency_matrix = np.ones((self.N_v, self.N_v))
+            for idx1, (rx_1, tx_1) in enumerate(antenna_combinations):
+                for idx2 in range(idx1 + 1, len(antenna_combinations)):  # Avoid already-selected pairs
+                    rx_2, tx_2 = antenna_combinations[idx2]
+
+                    # print('calculating correlation between {}_{} and {}_{}'.format(rx_1, tx_1, rx_2, tx_2))
+                    # print('idx_1: {}, idx_2: {}'.format(idx1, idx2))
+
+                    taps_1 = significant_taps[:, rx_1, tx_1, :].flatten()  # Flatten across symbols and resource blocks
+                    taps_2 = significant_taps[:, rx_2, tx_2, :].flatten()
+
+                    # Compute correlation coefficient
+                    corr_value = np.corrcoef(taps_1, taps_2)[0, 1]
+                    
+                    # store weights (correlation coefficients) in adjacency matrix
+                    adjacency_matrix[idx1, idx2] = corr_value
+                    adjacency_matrix[idx2, idx1] = corr_value  # Symmetric for undirected graph
+
+        return adjacency_matrix
+
     
     def siso_predict_tmp(self, h_freq_csi_history):
 
@@ -369,7 +426,7 @@ class gesn_pred_freq_mimo:
     def init_weights(self):
 
         matrices = []
-        for _ in range(self.max_adjacency):
+        for _ in range(self.N_v):
             result = self.sparse_mat(self.N_n_per_vertex, self.N_n_per_vertex)
             matrices.append(result)
         self.W_N = np.concatenate(matrices, axis=1)
@@ -496,9 +553,10 @@ class gesn_pred_freq_mimo:
     def return_neighbours_states(self, vertex_idx, internal_states):
 
         if self.max_adjacency == self.N_v:
-            return internal_states
 
-
+            curr_adjacency = self.adjacency_matrix[vertex_idx, :]
+            repeated_adjacency = np.repeat(curr_adjacency, self.N_n_per_vertex)
+            return internal_states * repeated_adjacency
 
     def complex_tanh(self, Y):
         return np.tanh(np.real(Y)) + 1j * np.tanh(np.imag(Y))
