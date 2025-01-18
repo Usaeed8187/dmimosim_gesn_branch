@@ -172,7 +172,7 @@ class MU_MIMO(Model):
             elif self.cfg.predictor == 'gesn':
                 rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
                                                     num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair', 
-                                                    num_neurons=16, edge_weighting_method='model_based')
+                                                    num_neurons=16, edge_weighting_method='grad_descent')
             
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)

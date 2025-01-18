@@ -75,7 +75,7 @@ if __name__ == "__main__":
         mobility = 'high_mobility'
         drop_idx = '7'
         # rx_ues_arr = [1,2,4,6]
-        rx_ues_arr = [4]
+        rx_ues_arr = [1]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
@@ -112,5 +112,7 @@ if __name__ == "__main__":
         cfg.precoding_method = "ZF"
         pred_nmse_gesn, pred_nmse_vanilla = sim_mu_mimo_all(cfg)
 
-        np.savez("results/channels_multiple_mu_mimo/results/{}/mu_mimo_results_UE_{}_pred.npz".format(folder_name, rx_ues_arr[ue_arr_idx]),
+        folder_path = "results/channels_multiple_mu_mimo/results/{}".format(folder_name)
+        os.makedirs(folder_path, exist_ok=True)
+        np.savez("{}/mu_mimo_results_UE_{}_pred.npz".format(folder_path, rx_ues_arr[ue_arr_idx]),
                 pred_nmse_gesn=pred_nmse_gesn, pred_nmse_vanilla=pred_nmse_vanilla)

@@ -1,11 +1,12 @@
 import copy
 import numpy as np
 import tensorflow as tf
+import os
+import matplotlib.pyplot as plt
+import itertools
 
 from dmimo.config import Ns3Config, RCConfig
 from dmimo.channel import lmmse_channel_estimation
-import matplotlib.pyplot as plt
-import itertools
 
 class gesn_pred_freq_mimo:
 
@@ -20,7 +21,9 @@ class gesn_pred_freq_mimo:
                 cp_len=64,
                 num_subcarriers=512,
                 subcarrier_spacing=15e3,
-                edge_weighting_method='model_based'):
+                num_epochs=100,
+                learning_rate = 0.01,
+                edge_weighting_method='grad_descent'):
         
         ns3_config = Ns3Config()
         self.rc_config = RCConfig()
@@ -58,10 +61,12 @@ class gesn_pred_freq_mimo:
         self.reg = self.rc_config.regularization
         self.enable_window = self.rc_config.enable_window
         self.history_len = self.rc_config.history_len
-        self.edge_weighting_method = edge_weighting_method
+        self.edge_weighting_method = edge_weighting_method # "none", "model_based", "model_free"
         self.cp_len = cp_len
         self.num_subcarriers = num_subcarriers
         self.subcarrier_spacing = subcarrier_spacing
+        self.num_epochs = num_epochs
+        self.learning_rate = learning_rate
 
         seed = 10
         self.RS = np.random.RandomState(seed)
@@ -100,7 +105,7 @@ class gesn_pred_freq_mimo:
         else:
             self.N_in = self.N_f
         self.N_out = self.N_f * self.N_v
-        self.S_0 = np.zeros([self.N_n], dtype='complex')
+        self.S_0 = tf.zeros([self.N_n], dtype=tf.complex128)
 
         # Initialize adjacency matrix (currently static for all time steps)
         if max_adjacency == 'all':
@@ -232,34 +237,22 @@ class gesn_pred_freq_mimo:
         h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
         h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
 
-        num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
-
         antenna_selections = self.generate_antenna_selections(self.num_tx_nodes, self.num_rx_nodes)
-
-        N_r = h_freq_csi_history_reshaped.shape[1]
-        N_t = h_freq_csi_history_reshaped.shape[2]
 
         channel_pred = np.zeros(h_freq_csi_history_reshaped[:self.syms_per_subframe,...].shape, dtype=complex)
 
-        # Loop over all possible graphs
+        # Loop over all possible graphs (MIMO to SISO simplification)
         for i in range(len(antenna_selections)):
-            
-            # Find antenna elements of current graph
+
             tx_ant_idx = antenna_selections[i]['transmitter_indices']
             rx_ant_idx = antenna_selections[i]['receiver_indices']
-            
-            # Get input-label pair for training data and input for testing data
+
             curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
-            channel_train_input_list = [curr_channels[:num_training_steps, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-            channel_train_gt_list = [curr_channels[-num_training_steps:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
             channel_test_input_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-
-            # Weight graph edges
-            self.adjacency_matrix = self.cal_edge_weights(edge_weighting_method=self.edge_weighting_method, csi_history=curr_channels)
-
-            # Train the model
-            pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
-
+            
+            # Train the model and calculate training loss:
+            loss = self.training(h_freq_csi_history_reshaped, antenna_selections, i)
+            
             # Generate output from trained model
             channel_pred_temp = self.test_train_predict(channel_test_input_list)
 
@@ -268,17 +261,97 @@ class gesn_pred_freq_mimo:
                 for count_tx, tx in enumerate(tx_ant_idx):
                     node_idx = count_rx * self.num_tx_nodes + count_tx
 
-                    channel_pred[:, rx, tx, :] = channel_pred_temp[node_idx].transpose()
-
+                    channel_pred[:, rx, tx, :] = tf.transpose(channel_pred_temp[node_idx])
+            
         channel_pred = tf.convert_to_tensor(channel_pred)
         channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
         return channel_pred
-    
-    def cal_edge_weights(self, edge_weighting_method, csi_history):
+
+
+    def training(self, h_freq_csi_history_reshaped, antenna_selections, i):
+
+        num_training_steps = h_freq_csi_history_reshaped.shape[0]-self.syms_per_subframe
         
-        if edge_weighting_method == 'none':
+        # Find antenna elements of current graph
+        tx_ant_idx = antenna_selections[i]['transmitter_indices']
+        rx_ant_idx = antenna_selections[i]['receiver_indices']
+        
+        # Get input-label pair for training data and testing data
+        curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
+        channel_train_input_list = [curr_channels[:num_training_steps, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+        channel_train_gt_list = [curr_channels[-num_training_steps:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+        channel_test_input_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+        
+        self.adjacency_matrix = self.cal_edge_weights(csi_history=curr_channels)
+        tril_indices = np.tril_indices(self.adjacency_matrix.shape[0], -1)
+        edge_weights = self.adjacency_matrix[tril_indices]
+
+        starting_edge_weights = edge_weights
+
+        if self.edge_weighting_method=='grad_descent':
+
+            optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+            edge_weights = tf.Variable(edge_weights, trainable=True)
+
+            for curr_epoch in range(self.num_epochs):
+            
+                with tf.GradientTape() as tape:
+            
+                    # Weight graph edges
+                    self.adjacency_matrix = tf.zeros((self.N_v, self.N_v), dtype=tf.float32)
+                    self.adjacency_matrix = tf.tensor_scatter_nd_update(
+                        self.adjacency_matrix,
+                        indices=tf.convert_to_tensor(np.stack(tril_indices, axis=-1), dtype=tf.int32),
+                        updates=tf.cast(edge_weights, dtype=tf.float32)  # Ensure updates are float32
+                    )
+                    self.adjacency_matrix = self.adjacency_matrix + tf.transpose(self.adjacency_matrix)
+                    self.adjacency_matrix = tf.linalg.set_diag(self.adjacency_matrix, tf.ones([self.N_v], dtype=tf.float32))
+                    
+                    # Train the model
+                    pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
+                    
+                    # Calculate training loss
+                    training_loss_channel_list = [curr_channels[num_training_steps:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+                    training_loss_channel_pred_list = self.test_train_predict(training_loss_channel_list)
+                    training_loss_channel_pred = tf.convert_to_tensor(training_loss_channel_pred_list)
+                    training_loss_channel_gt_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+                    training_loss_channel_gt = tf.convert_to_tensor(training_loss_channel_gt_list)
+                    training_loss_channel_gt = tf.transpose(training_loss_channel_gt_list, perm=[0,2,1])
+                    # mse = tf.reduce_mean(tf.square(training_loss_channel_gt - training_loss_channel_pred))
+                    # variance = tf.reduce_mean(tf.square(training_loss_channel_gt - tf.reduce_mean(training_loss_channel_gt)))
+                    # loss = mse / (variance + 1e-8)
+                    loss = self.cal_nmse(training_loss_channel_gt, training_loss_channel_pred)
+
+                
+                # Compute gradients and update edge_weights
+                os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+                gradients = tape.gradient(loss, [edge_weights])
+                optimizer.apply_gradients(zip(gradients, [edge_weights]))
+                os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
+
+                if (curr_epoch + 1) % 10 == 0:
+                    print(f"Epoch {curr_epoch + 1}/{curr_epoch}, Loss: {loss.numpy()}, edge_weights_mean: {tf.reduce_mean(edge_weights).numpy()}")
+        else:
+
+            # Train the model
+            pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
+            
+            # Calculate training loss
+            training_loss_channel_list = [curr_channels[num_training_steps:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+            training_loss_channel_pred_list = self.test_train_predict(training_loss_channel_list)
+            training_loss_channel_pred = tf.convert_to_tensor(training_loss_channel_pred)
+            training_loss_channel_gt_list = channel_test_input_list
+            training_loss_channel_gt = tf.convert_to_tensor(training_loss_channel_gt_list)
+            training_loss_channel_gt = tf.transpose(training_loss_channel_gt_list, perm=[0,2,1])
+            loss = self.cal_nmse(training_loss_channel_gt, training_loss_channel_pred)
+
+        return loss
+
+    def cal_edge_weights(self, csi_history):
+        
+        if self.edge_weighting_method == 'none':
             adjacency_matrix = np.ones((self.N_v, self.N_v)) - np.eye(self.N_v)
-        elif edge_weighting_method == 'model_based':
+        elif self.edge_weighting_method == 'model_based' or self.edge_weighting_method== 'grad_descent':
             # Calculate delays:
             h_time_csi = np.fft.ifft(csi_history, axis=-1)
             power = np.abs(h_time_csi) ** 2
@@ -429,9 +502,11 @@ class gesn_pred_freq_mimo:
         for _ in range(self.N_v):
             result = self.sparse_mat(self.N_n_per_vertex, self.N_n_per_vertex)
             matrices.append(result)
-        self.W_N = np.concatenate(matrices, axis=1)
+        self.W_N = tf.Variable(np.concatenate(matrices, axis=1), trainable=False)
 
-        self.W_in = 2 * (self.RS.rand(self.N_n_per_vertex, self.N_in) - 0.5)
+        # self.W_in = 2 * (self.RS.rand(self.N_n_per_vertex, self.N_in) - 0.5)
+        self.W_in = tf.Variable(2 * (self.RS.rand(self.N_n_per_vertex, self.N_in) - 0.5), trainable=False)  # Input weights (fixed)
+        self.W_in = tf.cast(self.W_in, dtype=tf.complex128)
         self.W_tran = np.concatenate([self.W_N, self.W_in], axis=1)
 
         self.W_out = self.RS.randn(self.N_out, (self.N_n_per_vertex + self.N_in) * self.N_v) + 1j * self.RS.randn(self.N_out, (self.N_n_per_vertex + self.N_in) * self.N_v)
@@ -462,43 +537,73 @@ class gesn_pred_freq_mimo:
 
         time_steps = input[0].shape[0]
 
-        pred_channel = np.zeros((self.W_out.shape[0], time_steps),dtype=complex)
+        pred_channel = tf.zeros((self.W_out.shape[0], time_steps), dtype=tf.complex128)
 
         for vertex_idx in range(self.N_v):
 
-            curr_state_inds = np.arange(vertex_idx*self.N_n_per_vertex, (vertex_idx+1)*self.N_n_per_vertex)
-            curr_W_out_inds = np.arange(vertex_idx*(self.N_n_per_vertex + self.N_in), (vertex_idx+1)*(self.N_n_per_vertex + self.N_in))
-            curr_target = target[vertex_idx]
-            curr_target = curr_target.reshape(curr_target.shape[0],-1).transpose(1,0)
+            curr_state_inds = tf.range(vertex_idx * self.N_n_per_vertex, (vertex_idx + 1) * self.N_n_per_vertex)
+            curr_W_out_inds = tf.range(vertex_idx * (self.N_n_per_vertex + self.N_in), (vertex_idx + 1) * (self.N_n_per_vertex + self.N_in))
             
             if self.rc_config.treatment == 'SISO':
-                curr_output_inds = np.arange(vertex_idx*self.N_RB, (vertex_idx+1)*self.N_RB)
+                curr_output_inds = tf.range(vertex_idx*self.N_RB, (vertex_idx+1)*self.N_RB)
             elif self.rc_config.treatment == 'MIMO':
-                curr_output_inds = np.arange(vertex_idx*self.num_bs_ant*self.num_bs_ant*self.N_RB, (vertex_idx+1)*self.num_bs_ant*self.num_bs_ant*self.N_RB)
+                curr_output_inds = tf.range(vertex_idx*self.num_bs_ant*self.num_bs_ant*self.N_RB, (vertex_idx+1)*self.num_bs_ant*self.num_bs_ant*self.N_RB)
 
-            curr_input = input[vertex_idx].transpose()
-            S_2D = np.concatenate([internal_states_history[curr_state_inds,:], curr_input], axis=0)
+            curr_target = tf.transpose(tf.reshape(target[vertex_idx], [tf.shape(target[vertex_idx])[0], -1]))
+            curr_input = tf.transpose(input[vertex_idx])
+            curr_internal_states_history = tf.gather(internal_states_history, curr_state_inds, axis=0)
+            S_2D = tf.concat([curr_internal_states_history, curr_input], axis=0)
 
-            self.W_out[np.ix_(curr_output_inds[:curr_target.shape[0]], curr_W_out_inds)] = curr_target @ self.reg_p_inv(S_2D)
+            curr_W_out_indices = tf.stack(tf.meshgrid(curr_output_inds, curr_W_out_inds, indexing="ij"), axis=-1)
+            updates = tf.matmul(curr_target, self.reg_p_inv(S_2D))
+            self.W_out = tf.tensor_scatter_nd_update(
+                self.W_out,
+                curr_W_out_indices,
+                updates
+            )
 
-            pred_channel[curr_output_inds[:curr_target.shape[0]], :] = self.W_out[np.ix_(curr_output_inds[:curr_target.shape[0]], curr_W_out_inds)] @ S_2D
+            pred_channel_indices = tf.stack(tf.meshgrid(curr_output_inds[:tf.shape(curr_target)[0]], tf.range(time_steps), indexing="ij"), axis=-1)
+            curr_W_out = tf.gather_nd(self.W_out, curr_W_out_indices)
+            curr_W_out = tf.cast(curr_W_out, S_2D.dtype)
+            pred_channel = tf.tensor_scatter_nd_update(
+                pred_channel,
+                pred_channel_indices,
+                tf.matmul(curr_W_out, S_2D)
+            )
 
         return pred_channel
 
     def cal_nmse(self, H, H_hat):
+        """
+        Calculate NMSE between H and H_hat using TensorFlow operations.
+        Args:
+            H: Ground truth tensor.
+            H_hat: Predicted tensor.
+        Returns:
+            NMSE: Normalized Mean Squared Error (TensorFlow tensor).
+        """
         H_hat = tf.cast(H_hat, dtype=H.dtype)
-        mse = np.sum(np.abs(H - H_hat) ** 2)
-        normalization_factor = np.sum((np.abs(H) + np.abs(H_hat)) ** 2)
-        nmse = mse / normalization_factor
+        mse = tf.reduce_sum(tf.abs(H - H_hat) ** 2)
+        # mean_H = tf.reduce_mean(H)
+        # variance_H = tf.reduce_mean(tf.square(tf.abs(H - mean_H)))
+        # nmse = mse / (variance_H + 1e-8)  # Add epsilon for numerical stability
+        normalization_factor = tf.reduce_sum((tf.abs(H) + tf.abs(H_hat)) ** 2)
+        nmse = tf.math.real(mse / normalization_factor)
         return nmse
 
     def reg_p_inv(self, X):
-        N = X.shape[0]
-        return np.conj(X.T)@np.linalg.pinv(X@np.conj(X.T)+self.reg*np.eye(N))
+        
+        N = tf.shape(X)[0]
+        X_conj_T = tf.transpose(tf.math.conj(X))
+        identity_matrix = tf.eye(N, dtype=X.dtype)
+        regularized_matrix = tf.matmul(X, X_conj_T) + self.reg * identity_matrix
+        regularized_matrix_inv = tf.linalg.inv(regularized_matrix)
+
+        return tf.matmul(X_conj_T, regularized_matrix_inv)
 
     def test_train_predict(self, channel_train_input):
 
-        self.S_0 = np.zeros([self.N_n], dtype='complex')
+        self.S_0 = tf.zeros([self.N_n], dtype=tf.complex128)
         Y_2D_org = channel_train_input
 
         internal_states_history = self.state_transit(Y_2D_org)
@@ -507,21 +612,28 @@ class gesn_pred_freq_mimo:
 
         for vertex_idx in range(self.N_v):
 
-            curr_state_inds = np.arange(vertex_idx*self.N_n_per_vertex, (vertex_idx+1)*self.N_n_per_vertex)
-            curr_W_out_inds = np.arange(vertex_idx*(self.N_n_per_vertex + self.N_in), (vertex_idx+1)*(self.N_n_per_vertex + self.N_in))
+            curr_state_inds = tf.range(vertex_idx * self.N_n_per_vertex, (vertex_idx + 1) * self.N_n_per_vertex)
+            curr_W_out_inds = tf.range(vertex_idx * (self.N_n_per_vertex + self.N_in), (vertex_idx + 1) * (self.N_n_per_vertex + self.N_in))
 
             curr_input = Y_2D_org[vertex_idx]
             if self.rc_config.treatment == 'SISO':
-                curr_output_inds = np.arange(vertex_idx*self.N_RB, (vertex_idx+1)*self.N_RB)
+                curr_output_inds = tf.range(vertex_idx * self.N_RB, (vertex_idx + 1) * self.N_RB)
             elif self.rc_config.treatment == 'MIMO':
-                curr_output_inds = np.arange(vertex_idx*self.num_bs_ant*self.num_bs_ant*self.N_RB, (vertex_idx+1)*self.num_bs_ant*self.num_bs_ant*self.N_RB)
-            len_curr_input_features = curr_input[0,...].reshape(-1).shape[0]
+                curr_output_inds = tf.range(
+                    vertex_idx * self.num_bs_ant * self.num_bs_ant * self.N_RB,
+                    (vertex_idx + 1) * self.num_bs_ant * self.num_bs_ant * self.N_RB,
+                )
+
+            len_curr_input_features = tf.shape(curr_input[0, ...])[0]
             curr_output_inds = curr_output_inds[:len_curr_input_features]
 
-            curr_input = Y_2D_org[vertex_idx].transpose()
-            S_2D = np.concatenate([internal_states_history[curr_state_inds,:], curr_input], axis=0)
+            curr_input = tf.transpose(Y_2D_org[vertex_idx])
+            curr_internal_states_history = tf.gather(internal_states_history, curr_state_inds, axis=0)
+            S_2D = tf.concat([curr_internal_states_history, curr_input], axis=0)
 
-            curr_output = self.W_out[np.ix_(curr_output_inds, curr_W_out_inds)] @ S_2D
+            curr_W_out_indices = tf.stack(tf.meshgrid(curr_output_inds, curr_W_out_inds, indexing="ij"), axis=-1)
+            curr_W_out = tf.gather_nd(self.W_out, curr_W_out_indices)
+            curr_output = tf.matmul(curr_W_out, S_2D)
             pred_channel.append(curr_output)
 
         # curr_channel_pred = self.W_out @ S_2D
@@ -533,20 +645,31 @@ class gesn_pred_freq_mimo:
 
         internal_states_history = []
 
-        internal_states = copy.deepcopy(self.S_0)
+        internal_states = tf.identity(self.S_0)
+        
         for t in range(T):
 
             for vertex_idx in range(self.N_v):    
 
                 curr_u = Y_4D[vertex_idx][t, ...] * self.input_scale
-                curr_u_reshaped = curr_u.reshape(-1)
+                curr_u_reshaped = tf.reshape(curr_u, [-1, 1])
 
-                state_matrix_inds = np.arange(vertex_idx*self.N_n_per_vertex, (vertex_idx+1)*self.N_n_per_vertex)
-                internal_states[state_matrix_inds] = self.complex_tanh(self.W_in[:, :curr_u_reshaped.shape[0]] @ curr_u_reshaped  
-                                                                       + self.W_N @ self.return_neighbours_states(vertex_idx, internal_states)) # WHY: why use the first few W_in weights
+                neighbours_states = self.return_neighbours_states(vertex_idx, internal_states)
+                neighbours_states = neighbours_states[:, np.newaxis]
+                neighbours_states = tf.cast(neighbours_states, self.W_N.dtype)
+                state_matrix_inds = tf.range(vertex_idx * self.N_n_per_vertex, (vertex_idx + 1) * self.N_n_per_vertex)
+                
+                internal_states = tf.tensor_scatter_nd_update(
+                    internal_states,
+                    tf.reshape(state_matrix_inds, [-1, 1]),
+                    tf.squeeze(self.complex_tanh(
+                        self.W_in[:, :tf.shape(curr_u_reshaped)[0]] @ curr_u_reshaped + self.W_N @ neighbours_states
+                    ))
+                )
+
             internal_states_history.append(internal_states)
         
-        internal_states_history = np.stack(internal_states_history, axis=1)
+        internal_states_history = tf.stack(internal_states_history, axis=1)
         
         return internal_states_history
     
@@ -555,11 +678,15 @@ class gesn_pred_freq_mimo:
         if self.max_adjacency == self.N_v:
 
             curr_adjacency = self.adjacency_matrix[vertex_idx, :]
-            repeated_adjacency = np.repeat(curr_adjacency, self.N_n_per_vertex)
+            repeated_adjacency = tf.repeat(curr_adjacency, self.N_n_per_vertex)
+            repeated_adjacency = tf.cast(repeated_adjacency, dtype=internal_states.dtype)
             return internal_states * repeated_adjacency
 
     def complex_tanh(self, Y):
-        return np.tanh(np.real(Y)) + 1j * np.tanh(np.imag(Y))
+        real_part = tf.math.tanh(tf.math.real(Y))
+        imag_part = tf.math.tanh(tf.math.imag(Y))
+
+        return tf.complex(real_part, imag_part)
     
     def rb_mapper(self, H):
 
