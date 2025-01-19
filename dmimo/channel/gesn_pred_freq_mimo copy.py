@@ -576,8 +576,8 @@ class gesn_pred_freq_mimo:
 
     def fitting_time(self, input, target):
 
-        # internal_states_history = self.state_transit(input)
-        internal_states_history = self.state_transit_parallel(input)
+        internal_states_history = self.state_transit(input)
+        # internal_states_history = self.state_transit_parallel(input)
 
         time_steps = input[0].shape[0]
 

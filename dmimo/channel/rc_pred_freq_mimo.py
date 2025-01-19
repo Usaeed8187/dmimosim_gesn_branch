@@ -17,6 +17,13 @@ class standard_rc_pred_freq_mimo:
 
         self.nfft_full = 512  # TODO: remove hardcoded param value
         self.subcarriers_per_RB = 12
+        self.num_rbs = int(np.ceil(self.nfft_full / self.subcarriers_per_RB))
+
+        self.rb_granularity = True
+        if self.rb_granularity:
+            self.num_freq_re = self.num_rbs
+        else:
+            self.num_freq_re = self.nfft_full
         # self.nfft = int(np.ceil(self.nfft_full / self.subcarriers_per_RB))
         self.nfft = self.nfft_full
         
@@ -66,10 +73,10 @@ class standard_rc_pred_freq_mimo:
         #     self.N_out = self.N_t
         #     self.S_0 = np.zeros([self.N_n], dtype='complex')
         if self.enable_window:
-            self.N_in = self.nfft * self.N_r * self.N_t * self.window_length
+            self.N_in = self.num_freq_re * self.N_r * self.N_t * self.window_length
         else:
-            self.N_in = self.nfft * self.N_r * self.N_t
-        self.N_out = self.nfft * self.N_r * self.N_t
+            self.N_in = self.num_freq_re * self.N_r * self.N_t
+        self.N_out = self.num_freq_re * self.N_r * self.N_t
         self.S_0 = np.zeros([self.N_n], dtype='complex')
 
         self.init_weights()
@@ -176,9 +183,12 @@ class standard_rc_pred_freq_mimo:
     
     def predict(self, h_freq_csi_history):
         if self.rc_config.treatment == 'SISO':
-            h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
-            h_freq_csi_history = self.rb_demapper(h_freq_csi_history)
-            return self.rc_siso_predict(h_freq_csi_history)
+            
+            if self.rb_granularity:
+                h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
+                h_freq_csi_predicted = self.rc_siso_predict(h_freq_csi_history)
+
+            return h_freq_csi_predicted
         else:
             raise ValueError("\n The method specified is functional atm")
         
@@ -214,10 +224,10 @@ class standard_rc_pred_freq_mimo:
                         for rx_ant in range(num_rx_antennas):
                     
                             channel_train_input_temp = channel_train_input[:, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
-                            channel_train_input_temp = channel_train_input_temp.transpose([1, 0, 2]).reshape(self.nfft, -1)
+                            channel_train_input_temp = channel_train_input_temp.transpose([1, 0, 2]).reshape(self.num_freq_re, -1)
                             # channel_train_input_temp = channel_train_input_temp.reshape(-1, channel_train_input_temp.shape[-1])
                             channel_train_gt_temp = channel_train_gt[:, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
-                            channel_train_gt_temp = channel_train_gt_temp.transpose([1, 0, 2]).reshape(self.nfft, -1)
+                            channel_train_gt_temp = channel_train_gt_temp.transpose([1, 0, 2]).reshape(self.num_freq_re, -1)
                             # channel_train_gt_temp = channel_train_gt_temp.reshape(-1, channel_train_gt_temp.shape[-1])
 
                             curr_train = self.fitting_time(channel_train_input_temp, channel_train_gt_temp)

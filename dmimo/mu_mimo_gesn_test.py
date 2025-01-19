@@ -172,7 +172,7 @@ class MU_MIMO(Model):
             elif self.cfg.predictor == 'gesn':
                 rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
                                                     num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair', 
-                                                    num_neurons=16, edge_weighting_method='grad_descent')
+                                                    num_neurons=16, edge_weighting_method='model_based') # edge_weighting_method: 'model_based', 'grad_descent'
             
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)
@@ -182,34 +182,44 @@ class MU_MIMO(Model):
             h_freq_csi = rc_predictor.predict(h_freq_csi_history)
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
 
+            # Get true and outdated channels for comparison
             h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                                              batch_size=self.batch_size)
             h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
             h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
             
-            h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
-            h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
+            # h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
+            # h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
+            # outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_outdated[0,...])
+                    
+            pred_nmse_testing_model_based = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
+        
+            # Get Vanilla RC NMSE for comparison
+            rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
+            h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
+            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                batch_size=self.batch_size)
+            # h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
+            h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
+            pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
             
-            num_tx_nodes = int((self.num_txs_ant - 4)/2) + 1
-            num_rx_nodes = int((self.num_rxs_ant - 4)/2) + 1
-                        
-            # pred_nmse_training = rc_predictor.cal_nmse(h_freq_csi_true_siso, h_freq_csi_training)
-            pred_nmse_testing = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
-            outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_outdated[0,...])
-
-            print("outdated_nmse: ", outdated_nmse)
-            # print("pred_nmse_training (GESN training): ", pred_nmse_training)
-            print("pred_nmse_testing (GESN testing): ", pred_nmse_testing)
-
-            debug = True
-            if debug:
-                rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
-                h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
-                h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+            # Compare with gradient descent GESN
+            rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
+                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair', 
+                                                    num_neurons=16, edge_weighting_method='grad_descent') # edge_weighting_method: 'model_based', 'grad_descent'
+            h_freq_csi_grad_descent = rc_predictor.predict(h_freq_csi_history)
+            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                                     batch_size=self.batch_size)
-                pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
-                print("pred_nmse (Vanilla): ", pred_nmse, "\n")
-            debug = False
+            h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
+            h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
+
+            pred_nmse_testing_grad_descent = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_grad_descent)
+            
+            # Print out all results
+            # print("outdated_nmse: ", outdated_nmse)
+            print("pred_nmse_testing (GESN testing (model_based)): ", pred_nmse_testing_model_based)
+            print("pred_nmse_testing (GESN testing (grad_descent)): ", pred_nmse_testing_grad_descent)
+            print("pred_nmse (Vanilla): ", pred_nmse, "\n")
 
             # Test plots
             plot = True
@@ -223,7 +233,10 @@ class MU_MIMO(Model):
                 h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
 
                 h_freq_csi_predicted_gesn = h_freq_csi
-                h_freq_csi_predicted_vanilla = rc_predictor.rb_mapper(tf.transpose(h_freq_csi_vanilla[:,0,:,0,...], perm=[0,1,2,4,3]))
+                if not rc_predictor_vanilla.rb_granularity:
+                    h_freq_csi_predicted_vanilla = rc_predictor.rb_mapper(tf.transpose(h_freq_csi_vanilla[:,0,:,0,...], perm=[0,1,2,4,3]))
+                else:
+                    h_freq_csi_predicted_vanilla = tf.transpose(h_freq_csi_vanilla[:,0,:,0,...], perm=[0,1,2,4,3])
 
                 debug_rx_ant = 0
                 debug_tx_ant = 0
@@ -232,7 +245,7 @@ class MU_MIMO(Model):
                 plt.figure()
                 plt.plot(np.real(h_freq_csi_predicted_gesn[debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="GESN Predicted Channel")
                 plt.plot(np.real(h_freq_csi_predicted_vanilla[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Vanilla ESN Predicted Channel")
-                plt.plot(np.real(h_freq_csi_outdated[-1, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Outdated Channel")
+                # plt.plot(np.real(h_freq_csi_outdated[-1, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Outdated Channel")
                 plt.plot(np.real(h_freq_csi_true[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Ground Truth Channel")
                 plt.legend()
                 plt.savefig('prediction_comparison')
@@ -251,7 +264,7 @@ class MU_MIMO(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
         
-        pred_nmse_gesn = pred_nmse_testing
+        pred_nmse_gesn = pred_nmse_testing_model_based
         pred_nmse_vanilla = pred_nmse
 
         return [pred_nmse_gesn, pred_nmse_vanilla]
