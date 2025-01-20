@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.python.keras import Model
 import matplotlib.pyplot as plt
+import time
 
 from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
 from sionna.mimo import StreamManagement
@@ -179,6 +180,7 @@ class MU_MIMO(Model):
             h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
                                                                 self.rg_csi, dmimo_chans)
             # Do channel prediction
+            all_start_time = time.time()
             h_freq_csi = rc_predictor.predict(h_freq_csi_history)
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
 
@@ -207,13 +209,18 @@ class MU_MIMO(Model):
             rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
                                                     num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair', 
                                                     num_neurons=16, edge_weighting_method='grad_descent') # edge_weighting_method: 'model_based', 'grad_descent'
+            start_time = time.time()
             h_freq_csi_grad_descent = rc_predictor.predict(h_freq_csi_history)
+            end_time = time.time()
+            print("Total time elapsed in gradient descent based method: {}".format(end_time - start_time))
             h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                                     batch_size=self.batch_size)
             h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
             h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
 
             pred_nmse_testing_grad_descent = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_grad_descent)
+            all_end_time = time.time()
+            print("Total time elapsed for all learning tasks: {}".format(all_end_time - all_start_time))
             
             # Print out all results
             # print("outdated_nmse: ", outdated_nmse)

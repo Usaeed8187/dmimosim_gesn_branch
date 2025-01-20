@@ -65,7 +65,7 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 32        # total number of slots in ns-3 channels
+    cfg.total_slots = 46        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
@@ -75,7 +75,7 @@ if __name__ == "__main__":
         mobility = 'high_mobility'
         drop_idx = '1'
         # rx_ues_arr = [1,2,4,6]
-        rx_ues_arr = [4]
+        rx_ues_arr = [1]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
