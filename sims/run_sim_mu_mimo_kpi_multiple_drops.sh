@@ -3,7 +3,7 @@
 # Array of arguments
 declare -a mobilities=("high_mobility")
 declare -a drop_idx=("1" "2" "3" "4" "5" "6" "7")
-declare -a rx_ues_arr=("1 2 4")
+declare -a rx_ues_arr=("1 2")
 # declare -a optional_args=("opt1" "opt2" "opt3")
 
 # Loop through the arrays

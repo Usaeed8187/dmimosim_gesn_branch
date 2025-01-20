@@ -25,8 +25,8 @@ class gesn_pred_freq_mimo:
                 cp_len=64,
                 num_subcarriers=512,
                 subcarrier_spacing=15e3,
-                num_epochs=10,
-                learning_rate = 0.5,
+                num_epochs=20,
+                learning_rate = 0.1,
                 batch_size = 1,
                 edge_weighting_method='grad_descent'):
         

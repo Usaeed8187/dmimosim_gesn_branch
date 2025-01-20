@@ -75,7 +75,7 @@ if __name__ == "__main__":
         mobility = 'high_mobility'
         drop_idx = '1'
         # rx_ues_arr = [1,2,4,6]
-        rx_ues_arr = [1]
+        rx_ues_arr = [2]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
