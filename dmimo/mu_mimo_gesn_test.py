@@ -180,29 +180,29 @@ class MU_MIMO(Model):
             h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
                                                                 self.rg_csi, dmimo_chans)
             # Do channel prediction
-            # h_freq_csi = rc_predictor.predict(h_freq_csi_history)
-            # _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
+            h_freq_csi = rc_predictor.predict(h_freq_csi_history)
+            _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
 
-            # # Get true and outdated channels for comparison
-            # h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-            #                                                  batch_size=self.batch_size)
-            # h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
-            # h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
+            # Get true and outdated channels for comparison
+            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                             batch_size=self.batch_size)
+            h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
+            h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
             
-            # # h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
-            # # h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
-            # # outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_outdated[0,...])
+            # h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
+            # h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
+            # outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_outdated[0,...])
                     
-            # pred_nmse_testing_model_based = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
+            pred_nmse_testing_model_based = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
         
-            # # Get Vanilla RC NMSE for comparison
-            # rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
-            # h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
-            # h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-            #                                     batch_size=self.batch_size)
-            # # h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
-            # h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
-            # pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
+            # Get Vanilla RC NMSE for comparison
+            rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
+            h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
+            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                batch_size=self.batch_size)
+            # h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
+            h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
+            pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
             
             # Compare with gradient descent GESN
             rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 

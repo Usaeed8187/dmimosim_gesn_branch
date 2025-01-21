@@ -257,6 +257,13 @@ class gesn_pred_freq_mimo:
         else:
             optimizer = None
 
+        edge_weights = tf.Variable(
+            initial_value=tf.zeros([int(self.N_v * (self.N_v - 1) / 2)]),
+            trainable=True,
+            dtype=tf.float32,
+            name="edge_weights"
+        )
+
         # Loop over all possible graphs (MIMO to SISO simplification)
         for i in range(len(antenna_selections)):
             if self.edge_weighting_method == "grad_descent":
@@ -273,14 +280,15 @@ class gesn_pred_freq_mimo:
                 self.adjacency_matrix = tf.ones((self.N_v, self.N_v), dtype=float)
             tril_indices = np.tril_indices(self.adjacency_matrix.shape[0], -1)
             lower_triangular_mask = tf.linalg.band_part(tf.ones_like(self.adjacency_matrix), -1, 0) - tf.eye(tf.shape(self.adjacency_matrix)[0])
-            edge_weights = tf.boolean_mask(self.adjacency_matrix, lower_triangular_mask > 0)
-            edge_weights = tf.Variable(edge_weights, trainable=True)
+            curr_weights = tf.boolean_mask(self.adjacency_matrix, lower_triangular_mask > 0)
+            edge_weights.assign(curr_weights)
+            self.adjacency_matrix = tf.cast(self.adjacency_matrix, tf.complex64)
             
             # Train the model and calculate training loss:
             start_time = time.time()
             loss = self.training(edge_weights, tril_indices, curr_channels, antenna_selections, i, optimizer)
             end_time = time.time()
-            print("total training time: ", end_time - start_time)
+            # print("total training time: ", end_time - start_time)
             
             # Generate output from trained model
             channel_pred_temp = self.test_train_predict(channel_test_input_list)
@@ -330,39 +338,30 @@ class gesn_pred_freq_mimo:
             best_loss = loss
             best_edge_weights = edge_weights
 
-            
+            start_time = time.time()
             for curr_epoch in range(self.num_epochs):
                 
                 self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
             
                 with tf.GradientTape() as tape:
-            
+                    
                     # Weight graph edges
-                    # start_time = time.time()
                     self.adjacency_matrix = tf.zeros((self.N_v, self.N_v), dtype=tf.float32)
                     self.adjacency_matrix = self.fill_lower_triangle(edge_weights)
                     self.adjacency_matrix = self.adjacency_matrix + tf.transpose(self.adjacency_matrix)
                     self.adjacency_matrix = tf.linalg.set_diag(self.adjacency_matrix, tf.ones([self.N_v], dtype=tf.float32))
                     
                     # Train the model
-                    # self.fitting_time_parallel(channel_train_input_list, channel_train_gt_list)
-                    # start_time = time.time()
                     self.fitting_time(channel_train_input_list, channel_train_gt_list)
-                    # end_time = time.time()
-                    # print("training duration: ", end_time - start_time, "seconds")
                     
                     # Calculate training loss
-                    start_time = time.time()
                     input_channel_list = [curr_channels[self.syms_per_subframe:num_training_steps, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))] # Taking the second-last subframe as input
                     pred_channel_list = self.test_train_predict(input_channel_list)
-                    # pred_channel_list = self.test_train_predict_parallel(input_channel_list)
                     pred_channel = tf.convert_to_tensor(pred_channel_list)
                     gt_channel_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))] # Taking the last subframe as ground truth
                     gt_channel = tf.convert_to_tensor(gt_channel_list)
                     gt_channel = tf.transpose(gt_channel, perm=[0,2,1])
                     loss = self.cal_nmse(gt_channel, pred_channel)
-                    end_time = time.time()
-                    print("training loss calculation duration: ", end_time - start_time, "seconds")
 
                 # Compute gradients and update edge_weights
                 tf.get_logger().setLevel(logging.ERROR)
@@ -373,7 +372,7 @@ class gesn_pred_freq_mimo:
                     best_loss = loss
                     best_edge_weights = tf.identity(edge_weights)
 
-                # print(f"Epoch {curr_epoch + 1}/{self.num_epochs}, Loss: {loss.numpy()}, edge_weights: {edge_weights}")
+                # print(f"Epoch {curr_epoch + 1}/{self.num_epochs}, Loss: {loss.numpy()}")
 
             # Use the best edge weights found from gradient descent
             self.adjacency_matrix = tf.zeros((self.N_v, self.N_v), dtype=tf.float32)
@@ -387,7 +386,8 @@ class gesn_pred_freq_mimo:
 
             print(f"Lowest loss: {float(best_loss)}")
 
-            hold = 1
+            end_time = time.time()
+            print("total gradient descent time = ", end_time - start_time)
 
         elif self.edge_weighting_method == "model_based":
 
@@ -406,8 +406,8 @@ class gesn_pred_freq_mimo:
             raise ValueError("\n The edge weighting method specified is not implemented")
 
         return loss
-
-    # @tf.function(jit_compile=True)
+    
+    @tf.function(jit_compile=True)
     def fill_lower_triangle(self, edge_weights):
         """
         Fills the lower triangular part of a matrix with the given edge_weights.
@@ -419,20 +419,38 @@ class gesn_pred_freq_mimo:
         - A matrix with the lower triangular part filled with edge_weights.
         """
 
-        # Compute the total number of elements in the lower triangle (excluding diagonal)
-        num_elements = (self.N_v * (self.N_v - 1)) // 2
+        # 1) Create a boolean mask for lower-triangular entries: i>j
+        rows = tf.range(self.N_v, dtype=tf.int32)
+        cols = tf.range(self.N_v, dtype=tf.int32)
+        row_idx, col_idx = tf.meshgrid(rows, cols, indexing='ij')  # shape [M, M]
+        mask_2d = row_idx > col_idx  # True below diag, shape [M, M]
 
-        # Generate lower triangular indices programmatically
-        lower_tri_indices = []
-        for i in range(1, self.N_v):
-            for j in range(i):
-                lower_tri_indices.append([i, j])
-        lower_tri_indices = tf.constant(lower_tri_indices, dtype=tf.int32)
+        # 2) Flatten the mask to shape [self.N_v*self.N_v]
+        mask_1d = tf.reshape(mask_2d, [-1])              # shape [self.N_v*self.N_v]
+        mask_1d_int = tf.cast(mask_1d, dtype=tf.int32)   # 1 where True, else 0
 
-        # Scatter the edge_weights into the lower triangular part of the matrix
-        updated_adjacency_matrix = tf.tensor_scatter_nd_update(self.adjacency_matrix, lower_tri_indices, edge_weights)
+        # 3) Compute a running index for each True entry via cumsum
+        #    e.g. mask_1d = [F, F, T, T, ...] -> cumsum -> [0, 0, 1, 2, ...]
+        cumsum_idx = tf.math.cumsum(mask_1d_int)  # shape [self.N_v*self.N_v]
+
+        # 4) Each True position i gets index (cumsum_idx[i] - 1).
+        #    Positions where mask_1d[i] = 0 get -1.
+        gather_indices = cumsum_idx - 1  # shape [self.N_v*self.N_v], range: [-1..N_v-1]
+
+        # 5) Safely clip indices to [0..N_v-1], then gather from edge_weights
+        #    (we'll zero out the invalid positions later by multiplying with mask)
+        safe_indices = tf.clip_by_value(gather_indices, 0, self.N_v - 1)
+        gathered_values = tf.gather(edge_weights, safe_indices)  # shape [self.N_v*self.N_v]
+
+        # 6) Zero-out positions where mask is False:
+        #    multiply by float-cast mask_1d so that non-lower-tri entries are 0
+        gathered_values *= tf.cast(mask_1d, tf.float32)
+
+        # 7) Reshape to [self.N_v, self.N_v]
+        updated_adjacency_matrix = tf.reshape(gathered_values, [self.N_v, self.N_v])
 
         return updated_adjacency_matrix
+
 
     def cal_edge_weights_tf(self, csi_history):
 
@@ -629,24 +647,26 @@ class gesn_pred_freq_mimo:
         Y_target_2D_real = np.concatenate(Y_target_2D_real_list, axis=0)
         return Y_target_2D_real
     
-    def fitting_time_parallel(self, input, target):
+    # def fitting_time_parallel(self, input, target):
         
-        internal_states_history = self.state_transit_parallel(input)
-        internal_states_history_reshaped = tf.reshape(internal_states_history, [-1, self.N_v, tf.shape(internal_states_history)[1]])
-        internal_states_history_reshaped = tf.transpose(internal_states_history_reshaped, perm=[1,2,0])
+    #     internal_states_history = self.state_transit_parallel(input)
+    #     internal_states_history_reshaped = tf.reshape(internal_states_history, [-1, self.N_v, tf.shape(internal_states_history)[1]])
+    #     internal_states_history_reshaped = tf.transpose(internal_states_history_reshaped, perm=[1,2,0])
         
-        input = tf.convert_to_tensor(input)
-        S_3D = tf.concat([internal_states_history_reshaped, input], axis=-1)
-        S_3D_reshaped = tf.transpose(S_3D, perm=[0, 2, 1])
+    #     input = tf.convert_to_tensor(input)
+    #     S_3D = tf.concat([internal_states_history_reshaped, input], axis=-1)
+    #     S_3D_reshaped = tf.transpose(S_3D, perm=[0, 2, 1])
 
-        target = tf.convert_to_tensor(input)
-        target_reshaped = tf.transpose(target, perm=[0, 2, 1])
-        self.W_out = tf.matmul(target_reshaped, self.reg_p_inv_parallel(S_3D_reshaped))
+    #     target = tf.convert_to_tensor(input)
+    #     target_reshaped = tf.transpose(target, perm=[0, 2, 1])
+    #     self.W_out = tf.matmul(target_reshaped, self.reg_p_inv_parallel(S_3D_reshaped))
     
     
     def fitting_time(self, input, target):
 
-        internal_states_history = self.state_transit_parallel(input)
+        # internal_states_history = self.state_transit_parallel(input)
+        internal_states_history = self.state_transit_parallel_v2(input)
+        
         self.W_out = tf.cast(self.W_out, tf.complex64)
                 
         for vertex_idx in range(self.N_v):
@@ -719,7 +739,8 @@ class gesn_pred_freq_mimo:
         Y_2D_org = tf.convert_to_tensor(channel_train_input)
 
         # internal_states_history = self.state_transit(Y_2D_org)
-        internal_states_history = self.state_transit_parallel(Y_2D_org)
+        # internal_states_history = self.state_transit_parallel(Y_2D_org)
+        internal_states_history = self.state_transit_parallel_v2(Y_2D_org)
         internal_states_history_reshaped = tf.reshape(internal_states_history, [-1, self.N_v, tf.shape(internal_states_history)[1]])
         internal_states_history_reshaped = tf.transpose(internal_states_history_reshaped, perm=[1,2,0])
 
@@ -738,7 +759,8 @@ class gesn_pred_freq_mimo:
         self.W_out = tf.cast(self.W_out, tf.complex64)
 
         # internal_states_history = self.state_transit(Y_2D_org)
-        internal_states_history = self.state_transit_parallel(Y_2D_org)
+        # internal_states_history = self.state_transit_parallel(Y_2D_org)
+        internal_states_history = self.state_transit_parallel_v2(Y_2D_org)
 
         pred_channel = []
 
@@ -769,6 +791,45 @@ class gesn_pred_freq_mimo:
             pred_channel.append(curr_output)
 
         return pred_channel
+
+
+    def state_transit_parallel_v2(self, Y_4D):
+
+        T = Y_4D[0].shape[0] # number of samples
+        Y_4D = tf.convert_to_tensor(Y_4D)
+        Y_4D = Y_4D * self.input_scale
+        Y_4D = tf.cast(Y_4D, dtype=tf.complex64)
+
+        internal_states_history = []
+
+        internal_states = tf.identity(self.S_0)
+
+        for t in range(T):
+            # Gather inputs for all vertices at the current time step
+            curr_inputs = tf.gather(Y_4D, t, axis=1)  # Shape: [N_v, num_rbs]
+            curr_inputs = tf.transpose(curr_inputs, perm=[1,0])  # Shape: [num_rbs, N_v]
+
+            # neighbors_states = tf.stack(
+            #     [self.return_neighbours_states(vertex_idx, internal_states) for vertex_idx in range(self.N_v)],
+            #     axis=0
+            # )  # Shape: [N_v*N_n_per_vertex, N_v]
+            # neighbors_states = tf.transpose(neighbors_states, perm=[1,0])  # Shape: [N_v*N_n_per_vertex, N_v]
+            neighbors_states = self.return_neighbours_states_v2(internal_states)
+
+            # Compute state updates for all vertices
+            state_updates = self.complex_tanh(
+                self.W_in @ curr_inputs + self.W_N @ neighbors_states
+            )  # Shape: [N_n_per_vertex, N_v]
+
+            internal_states = tf.reshape(state_updates, [-1])
+
+            # Store the updated states
+            internal_states_history.append(internal_states)
+
+        # Stack the internal states across time steps
+        internal_states_history = tf.stack(internal_states_history, axis=1)  # Shape: [N_v * N_n_per_vertex, num_time_steps]
+        return internal_states_history
+
 
     # @tf.function(jit_compile=True)
     def state_transit_parallel(self, Y_4D):
@@ -845,7 +906,39 @@ class gesn_pred_freq_mimo:
         
         return internal_states_history
     
-    @tf.function(jit_compile=True)
+    # @tf.function(jit_compile=True)
+    def return_neighbours_states_v2(self, internal_states):
+
+        # 1) Reshape 'internal_states' to [N_v, N_n_per_vertex]
+        #    so row j corresponds to vertex j’s internal subunits.
+        internal_states_2d = tf.reshape(internal_states, [self.N_v, self.N_n_per_vertex])
+        
+        # 2) adjacency_matrix has shape [N_v, N_v].
+        #    We'll make it [N_v, N_v, 1] so we can broadcast across subunits:
+        #       result[i, j, k] = adjacency[i, j] * internal_states_2d[j, k]
+        adjacency_3d = self.adjacency_matrix[:, :, tf.newaxis]            # => [N_v, N_v, 1]
+        
+        # 3) Expand 'internal_states_2d' to [1, N_v, N_n_per_vertex] 
+        #    so it lines up with adjacency’s second dimension (j):
+        internal_states_3d = internal_states_2d[tf.newaxis, :, :]    # => [1, N_v, N_n_per_vertex]
+        
+        # 4) Broadcast-multiply to get shape [N_v, N_v, N_n_per_vertex]
+        #    - i dimension = adjacency’s first axis
+        #    - j dimension = adjacency’s second axis + internal_states’ first axis
+        #    - k dimension = internal_states’ second axis
+        adjacency_3d = tf.cast(adjacency_3d, internal_states_3d.dtype)
+        result_3d = adjacency_3d * internal_states_3d  # => [N_v, N_v, N_n_per_vertex]
+        
+        # 5) Reshape to [N_v, N_v*N_n_per_vertex], so each row i is
+        #    the flattened neighbor-states for vertex i
+        result_2d = tf.reshape(result_3d, [self.N_v, self.N_v * self.N_n_per_vertex])
+        
+        # 6) Transpose to match your original final shape: [N_v*N_n_per_vertex, N_v]
+        neighbors_states = tf.transpose(result_2d, perm=[1, 0])
+
+        return neighbors_states
+
+    # @tf.function(jit_compile=True)
     def return_neighbours_states(self, vertex_idx, internal_states):
 
         if self.max_adjacency == self.N_v:
