@@ -110,9 +110,10 @@ if __name__ == "__main__":
         cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
 
         cfg.precoding_method = "ZF"
-        pred_nmse_gesn, pred_nmse_vanilla = sim_mu_mimo_all(cfg)
+        pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent, pred_nmse_vanilla = sim_mu_mimo_all(cfg)
 
         folder_path = "results/channels_multiple_mu_mimo/results/{}".format(folder_name)
         os.makedirs(folder_path, exist_ok=True)
         np.savez("{}/mu_mimo_results_UE_{}_pred.npz".format(folder_path, rx_ues_arr[ue_arr_idx]),
-                pred_nmse_gesn=pred_nmse_gesn, pred_nmse_vanilla=pred_nmse_vanilla)
+                pred_nmse_gesn_model_based=pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent=pred_nmse_gesn_grad_descent,
+                pred_nmse_vanilla=pred_nmse_vanilla)

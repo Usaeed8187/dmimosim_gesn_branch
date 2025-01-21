@@ -259,8 +259,8 @@ class gesn_pred_freq_mimo:
 
         # Loop over all possible graphs (MIMO to SISO simplification)
         for i in range(len(antenna_selections)):
-            
-            print("\n\nGraph {}/{}".format(i+1, len(antenna_selections)))
+            if self.edge_weighting_method == "grad_descent":
+                print("\n\nGraph {}/{}".format(i+1, len(antenna_selections)))
             tx_ant_idx = antenna_selections[i]['transmitter_indices']
             rx_ant_idx = antenna_selections[i]['receiver_indices']
 

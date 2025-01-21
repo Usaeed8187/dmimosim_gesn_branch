@@ -271,10 +271,9 @@ class MU_MIMO(Model):
         if self.cfg.return_estimated_channel:
             return h_freq_csi, rx_snr_db
         
-        pred_nmse_gesn = pred_nmse_testing_model_based
         pred_nmse_vanilla = pred_nmse
 
-        return [pred_nmse_gesn, pred_nmse_vanilla]
+        return [pred_nmse_testing_model_based, pred_nmse_testing_grad_descent, pred_nmse_vanilla]
         
         h_freq_csi_all = h_freq_csi
 
@@ -561,7 +560,7 @@ def sim_mu_mimo(cfg: SimConfig):
 
     # MU-MIMO transmission (P2)
     # dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat, sinr_dB_arr = mu_mimo(dmimo_chans, info_bits)
-    [pred_nmse_gesn, pred_nmse_vanilla] = mu_mimo(dmimo_chans, info_bits)
+    [pred_nmse_testing_model_based, pred_nmse_testing_grad_descent, pred_nmse_vanilla] = mu_mimo(dmimo_chans, info_bits)
     # ranks_list.append(int(cfg.num_tx_streams / (cfg.num_rx_ue_sel+2)))
 
     # Update average error statistics
@@ -597,7 +596,7 @@ def sim_mu_mimo(cfg: SimConfig):
     # node_wise_userbits = (1.0 - node_wise_bler) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
     # node_wise_ratedbits = (1.0 - node_wise_uncoded_ser) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
 
-    return pred_nmse_gesn, pred_nmse_vanilla
+    return pred_nmse_testing_model_based, pred_nmse_testing_grad_descent, pred_nmse_vanilla
 
 
 def sim_mu_mimo_all(cfg: SimConfig):
@@ -607,7 +606,8 @@ def sim_mu_mimo_all(cfg: SimConfig):
 
     total_cycles = 0
     
-    pred_nmse_gesn = []
+    pred_nmse_gesn_model_based = []
+    pred_nmse_gesn_grad_descent = []
     pred_nmse_vanilla = []
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
 
@@ -625,11 +625,10 @@ def sim_mu_mimo_all(cfg: SimConfig):
         #     print("Continued \n")
         #     continue
 
-        curr_pred_nmse_gesn, curr_pred_nmse_vanilla = sim_mu_mimo(cfg)
+        curr_pred_nmse_gesn_model_based, curr_pred_nmse_gesn_grad_descent, curr_pred_nmse_vanilla = sim_mu_mimo(cfg)
 
-        pred_nmse_gesn.append(curr_pred_nmse_gesn)
+        pred_nmse_gesn_model_based.append(curr_pred_nmse_gesn)
+        pred_nmse_gesn_grad_descent.append(curr_pred_nmse_gesn_grad_descent)
         pred_nmse_vanilla.append(curr_pred_nmse_vanilla)
 
-
-
-    return pred_nmse_gesn, pred_nmse_vanilla
+    return pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent, pred_nmse_vanilla
