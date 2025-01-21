@@ -223,7 +223,7 @@ class MU_MIMO(Model):
             print("pred_nmse (Vanilla): ", pred_nmse, "\n")
 
             # Test plots
-            plot = True
+            plot = False
             if plot:
                 h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                                              batch_size=self.batch_size)
@@ -621,7 +621,7 @@ def sim_mu_mimo_all(cfg: SimConfig):
 
         curr_pred_nmse_gesn_model_based, curr_pred_nmse_gesn_grad_descent, curr_pred_nmse_vanilla = sim_mu_mimo(cfg)
 
-        pred_nmse_gesn_model_based.append(curr_pred_nmse_gesn)
+        pred_nmse_gesn_model_based.append(curr_pred_nmse_gesn_model_based)
         pred_nmse_gesn_grad_descent.append(curr_pred_nmse_gesn_grad_descent)
         pred_nmse_vanilla.append(curr_pred_nmse_vanilla)
 
