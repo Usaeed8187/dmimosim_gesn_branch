@@ -17,7 +17,7 @@ from dmimo.mu_mimo_gesn_test import sim_mu_mimo_all
 
 
 sys.path.append(os.path.join('..'))
-source_dir = '/home/data/ns3_channels_q4/'
+source_dir = '~/data/ns3_channels_q4/'
 destination_dir = 'ns3/'
 if not os.path.exists(destination_dir):
     os.makedirs(destination_dir)
@@ -75,7 +75,7 @@ if __name__ == "__main__":
         mobility = 'high_mobility'
         drop_idx = '1'
         # rx_ues_arr = [1,2,4,6]
-        rx_ues_arr = [2]
+        rx_ues_arr = [1]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
