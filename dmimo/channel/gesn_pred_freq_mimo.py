@@ -20,7 +20,7 @@ class gesn_pred_freq_mimo:
                 num_rx_ant=8, 
                 num_tx_ant=8, 
                 max_adjacency='all', 
-                method='per_node_pair', 
+                method='per_antenna_pair', 
                 num_neurons=None,
                 cp_len=64,
                 num_subcarriers=512,
@@ -72,6 +72,7 @@ class gesn_pred_freq_mimo:
         self.learning_rate = self.rc_config.lr
         self.weight_initialization = "model_based" # 'model_based', 'ones'
         self.batch_size = batch_size
+        self.method = method
 
         seed = 10
         self.RS = np.random.RandomState(seed)
@@ -80,7 +81,14 @@ class gesn_pred_freq_mimo:
         # Calculate weight matrix dimensions
         if method == 'per_antenna_pair':
             # one antenna pair is one vertex
-            raise ValueError("\n The GESN method specified has not been completely implemented")
+            self.num_tx_nodes = int((self.N_t - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
+            self.num_rx_nodes = int((self.N_r - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
+            self.N_v = ns3_config.num_bs_ant * ns3_config.num_bs_ant                                        # number of vertices in the graph. Will be updated in *predict_per_antenna_pair()
+            self.N_e = int((self.N_v*(self.N_v-1))/2)                                                       # number of edges in the graph (assumes fully connected). Will be updated in *predict_per_antenna_pair()
+            if self.rc_config.treatment == 'SISO':
+                self.N_f = self.N_RB                                                                        # length of feature vector for each vertex
+            else:
+                raise ValueError("\n The GESN treatment specified is not defined")                          # length of feature vector for each vertex
 
         elif method == 'per_node_pair':
             # one tx-rx node pair is one vertex
@@ -187,7 +195,12 @@ class gesn_pred_freq_mimo:
     def predict(self, h_freq_csi_history):
 
         if self.rc_config.treatment == 'SISO':
-            channel_pred = self.siso_predict(h_freq_csi_history)
+            if self.method == 'per_node_pair':
+                channel_pred = self.siso_predict_per_node_pair(h_freq_csi_history)
+            elif self.method == 'per_antenna_pair':
+                channel_pred = self.siso_predict_per_antenna_pair(h_freq_csi_history)
+            else:
+                raise ValueError("\n Only node-pair and antenna-pair treatment has been defined.")
         elif self.rc_config.treatment == 'MIMO':
             channel_pred = self.mimo_predict(h_freq_csi_history)
         else:
@@ -236,8 +249,50 @@ class gesn_pred_freq_mimo:
         
         return selections
 
+    def generate_node_selections(self, num_transmitters, num_receivers):
+        """
+        Generate all possible node selections for transmitters and receivers and convert one-hot encoding to indices.
 
-    def siso_predict(self, h_freq_csi_history):
+        :param num_transmitters: Number of transmitters
+        :param num_receivers: Number of receivers
+        :return: List of all possible selections with indices
+        """
+        # Define number of antennas for transmitters and receivers
+        tx_antennas = [4 if i == 0 else 2 for i in range(num_transmitters)]
+        rx_antennas = [4 if i == 0 else 2 for i in range(num_receivers)]
+
+        # Generate one-hot encoding options for each transmitter and receiver
+        tx_selections = [list(np.eye(ant, dtype=int)) for ant in tx_antennas]
+        rx_selections = [list(np.eye(ant, dtype=int)) for ant in rx_antennas]
+        
+        # Create all possible combinations of selections
+        all_combinations = itertools.product(
+            itertools.product(*tx_selections),
+            itertools.product(*rx_selections)
+        )
+        
+        # Convert one-hot encodings to indices
+        selections = []
+        tx_offsets = [sum(tx_antennas[:i]) for i in range(num_transmitters)]
+        rx_offsets = [sum(rx_antennas[:i]) for i in range(num_receivers)]
+
+        for tx_choice, rx_choice in all_combinations:
+            tx_indices = [
+                offset + np.argmax(choice) for offset, choice in zip(tx_offsets, tx_choice)
+            ]
+            rx_indices = [
+                offset + np.argmax(choice) for offset, choice in zip(rx_offsets, rx_choice)
+            ]
+            selections.append({
+                "transmitter_indices": tx_indices,
+                "receiver_indices": rx_indices
+            })
+        
+        return selections
+
+
+
+    def siso_predict_per_node_pair(self, h_freq_csi_history):
 
         h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
         h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
@@ -256,7 +311,11 @@ class gesn_pred_freq_mimo:
             optimizer = None
 
         edge_weights = tf.Variable(
-            initial_value=tf.zeros([int(self.N_v * (self.N_v - 1) / 2)]),
+            initial_value=tf.random.uniform(
+                [int(self.N_v * (self.N_v - 1) / 2)], 
+                minval=0.0, 
+                maxval=1.0
+            ),
             trainable=True,
             dtype=tf.float32,
             name="edge_weights"
@@ -276,15 +335,18 @@ class gesn_pred_freq_mimo:
                 self.adjacency_matrix = self.cal_edge_weights_tf(csi_history=curr_channels)
             elif self.weight_initialization == 'ones':
                 self.adjacency_matrix = tf.ones((self.N_v, self.N_v), dtype=float)
-            tril_indices = np.tril_indices(self.adjacency_matrix.shape[0], -1)
             lower_triangular_mask = tf.linalg.band_part(tf.ones_like(self.adjacency_matrix), -1, 0) - tf.eye(tf.shape(self.adjacency_matrix)[0])
             curr_weights = tf.boolean_mask(self.adjacency_matrix, lower_triangular_mask > 0)
             edge_weights.assign(curr_weights)
             self.adjacency_matrix = tf.cast(self.adjacency_matrix, tf.complex64)
             
+            # Find antenna elements of current graph
+            tx_ant_idx = antenna_selections[i]['transmitter_indices']
+            rx_ant_idx = antenna_selections[i]['receiver_indices']
+
             # Train the model and calculate training loss:
             start_time = time.time()
-            loss = self.training(edge_weights, tril_indices, curr_channels, antenna_selections, i, optimizer)
+            loss = self.training(edge_weights, curr_channels, tx_ant_idx, rx_ant_idx, optimizer)
             end_time = time.time()
             # print("total training time: ", end_time - start_time)
             
@@ -301,15 +363,139 @@ class gesn_pred_freq_mimo:
         channel_pred = tf.convert_to_tensor(channel_pred)
         channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
         return channel_pred
-    
+
+
+    def siso_predict_per_antenna_pair(self, h_freq_csi_history):
+
+        h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
+        h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
+
+        num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
+        h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
+        h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
+
+        num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
+
+        channel_pred = np.zeros(h_freq_csi_history_reshaped[:self.syms_per_subframe,...].shape, dtype=complex)
+
+        if self.edge_weighting_method=='grad_descent':
+            optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+        else:
+            optimizer = None
+
+        self.adjacency_matrix = tf.ones((self.N_v, self.N_v), dtype=float)
+
+        edge_weights_4_4 = tf.Variable(
+            initial_value=tf.random.uniform(
+                [int(self.num_bs_ant*self.num_bs_ant * (self.num_bs_ant*self.num_bs_ant - 1) / 2)], 
+                minval=0.0,
+                maxval=1.0
+            ),
+            trainable=True,
+            dtype=tf.float32,
+            name="edge_weights_4_4"
+        )
+
+        edge_weights_4_2 = tf.Variable(
+            initial_value=tf.random.uniform(
+                [int(self.num_bs_ant*self.num_ue_ant * (self.num_bs_ant*self.num_ue_ant - 1) / 2)], 
+                minval=0.0,
+                maxval=1.0
+            ),
+            trainable=True,
+            dtype=tf.float32,
+            name="edge_weights_4_2"
+        )
+
+        edge_weights_2_2 = tf.Variable(
+            initial_value=tf.random.uniform(
+                [int(self.num_ue_ant*self.num_ue_ant * (self.num_ue_ant*self.num_ue_ant - 1) / 2)], 
+                minval=0.0,
+                maxval=1.0
+            ),
+            trainable=True,
+            dtype=tf.float32,
+            name="edge_weights_2_2"
+        )
+        
+        all_trainable_variables = [edge_weights_4_4, edge_weights_4_2, edge_weights_2_2]
+
+        optimizer.build(all_trainable_variables)
+
+        current_iteration = 0
+
+        for tx_node_idx in range(self.num_tx_nodes):
+            for rx_node_idx in range(self.num_rx_nodes):
+                
+                current_iteration += 1
+
+                if self.edge_weighting_method == "grad_descent":
+                    print("\n\nGraph {}/{}".format(current_iteration, self.num_tx_nodes * self.num_rx_nodes))
+
+                if tx_node_idx == 0:
+                    tx_ant_idx = np.arange(0,self.num_bs_ant)
+                else:
+                    tx_ant_idx = np.arange(self.num_bs_ant + (tx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (tx_node_idx)*self.num_ue_ant)
+                
+                if rx_node_idx == 0:
+                    rx_ant_idx = np.arange(0,self.num_bs_ant)
+                else:
+                    rx_ant_idx = np.arange(self.num_bs_ant + (rx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (rx_node_idx)*self.num_ue_ant)
+
+                self.update_graph_dimensions(tx_ant_idx, rx_ant_idx)
+
+                if tx_ant_idx.size == self.num_bs_ant and rx_ant_idx.size == self.num_bs_ant:
+                    edge_weights = edge_weights_4_4
+                elif tx_ant_idx.size == self.num_bs_ant or rx_ant_idx.size == self.num_bs_ant:
+                    edge_weights = edge_weights_4_2
+                else:
+                    edge_weights = edge_weights_2_2
+
+                curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
+                channel_test_input_list = [tf.cast(curr_channels[num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+
+                self.adjacency_matrix = self.cal_edge_weights_tf(csi_history=curr_channels)
+
+                self.training(edge_weights, curr_channels, tx_ant_idx, rx_ant_idx, optimizer)
+
+                # Generate output from trained model
+                channel_pred_temp = self.test_train_predict(channel_test_input_list)
+
+                print("predicting for rx antennas: ", rx_ant_idx)
+                print("predicting for tx antennas: ", tx_ant_idx)
+
+                # Store output
+                for count_rx, rx in enumerate(rx_ant_idx):
+                    for count_tx, tx in enumerate(tx_ant_idx):
+                        node_idx = count_rx * self.num_tx_nodes + count_tx
+
+                        channel_pred[:, rx, tx, :] = tf.transpose(channel_pred_temp[node_idx])
+
+        channel_pred = tf.convert_to_tensor(channel_pred)
+        channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
+
+        return channel_pred
+
+    def update_graph_dimensions(self, tx_ant_idx, rx_ant_idx):
+
+        self.N_v = tx_ant_idx.size * rx_ant_idx.size
+        self.N_e = int((self.N_v*(self.N_v-1))/2)
+        self.N_n = self.rc_config.num_neurons * self.N_v
+        self.N_n_per_vertex = self.rc_config.num_neurons
+
+        self.N_out = self.N_f * self.N_v
+        self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
+
+        # Initialize adjacency matrix (currently static for all time steps)
+        self.max_adjacency = self.N_v
+
+        # Initialize weight matrices
+        self.init_weights()
+
     # @tf.function(jit_compile=True)
-    def training(self, edge_weights, tril_indices, curr_channels, antenna_selections, i, optimizer):
+    def training(self, edge_weights, curr_channels, tx_ant_idx, rx_ant_idx, optimizer):
 
         num_training_steps = (self.history_len-1) * self.syms_per_subframe
-        
-        # Find antenna elements of current graph
-        tx_ant_idx = antenna_selections[i]['transmitter_indices']
-        rx_ant_idx = antenna_selections[i]['receiver_indices']
         
         # Get input-label pair for training data and testing data
         channel_train_input_list = [tf.cast(curr_channels[:num_training_steps, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
@@ -496,48 +682,6 @@ class gesn_pred_freq_mimo:
 
 
         return adjacency_matrix
-
-    
-    # def siso_predict_tmp(self, h_freq_csi_history):
-
-    #     h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
-    #     h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
-
-    #     num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
-    #     h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
-    #     h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
-
-    #     num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
-
-    #     channel_train_input_list = []
-    #     channel_train_gt_list = []
-    #     channel_test_input_list = []
-
-    #     for tx_node_idx in range(self.num_tx_nodes):
-    #         for rx_node_idx in range(self.num_rx_nodes):
-                
-    #             if tx_node_idx == 0:
-    #                 tx_ant_idx = np.arange(0,self.num_bs_ant)
-    #             else:
-    #                 tx_ant_idx = np.arange(self.num_bs_ant + (tx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (tx_node_idx)*self.num_ue_ant)
-    #             tx_ant_idx = tx_ant_idx[0]
-                
-    #             if rx_node_idx == 0:
-    #                 rx_ant_idx = np.arange(0,self.num_bs_ant)
-    #             else:
-    #                 rx_ant_idx = np.arange(self.num_bs_ant + (rx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (rx_node_idx)*self.num_ue_ant)
-    #             rx_ant_idx = rx_ant_idx[0]
-                
-    #             channel_train_input_list.append(h_freq_csi_history_reshaped[:num_training_steps,rx_ant_idx, :, :][:, tx_ant_idx, :])
-    #             channel_train_gt_list.append(h_freq_csi_history_reshaped[-num_training_steps:,rx_ant_idx, :, :][:, tx_ant_idx, :])
-    #             channel_test_input_list.append(h_freq_csi_history_reshaped[-self.syms_per_subframe:,rx_ant_idx,...][:, tx_ant_idx, :]) # TRY: If this doesn't work, try making them all 2x2 matrices
-
-    #     pred_channel_training = self.fitting_time(channel_train_input_list, channel_train_gt_list)
-
-    #     channel_pred_temp = self.test_train_predict(channel_test_input_list)
-
-    #     channel_pred = tf.convert_to_tensor(channel_pred_temp)
-    #     return channel_pred
     
     def mimo_predict(self, h_freq_csi_history):
 
@@ -666,7 +810,7 @@ class gesn_pred_freq_mimo:
         internal_states_history = self.state_transit_parallel_v2(input)
         
         self.W_out = tf.cast(self.W_out, tf.complex64)
-                
+
         for vertex_idx in range(self.N_v):
 
             curr_state_inds = tf.range(vertex_idx * self.N_n_per_vertex, (vertex_idx + 1) * self.N_n_per_vertex)
