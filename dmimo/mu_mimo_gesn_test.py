@@ -149,20 +149,6 @@ class MU_MIMO(Model):
         :return: decoded bits, uncoded BER, demodulated QAM symbols (for debugging purpose)
         """
 
-        if not self.cfg.return_estimated_channel:
-            # LDPC encoder processing
-            info_bits = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
-                                            self.num_codewords, self.encoder.k])
-            c = self.encoder(info_bits)
-            c = tf.reshape(c, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords * self.encoder.n])
-
-            # Interleaving for coded bits
-            d = self.intlvr(c)
-
-            # QAM mapping for the OFDM grid
-            x = self.mapper(d)
-            x_rg = self.rg_mapper(x)
-
         if self.cfg.perfect_csi is True:
             # Perfect channel estimation
             h_freq_csi, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
@@ -188,14 +174,10 @@ class MU_MIMO(Model):
                                                              batch_size=self.batch_size)
             h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
             h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
-            
-            # h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
-            # h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
-            # outdated_nmse = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_outdated[0,...])
-                    
+                                
             pred_nmse_testing_model_based = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
         
-            # Get Vanilla RC NMSE for comparison
+            # # Get Vanilla RC NMSE for comparison
             rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
             h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
             h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
@@ -261,170 +243,10 @@ class MU_MIMO(Model):
                                                                slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay,
                                                                cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
-        
-        if self.cfg.return_estimated_channel:
-            return h_freq_csi, rx_snr_db
-        
+                
         pred_nmse_vanilla = pred_nmse
 
         return [pred_nmse_testing_model_based, pred_nmse_testing_grad_descent, pred_nmse_vanilla]
-        
-        h_freq_csi_all = h_freq_csi
-
-        # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-        h_freq_csi = h_freq_csi[:, :, :self.num_rxs_ant, :, :, :, :]
-
-        # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-        h_freq_csi =tf.reshape(h_freq_csi, (-1, self.num_rx_ue, self.num_ue_ant, *h_freq_csi.shape[3:]))
-
-        # apply precoding to OFDM grids
-        if self.cfg.precoding_method == "ZF":
-            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi])
-        elif self.cfg.precoding_method == "BD":
-            x_precoded, g = self.bd_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
-        elif self.cfg.precoding_method == "None":
-            if self.cfg.ue_ranks[0] == 2:
-                x_precoded = x_rg
-            elif self.cfg.ue_ranks[0] == 1:
-                x_precoded = tf.repeat(x_rg, repeats=2, axis=2)
-            else:
-                ValueError("unsupported number of streams")
-        else:
-            ValueError("unsupported precoding method")
-
-        # add CFO/STO to simulate synchronization errors
-        if self.sto_sigma > 0:
-            x_precoded = add_timing_offset(x_precoded, self.sto_sigma)
-        if self.cfo_sigma > 0:
-            x_precoded = add_frequency_offset(x_precoded, self.cfo_sigma)
-
-        # apply dMIMO channels to the resource grid in the frequency domain.
-        y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
-
-        # SINR calculation
-        # if self.cfg.precoding_method != "None":
-            
-        #     sinr_calculation = True
-        #     sinr_dB_arr = np.zeros((self.cfg.num_rx_ue_sel+1, self.batch_size))
-        #     dmimo_chans._add_noise = False
-
-        #     num_UE_Ant = 2
-        #     num_BS_Ant = 4
-
-        #     for node_idx in range(self.cfg.num_rx_ue_sel+1):
-
-        #         x_precoded_sinr, _ = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_ranks[0]])
-        #         y_sinr = dmimo_chans([x_precoded_sinr, self.cfg.first_slot_idx])
-                
-        #         if node_idx == 0:
-
-        #             if self.cfg.precoding_method == "ZF":
-        #                 num_BS_streams = self.cfg.ue_ranks[0]*2
-        #                 zeros_slice = tf.zeros_like(x_rg[:, :, num_BS_streams:, ...])
-        #                 x_rg_tmp = tf.concat([x_rg[:, :, :num_BS_streams, ...], zeros_slice], axis=2)
-        #                 x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
-        #             else:
-        #                 ValueError("unsupported precoding method for SINR calculation")
-                    
-        #             if self.cfg.ue_ranks[0] == 1:
-        #                 ant_indices = np.arange(0, num_BS_Ant,2)
-        #             elif self.cfg.ue_ranks[0] ==2:
-        #                 ant_indices = np.arange(num_BS_Ant)
-
-        #             sig_all = tf.gather(y_sinr, ant_indices, axis=-3)
-        #             sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
-        #             sig_intended = tf.gather(sig_intended, ant_indices, axis=-3)
-        #             sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
-        #             interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
-        #             rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,:4,:], axis=(1,2,3)) / 10)
-        #             noise_pow = sig_pow / rx_snr_linear
-        #             sinr_linear = sig_pow / (interf_pow + noise_pow)
-        #             sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
-
-        #             print("BS sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
-
-        #         else:
-
-        #             if self.cfg.ue_ranks[0] == 1:
-        #                 ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant, 2)
-        #             elif self.cfg.ue_ranks[0] ==2:
-        #                 ant_indices = np.arange((node_idx-1)*num_UE_Ant  + num_BS_Ant, node_idx*num_UE_Ant + num_BS_Ant)
-
-                    
-        #             stream_indices = np.arange(self.cfg.ue_ranks[0]*2 + (node_idx-1)*self.cfg.ue_ranks[0], self.cfg.ue_ranks[0]*2 + node_idx*self.cfg.ue_ranks[0])
-
-        #             if self.cfg.precoding_method == "ZF":
-        #                 mask = tf.reduce_any(tf.equal(tf.range(x_rg.shape[2])[..., tf.newaxis], stream_indices), axis=-1)
-        #                 mask = tf.cast(mask, x_rg.dtype)
-        #                 mask = tf.reshape(mask, [1, 1, -1, 1, 1])
-        #                 x_rg_tmp = x_rg * mask
-        #                 x_precoded_tmp, _ = self.zf_precoder([x_rg_tmp, h_freq_csi, self.cfg.ue_ranks[0]])
-        #             else:
-        #                 ValueError("unsupported precoding method for SINR calculation")
-                    
-        #             sig_all = tf.gather(y_sinr, ant_indices, axis=2)
-        #             sig_intended = dmimo_chans([x_precoded_tmp, self.cfg.first_slot_idx])
-        #             sig_intended = tf.gather(sig_intended, ant_indices, axis=2)
-        #             sig_pow = tf.reduce_sum(tf.square(tf.abs(sig_intended)), axis=[1, 2, 3, 4])
-        #             interf_pow = tf.reduce_sum(tf.square(tf.abs(sig_all - sig_intended)), axis=[1, 2, 3, 4])
-        #             rx_snr_linear = 10**(np.mean(rx_snr_db[:,:,ant_indices,:], axis=(1,2,3)) / 10)
-        #             noise_pow = sig_pow / rx_snr_linear
-        #             sinr_linear = sig_pow / (interf_pow + noise_pow)
-
-        #             if tf.reduce_any(tf.equal(sinr_linear, 0)):
-        #                 sinr_linear = rx_snr_linear / 2
-                    
-        #             sinr_dB_arr[node_idx, :] = 10*np.log10(sinr_linear)
-                    
-        #             print("UE ", node_idx-1, " sinr_dB: ", sinr_dB_arr[node_idx, :], "\n")
-
-                    
-        #             if (sinr_dB_arr[node_idx, :] == np.inf).any():
-        #                 hold = 1
-
-        # else:
-        #     sinr_dB_arr = None
-        sinr_dB_arr = None
-
-        # make proper shape
-        y = y[:, :, :self.num_rxs_ant, :, :]
-        y = tf.reshape(y, (self.batch_size, self.num_rx_ue, self.num_ue_ant, 14, -1))
-
-        if self.cfg.precoding_method == "BD":
-            y = self.bd_equalizer([y, h_freq_csi, self.cfg.ue_indices, self.cfg.ue_ranks])
-
-        # LS channel estimation with linear interpolation
-        no = 0.1  # initial noise estimation (tunable param)
-        h_hat, err_var = self.ls_estimator([y, no])
-
-        # LMMSE equalization
-        x_hat, no_eff = self.lmmse_equ([y, h_hat, err_var, no]) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols]
-
-        # Soft-output QAM demapper
-        llr = self.demapper([x_hat, no_eff])
-
-        # Hard-decision bit error rate
-        d_hard = tf.cast(llr > 0, tf.float32) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols * QAM order]
-        uncoded_ber = compute_ber(d, d_hard).numpy()
-
-        # Hard-decision symbol error rate
-        x_hard = self.mapper(d_hard)
-        uncoded_ser = np.count_nonzero(x - x_hard) / np.prod(x.shape)
-        num_tx_streams_per_node = int(self.cfg.num_tx_streams/(self.cfg.num_rx_ue_sel+2))
-        node_wise_uncoded_ser = compute_UE_wise_SER(x ,x_hard, num_tx_streams_per_node, self.cfg.num_tx_streams)
-
-        # LLR deinterleaver for LDPC decoding
-        llr = self.dintlvr(llr)
-        llr = tf.reshape(llr, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.n])
-
-        # LDPC hard-decision decoding
-        dec_bits = self.decoder(llr) # Shape: [nbatches, 1, number of streams, 1, number of effective subcarriers * number of data OFDM symbols * QAM order * code rate]
-
-        if self.cfg.rank_adapt and self.cfg.link_adapt:
-            # h_freq_csi_reshaped = tf.reshape(h_freq_csi, shape_tmp)
-            do_rank_link_adaptation(self.cfg, dmimo_chans, h_freq_csi_all, rx_snr_db, self.cfg.first_slot_idx)
-
-        return dec_bits, uncoded_ber, uncoded_ser, node_wise_uncoded_ser, x_hat, sinr_dB_arr
 
 
 def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_slot_idx=None, mu_mimo=None):
@@ -529,14 +351,6 @@ def sim_mu_mimo(cfg: SimConfig):
         tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
         ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
-    # Initial rank and link adaptation
-    mu_mimo_tmp = MU_MIMO(cfg)
-    binary_source = BinarySource()
-    info_bits = binary_source([cfg.num_slots_p2, mu_mimo_tmp.num_bits_per_frame])
-    ranks_list = []
-    if cfg.rank_adapt and cfg.link_adapt and cfg.first_slot_idx == cfg.start_slot_idx:
-        do_rank_link_adaptation(cfg, dmimo_chans=dmimo_chans, mu_mimo=mu_mimo_tmp)
-
     # Create MU-MIMO simulation
     mu_mimo = MU_MIMO(cfg)
 
@@ -544,51 +358,8 @@ def sim_mu_mimo(cfg: SimConfig):
     binary_source = BinarySource()
     info_bits = binary_source([cfg.num_slots_p2, mu_mimo.num_bits_per_frame])
 
-    # TxSquad transmission (P1)
-    if cfg.enable_txsquad is True:
-        tx_squad = TxSquad(cfg, mu_mimo.num_bits_per_frame)
-        txs_chans = dMIMOChannels(ns3cfg, "TxSquad", add_noise=True)
-        info_bits_new, txs_ber, txs_bler = tx_squad(txs_chans, info_bits)
-        # print("BER: {}  BLER: {}".format(txs_ber, txs_bler))
-        assert txs_ber <= 1e-3, "TxSquad transmission BER too high"
-
     # MU-MIMO transmission (P2)
-    # dec_bits, uncoded_ber, uncoded_ser,node_wise_uncoded_ser, x_hat, sinr_dB_arr = mu_mimo(dmimo_chans, info_bits)
     [pred_nmse_testing_model_based, pred_nmse_testing_grad_descent, pred_nmse_vanilla] = mu_mimo(dmimo_chans, info_bits)
-    # ranks_list.append(int(cfg.num_tx_streams / (cfg.num_rx_ue_sel+2)))
-
-    # Update average error statistics
-    # info_bits = tf.reshape(info_bits, dec_bits.shape)
-    # coded_ber = compute_ber(info_bits, dec_bits).numpy()
-    # coded_bler = compute_bler(info_bits, dec_bits).numpy()
-
-    # # Update per-node error statistics
-    # num_tx_streams_per_node = int(cfg.num_tx_streams/(cfg.num_rx_ue_sel+2))
-    # node_wise_ber, node_wise_bler = compute_UE_wise_BER(info_bits, dec_bits, num_tx_streams_per_node, cfg.num_tx_streams)
-    
-
-    # # RxSquad transmission (P3)
-    # if cfg.enable_rxsquad is True:
-    #     rxcfg = cfg.clone()
-    #     rxcfg.csi_delay = 0
-    #     rxcfg.perfect_csi = True
-    #     rx_squad = RxSquad(rxcfg, mu_mimo.num_bits_per_frame)
-    #     # print("RxSquad using modulation order {} for {} streams / {}".format(
-    #     #     rx_squad.num_bits_per_symbol, mu_mimo.num_streams_per_tx, mu_mimo.mapper.constellation.num_bits_per_symbol))
-    #     rxscfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
-    #     rxs_chans = dMIMOChannels(rxscfg, "RxSquad", add_noise=True)
-    #     received_bits, rxs_ber, rxs_bler, rxs_ber_max, rxs_bler_max = rx_squad(rxs_chans, dec_bits)
-    #     print("BER: {}  BLER: {}".format(rxs_ber, rxs_bler))
-    #     assert rxs_ber <= 1e-3 and rxs_ber_max <= 1e-2, "RxSquad transmission BER too high"
-
-    # # Goodput and throughput estimation
-    # goodbits = (1.0 - coded_ber) * mu_mimo.num_bits_per_frame
-    # userbits = (1.0 - coded_bler) * mu_mimo.num_bits_per_frame
-    # ratedbits = (1.0 - uncoded_ser) * mu_mimo.num_uncoded_bits_per_frame
-
-    # node_wise_goodbits = (1.0 - node_wise_ber) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
-    # node_wise_userbits = (1.0 - node_wise_bler) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
-    # node_wise_ratedbits = (1.0 - node_wise_uncoded_ser) * mu_mimo.num_bits_per_frame / (cfg.num_rx_ue_sel + 1)
 
     return pred_nmse_testing_model_based, pred_nmse_testing_grad_descent, pred_nmse_vanilla
 
