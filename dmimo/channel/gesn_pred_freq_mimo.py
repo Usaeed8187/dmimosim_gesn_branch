@@ -25,8 +25,6 @@ class gesn_pred_freq_mimo:
                 cp_len=64,
                 num_subcarriers=512,
                 subcarrier_spacing=15e3,
-                num_epochs=1,
-                learning_rate = 0.2,
                 batch_size = 1,
                 edge_weighting_method='grad_descent'):
         
@@ -70,8 +68,8 @@ class gesn_pred_freq_mimo:
         self.cp_len = cp_len
         self.num_subcarriers = num_subcarriers
         self.subcarrier_spacing = subcarrier_spacing
-        self.num_epochs = num_epochs
-        self.learning_rate = learning_rate
+        self.num_epochs = self.rc_config.num_epochs
+        self.learning_rate = self.rc_config.lr
         self.weight_initialization = "model_based" # 'model_based', 'ones'
         self.batch_size = batch_size
 

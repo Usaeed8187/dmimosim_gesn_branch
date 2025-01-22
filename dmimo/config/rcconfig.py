@@ -23,6 +23,8 @@ class RCConfig(Config):
         self._history_len = 3 # number of subframes that we use to train
         self._prediction_on = True
         self._treatment = 'SISO' # SISO, vectorized_MIMO, piece_wise_vectorized_MIMO, TODO: piece_wise_vectorized_MIMO not currently implemented
+        self._num_epochs = 50 # number of epochs for gradient descent
+        self._lr = 0.2 # learning rate for gradient descent
 
         super().__init__(**kwargs)
 
@@ -153,3 +155,19 @@ class RCConfig(Config):
     @treatment.setter
     def treatment(self, val):
         self._treatment = val
+
+    @property
+    def num_epochs(self):
+        return self._num_epochs
+
+    @num_epochs.setter
+    def num_epochs(self, val):
+        self._num_epochs = val
+
+    @property
+    def lr(self):
+        return self._lr
+
+    @lr.setter
+    def treatment(self, val):
+        self._lr = val

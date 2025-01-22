@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
 
-from dmimo.config import SimConfig
+from dmimo.config import SimConfig, RCConfig
 from dmimo.mu_mimo_gesn_test import sim_mu_mimo_all
 
 
@@ -64,8 +64,9 @@ if len(arguments) > 0:
 if __name__ == "__main__":
 
     # Simulation settings
+    rc_config = RCConfig()
     cfg = SimConfig()
-    cfg.total_slots = 46        # total number of slots in ns-3 channels
+    cfg.total_slots = 34        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
@@ -77,6 +78,8 @@ if __name__ == "__main__":
         # rx_ues_arr = [1,2,4,6]
         rx_ues_arr = [1]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
+    rc_config.lr = 0.2
+    rc_config.num_epochs = 50
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("results", folder_name), exist_ok=True)
@@ -112,7 +115,7 @@ if __name__ == "__main__":
         cfg.precoding_method = "ZF"
         pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent, pred_nmse_vanilla = sim_mu_mimo_all(cfg)
 
-        folder_path = "results/channels_multiple_mu_mimo/results/{}".format(folder_name)
+        folder_path = "results/channels_multiple_mu_mimo/results_epochs_{}_lr_{}/{}".format(rc_config.num_epochs, rc_config.lr, folder_name)
         os.makedirs(folder_path, exist_ok=True)
         np.savez("{}/mu_mimo_results_UE_{}_pred.npz".format(folder_path, rx_ues_arr[ue_arr_idx]),
                 pred_nmse_gesn_model_based=pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent=pred_nmse_gesn_grad_descent,
