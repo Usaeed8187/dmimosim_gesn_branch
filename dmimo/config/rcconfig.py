@@ -169,5 +169,5 @@ class RCConfig(Config):
         return self._lr
 
     @lr.setter
-    def treatment(self, val):
+    def lr(self, val):
         self._lr = val
