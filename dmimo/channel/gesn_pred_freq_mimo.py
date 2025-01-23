@@ -192,7 +192,9 @@ class gesn_pred_freq_mimo:
         return h_freq_csi_history
 
 
-    def predict(self, h_freq_csi_history):
+    def predict(self, h_freq_csi_history, gt_channel=None):
+        
+        self.gt_channel = gt_channel
 
         if self.rc_config.treatment == 'SISO':
             if self.method == 'per_node_pair':
@@ -464,12 +466,16 @@ class gesn_pred_freq_mimo:
                 print("predicting for rx antennas: ", rx_ant_idx)
                 print("predicting for tx antennas: ", tx_ant_idx)
 
+                hold = 1
+
                 # Store output
                 for count_rx, rx in enumerate(rx_ant_idx):
                     for count_tx, tx in enumerate(tx_ant_idx):
-                        node_idx = count_rx * self.num_tx_nodes + count_tx
+                        node_idx = count_rx * tx_ant_idx.size + count_tx
 
                         channel_pred[:, rx, tx, :] = tf.transpose(channel_pred_temp[node_idx])
+                
+                hold = 1
 
         channel_pred = tf.convert_to_tensor(channel_pred)
         channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
