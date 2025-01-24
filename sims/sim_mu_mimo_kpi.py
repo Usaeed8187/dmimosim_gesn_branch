@@ -76,7 +76,7 @@ if __name__ == "__main__":
         mobility = 'high_mobility'
         drop_idx = '1'
         # rx_ues_arr = [1,2,4,6]
-        rx_ues_arr = [4]
+        rx_ues_arr = [1]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
     rc_config.lr = 0.2
     rc_config.num_epochs = 50

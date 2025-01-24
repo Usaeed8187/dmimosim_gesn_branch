@@ -186,11 +186,11 @@ class MU_MIMO(Model):
             # h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
             # pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
             
-            # # Compare with gradient descent GESN
-            # h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-            #                                         batch_size=self.batch_size)
-            # h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
-            # h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
+            # Compare with gradient descent GESN
+            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                    batch_size=self.batch_size)
+            h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
+            h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
 
             rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
                                                     num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method=self.cfg.graph_formulation, 
@@ -203,8 +203,8 @@ class MU_MIMO(Model):
             pred_nmse_testing_per_node_pair = None
 
             # Print out all results
-            print("GESN (per_node_pair): ", pred_nmse_testing_per_antenna_pair)
-            print("GESN (per_antenna_pair)): ", pred_nmse_testing_per_node_pair)
+            print("GESN (per_antenna_pair): ", pred_nmse_testing_per_antenna_pair)
+            print("GESN (per_node_pair)): ", pred_nmse_testing_per_node_pair)
             print("Vanilla ESN: ", pred_nmse, "\n")
 
             # Test plots
@@ -237,8 +237,6 @@ class MU_MIMO(Model):
                 plt.savefig('prediction_comparison')
                 # plt.show()
             plot = False
-
-            h_freq_csi = rc_predictor.rb_demapper(h_freq_csi)
 
         else:
             # LMMSE channel estimation
