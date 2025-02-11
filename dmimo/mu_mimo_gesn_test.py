@@ -200,7 +200,6 @@ class MU_MIMO(Model):
             h_freq_csi_grad_descent = rc_predictor.predict(h_freq_csi_history, h_freq_csi_true[0,...])
 
             pred_nmse_wgesn_per_antenna_pair = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_grad_descent)
-
             
             # Print out all results
             print("\nESN: ", pred_nmse_esn)

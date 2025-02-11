@@ -391,7 +391,7 @@ class gesn_pred_freq_mimo:
 
         self.adjacency_matrix = tf.ones((self.N_v, self.N_v), dtype=float)
 
-        if self.vector_inputs:
+        if self.vector_inputs == 'tx_ants':
 
             edge_weights_4_4 = tf.Variable(
                 initial_value=tf.random.uniform(
@@ -423,7 +423,55 @@ class gesn_pred_freq_mimo:
                 ),
                 trainable=True,
                 dtype=tf.float32,
+                name="edge_weights_2_4"
+            )
+
+            edge_weights_2_2 = tf.Variable(
+                initial_value=tf.random.uniform(
+                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
+                    minval=0.0,
+                    maxval=1.0
+                ),
+                trainable=True,
+                dtype=tf.float32,
+                name="edge_weights_2_2"
+            )
+
+            all_trainable_variables = [edge_weights_4_4, edge_weights_4_2, edge_weights_2_4, edge_weights_2_2]
+
+        elif self.vector_inputs == 'rx_ants':
+            
+            edge_weights_4_4 = tf.Variable(
+                initial_value=tf.random.uniform(
+                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
+                    minval=0.0,
+                    maxval=1.0
+                ),
+                trainable=True,
+                dtype=tf.float32,
+                name="edge_weights_4_4"
+            )
+
+            edge_weights_4_2 = tf.Variable(
+                initial_value=tf.random.uniform(
+                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
+                    minval=0.0,
+                    maxval=1.0
+                ),
+                trainable=True,
+                dtype=tf.float32,
                 name="edge_weights_4_2"
+            )
+
+            edge_weights_2_4 = tf.Variable(
+                initial_value=tf.random.uniform(
+                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
+                    minval=0.0,
+                    maxval=1.0
+                ),
+                trainable=True,
+                dtype=tf.float32,
+                name="edge_weights_2_4"
             )
 
             edge_weights_2_2 = tf.Variable(
@@ -500,7 +548,7 @@ class gesn_pred_freq_mimo:
 
                 self.update_graph_dimensions(tx_ant_idx, rx_ant_idx)
                 
-                if self.vector_inputs:
+                if self.vector_inputs == 'tx_ants' or self.vector_inputs == 'rx_ants':
                     if tx_ant_idx.size == self.num_bs_ant and rx_ant_idx.size == self.num_bs_ant:
                         edge_weights = edge_weights_4_4
                     elif tx_ant_idx.size == self.num_bs_ant:
@@ -517,11 +565,19 @@ class gesn_pred_freq_mimo:
                     else:
                         edge_weights = edge_weights_2_2
 
-                if self.vector_inputs:
+                if self.vector_inputs == 'tx_ants':
                     curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
                     curr_channels = curr_channels.reshape(*curr_channels.shape[:2], 1, -1)
                     tx_ant_idx_tmp = tx_ant_idx
                     tx_ant_idx = np.array([0])
+                    channel_test_input_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+                elif self.vector_inputs == 'rx_ants':
+                    curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
+                    curr_channels = curr_channels.transpose(0,2,1,3)
+                    curr_channels = curr_channels.reshape(*curr_channels.shape[:2], 1, -1)
+                    curr_channels = curr_channels.transpose(0,2,1,3)
+                    rx_ant_idx_tmp = rx_ant_idx
+                    rx_ant_idx = np.array([0])
                     channel_test_input_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
                 else:
                     curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
@@ -535,13 +591,21 @@ class gesn_pred_freq_mimo:
                 channel_pred_temp = self.test_train_predict(channel_test_input_list)
 
                 # Store output
-                if self.vector_inputs:
+                if self.vector_inputs == 'tx_ants':
                     tx_ant_idx = tx_ant_idx_tmp
                     for count_rx, rx in enumerate(rx_ant_idx):
                         node_idx = count_rx
                         channel_pred_temp_reshaped = tf.transpose(channel_pred_temp[node_idx][:,self.syms_per_subframe:])
                         channel_pred_temp_reshaped = tf.reshape(channel_pred_temp_reshaped, channel_pred[:, rx, tx_ant_idx, :].shape)
                         channel_pred[:, rx, tx_ant_idx, :] = channel_pred_temp_reshaped
+                elif self.vector_inputs == 'rx_ants':
+                    rx_ant_idx = rx_ant_idx_tmp
+                    for count_tx, tx in enumerate(tx_ant_idx):
+                        node_idx = count_tx
+                        channel_pred_temp_reshaped = tf.transpose(channel_pred_temp[node_idx][:,self.syms_per_subframe:])
+                        channel_pred_temp_reshaped = tf.reshape(channel_pred_temp_reshaped, channel_pred[:, rx_ant_idx, tx, :].shape)
+                        channel_pred[:, rx_ant_idx, tx, :] = channel_pred_temp_reshaped
+
                 else:
                     for count_rx, rx in enumerate(rx_ant_idx):
                         for count_tx, tx in enumerate(tx_ant_idx):
@@ -557,13 +621,32 @@ class gesn_pred_freq_mimo:
 
     def update_graph_dimensions(self, tx_ant_idx, rx_ant_idx):
         
-        if self.vector_inputs:
+        if self.vector_inputs == 'tx_ants':
             self.N_v = rx_ant_idx.size
             self.N_e = int((self.N_v*(self.N_v-1))/2)
             self.N_n = self.rc_config.num_neurons * self.N_v
             self.N_n_per_vertex = self.rc_config.num_neurons
 
             self.N_f = self.N_RB * tx_ant_idx.size
+            self.N_out = self.N_f * self.N_v
+            self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
+
+            self.max_adjacency = self.N_v
+
+            if self.enable_window:
+                self.N_in = self.N_f * self.window_length
+            else:
+                self.N_in = self.N_f
+            
+            self.init_weights()
+        elif self.vector_inputs == 'rx_ants':
+            
+            self.N_v = tx_ant_idx.size
+            self.N_e = int((self.N_v*(self.N_v-1))/2)
+            self.N_n = self.rc_config.num_neurons * self.N_v
+            self.N_n_per_vertex = self.rc_config.num_neurons
+
+            self.N_f = self.N_RB * rx_ant_idx.size
             self.N_out = self.N_f * self.N_v
             self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
 
@@ -750,9 +833,12 @@ class gesn_pred_freq_mimo:
 
             # Identify significant taps
             significant_taps = tf.cast(power > threshold, tf.float32)
-            if self.vector_inputs:
+            if self.vector_inputs == 'tx_ants':
                 batch_size, num_rx_antennas, _, _ = significant_taps.shape
                 flattened_taps = tf.reshape(significant_taps, (batch_size, num_rx_antennas, -1))
+            elif self.vector_inputs == 'rx_ants':
+                batch_size, _, num_tx_antennas, _ = significant_taps.shape
+                flattened_taps = tf.reshape(significant_taps, (batch_size, num_tx_antennas, -1))
             else:
                 batch_size, num_rx_antennas, num_tx_antennas, _ = significant_taps.shape
                 flattened_taps = tf.reshape(significant_taps, (batch_size, num_rx_antennas * num_tx_antennas, -1))
@@ -909,7 +995,7 @@ class gesn_pred_freq_mimo:
             curr_state_inds = tf.range(vertex_idx * self.N_n_per_vertex, (vertex_idx + 1) * self.N_n_per_vertex)
             curr_W_out_inds = tf.range(vertex_idx * (self.N_n_per_vertex + self.N_in), (vertex_idx + 1) * (self.N_n_per_vertex + self.N_in))
             
-            if self.vector_inputs:
+            if self.vector_inputs == 'tx_ants' or self.vector_inputs == 'rx_ants':
                 if self.rc_config.treatment == 'SISO':
                     curr_output_inds = tf.range(vertex_idx*self.N_f, (vertex_idx+1)*self.N_f)
                 elif self.rc_config.treatment == 'MIMO':
@@ -1054,7 +1140,7 @@ class gesn_pred_freq_mimo:
             curr_W_out_inds = tf.range(vertex_idx * (self.N_n_per_vertex + self.N_in), (vertex_idx + 1) * (self.N_n_per_vertex + self.N_in))
 
             curr_input = Y_2D_org[vertex_idx]
-            if self.vector_inputs:
+            if self.vector_inputs == 'tx_ants' or self.vector_inputs == 'rx_ants':
                 if self.rc_config.treatment == 'SISO':
                     curr_output_inds = tf.range(vertex_idx * self.N_f, (vertex_idx + 1) * self.N_f)
                 elif self.rc_config.treatment == 'MIMO':
