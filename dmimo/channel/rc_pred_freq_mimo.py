@@ -7,10 +7,9 @@ from dmimo.channel import lmmse_channel_estimation
 
 class standard_rc_pred_freq_mimo:
 
-    def __init__(self, architecture, num_rx_ant=8, num_neurons=None):
+    def __init__(self, architecture, rc_config, num_rx_ant=8, num_neurons=None):
         
         ns3_config = Ns3Config()
-        rc_config = RCConfig()
         self.rc_config = rc_config
 
         self.num_rx_ant = num_rx_ant  # TODO: use node selection mask
@@ -26,6 +25,10 @@ class standard_rc_pred_freq_mimo:
             self.num_freq_re = self.nfft_full
         # self.nfft = int(np.ceil(self.nfft_full / self.subcarriers_per_RB))
         self.nfft = self.nfft_full
+
+        self.window_weighting_method = 'exponential_decay' # 'autocorrelation', 'same_weights', 'exponential_decay'
+        self.window_weight_application = 'none' # across_time, across_inputs, across_time_and_inputs
+        self.match_testing_training_input_size = True
         
         if architecture == 'baseline':
             self.N_t = ns3_config.num_bs_ant
@@ -63,15 +66,7 @@ class standard_rc_pred_freq_mimo:
         seed = 10
         self.RS = np.random.RandomState(seed)
         self.type = rc_config.type # 'real', 'complex'
-        # self.type = 'real' # 'real', 'complex'
-        # if self.type == 'real':
-        #     self.N_in = self.N_r * self.window_length * 2
-        #     self.N_out = self.N_t * 2
-        #     self.S_0 = np.zeros([self.N_n])
-        # else:
-        #     self.N_in = self.N_r * self.window_length
-        #     self.N_out = self.N_t
-        #     self.S_0 = np.zeros([self.N_n], dtype='complex')
+
         if self.enable_window:
             self.N_in = self.num_freq_re * self.N_r * self.N_t * self.window_length
         else:
@@ -187,6 +182,8 @@ class standard_rc_pred_freq_mimo:
             if self.rb_granularity:
                 h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
                 h_freq_csi_predicted = self.rc_siso_predict(h_freq_csi_history)
+            else:
+                h_freq_csi_predicted = self.rc_siso_predict(h_freq_csi_history)
 
             return h_freq_csi_predicted
         else:
@@ -215,6 +212,9 @@ class standard_rc_pred_freq_mimo:
         # channel_train_input = channel_train_input.transpose([1, 2, 3, 4, 5, 6, 0, 7])
         # channel_train_input = channel_train_input.reshape(channel_train_input.shape[:6] + (-1,))
 
+        if not self.enable_window:
+            window_weights = None
+
         # chan_pred_train = np.zeros(h_freq_csi_history[:2,...].shape, dtype=complex)
         chan_pred = np.zeros(h_freq_csi_history[0,...].shape, dtype=complex)
         for batch_idx in range(num_batches):
@@ -230,13 +230,17 @@ class standard_rc_pred_freq_mimo:
                             channel_train_gt_temp = channel_train_gt_temp.transpose([1, 0, 2]).reshape(self.num_freq_re, -1)
                             # channel_train_gt_temp = channel_train_gt_temp.reshape(-1, channel_train_gt_temp.shape[-1])
 
-                            curr_train = self.fitting_time(channel_train_input_temp, channel_train_gt_temp)
+                            if self.enable_window:
+                                window_weights = self.calculate_window_weights(channel_train_input_temp)
+                            curr_train = self.fitting_time(channel_train_input_temp, channel_train_gt_temp, window_weights)
                             # curr_train = curr_train.reshape(channel_train_input[batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...].shape)
                             # chan_pred_train[:, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...] = curr_train
 
-                            # channel_test_input = channel_train_gt_temp
-                            channel_test_input = channel_train_gt[-1, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...]
-                            channel_pred_temp = self.test_train_predict(channel_test_input)
+                            channel_test_input = channel_train_gt_temp
+                            # if self.enable_window:
+                            #     window_weights = self.calculate_window_weights(channel_test_input)
+                            channel_pred_temp = self.test_train_predict(channel_test_input, window_weights)
+                            channel_pred_temp = channel_pred_temp[:, -14:]
                             channel_pred_temp = channel_pred_temp.reshape(channel_train_input[0, batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...].shape)
                             chan_pred[batch_idx, rx_node, rx_ant, tx_node, tx_ant, ...] = channel_pred_temp
 
@@ -246,6 +250,32 @@ class standard_rc_pred_freq_mimo:
         # print(f"train nmse: {train_nmse}")
         return chan_pred
 
+    def calculate_window_weights(self, h_freq_csi_history):
+
+        if self.window_weighting_method == 'autocorrelation':
+            def autocorrelation(x):
+                """Compute the autocorrelation of a 1D signal."""
+                n = len(x)
+                x_mean = np.mean(x)
+                x_var = np.var(x)
+                acf = np.correlate(x - x_mean, x - x_mean, mode='full') / (n * x_var)
+                return acf[n-1:]  # Keep only non-negative lags
+
+            h_reshaped = np.moveaxis(h_freq_csi_history, -1, 0)
+            acf_result = np.apply_along_axis(autocorrelation, 0, h_reshaped)
+            acf_result = np.squeeze(np.mean(acf_result, axis=-1))
+
+            window_weights = np.abs(acf_result)
+        elif self.window_weighting_method == 'same_weights':
+            window_weights = 1
+        elif self.window_weighting_method == 'exponential_decay':
+            # x = np.linspace(0, self.window_length-1, self.history_len*self.num_ofdm_sym)
+            x = np.linspace(0, self.window_length-1, h_freq_csi_history.shape[1])
+            window_weights = np.exp(-x/2)
+        else:
+            raise ValueError("\n The window_weighting_method specified is not implemented")
+        
+        return window_weights
 
     def init_weights(self):
         if self.type == 'real':
@@ -277,7 +307,7 @@ class standard_rc_pred_freq_mimo:
         Y_target_2D_real = np.concatenate(Y_target_2D_real_list, axis=0)
         return Y_target_2D_real
 
-    def fitting_time(self, channel_input, channel_output):
+    def fitting_time(self, channel_input, channel_output, curr_window_weights):
         # @todo only work for SISO
         # channel_input: [32, ]
         Y_2D = channel_input
@@ -294,7 +324,7 @@ class standard_rc_pred_freq_mimo:
         for d in np.arange(self.initial_forget_length, self.max_forget_length, self.forget_length_search_step):
             self.forget_length = d # delay
             if self.enable_window:
-                Y_2D_new = self.form_window_input_signal(Y_2D)  # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
+                Y_2D_new = self.form_window_input_signal(Y_2D, curr_window_weights)  # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
             else:
                 Y_2D_new = np.concatenate([Y_2D, np.zeros([Y_2D.shape[0], self.forget_length], dtype=Y_2D.dtype)], axis=1)
             S_2D_transit = self.state_transit(Y_2D_new * self.input_scale) # (16, 640) (N_n, N_symbols * (N_fft + N_cp))
@@ -341,15 +371,17 @@ class standard_rc_pred_freq_mimo:
         psi_inv_current = float(1) /lambda_temp * (psi_inv_pre - np.matmul(k, np.matmul(np.conj(extended_state.T), psi_inv_pre)))
         return psi_inv_current
 
-    def form_window_input_signal(self, Y_2D_complex):
+    def form_window_input_signal(self, Y_2D_complex, curr_window_weights):
         # Y_2D: [N_r, N_symbols * (N_fft + N_cp)]
+        if self.window_weight_application == 'across_inputs' or self.window_weight_application == 'across_time_and_inputs':
+            Y_2D_complex = Y_2D_complex * curr_window_weights
+
         if self.type == 'real':
             Y_2D = np.concatenate((Y_2D_complex.real, Y_2D_complex.imag), axis=0)
         else:
             Y_2D = copy.deepcopy(Y_2D_complex)
         Y_2D = np.concatenate([Y_2D, np.zeros([Y_2D.shape[0], self.forget_length], dtype=Y_2D.dtype)], axis=1) # [N_r, N_symbols * (N_fft + N_cp) + delay]
         Y_2D_window = []
-
         for n in range(self.window_length):
             shift_y_2d = np.roll(Y_2D, shift=n, axis=-1)
             if self.type == 'real':
@@ -357,19 +389,23 @@ class standard_rc_pred_freq_mimo:
             else:
                 shift_y_2d[:, :n] = 0. + 0.j
             Y_2D_window.append(shift_y_2d) # a method to explore
-
+        
         # Y_2D_window = np.concatenate(Y_2D_window, axis = 0) # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
         if self.type == 'real':
-            Y_2D_window = np.concatenate(Y_2D_window, axis = 1).reshape(self.N_in, -1)
+            Y_2D_window = np.concatenate(Y_2D_window, axis =0)
         else:
-            Y_2D_window = np.concatenate(Y_2D_window, axis=1).reshape(self.N_in, -1)
+            Y_2D_window = np.concatenate(Y_2D_window, axis=0)
+        
+        if self.window_weight_application == 'across_time' or self.window_weight_application == 'across_time_and_inputs':
+            Y_2D_window = Y_2D_window * curr_window_weights
+
         return Y_2D_window
 
-    def test_train_predict(self, channel_train_input):
+    def test_train_predict(self, channel_train_input, curr_window_weights):
         self.S_0 = np.zeros([self.N_n], dtype='complex')
         Y_2D_org = channel_train_input
         if self.enable_window:
-            Y_2D = self.form_window_input_signal(Y_2D_org)  # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
+            Y_2D = self.form_window_input_signal(Y_2D_org, curr_window_weights)  # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
         else:
             Y_2D = np.concatenate([Y_2D_org, np.zeros([Y_2D_org.shape[0], self.forget_length], dtype=Y_2D_org.dtype)], axis=1)
         S_2D = self.state_transit(Y_2D * self.input_scale)

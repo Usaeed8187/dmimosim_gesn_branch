@@ -14,9 +14,9 @@ class RCConfig(Config):
         self._initial_forget_length = 0
         self._max_forget_length = 1
         self._forget_length_search_step = 1
-        self._window_length = 1
+        self._window_length = 3
         self._learning_delay = True
-        self._enable_window = False
+        self._enable_window = True
         self._regularization = 1
         self._type = 'complex' # real, complex
         self._DF_rls = False

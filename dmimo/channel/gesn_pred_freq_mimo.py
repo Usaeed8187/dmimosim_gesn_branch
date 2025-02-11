@@ -15,7 +15,8 @@ from dmimo.channel import lmmse_channel_estimation
 class gesn_pred_freq_mimo:
 
     def __init__(self, 
-                architecture, 
+                architecture,
+                rc_config,
                 len_features=None, 
                 num_rx_ant=8, 
                 num_tx_ant=8, 
@@ -29,7 +30,7 @@ class gesn_pred_freq_mimo:
                 edge_weighting_method='grad_descent'):
         
         ns3_config = Ns3Config()
-        self.rc_config = RCConfig()
+        self.rc_config = rc_config
 
         self.syms_per_subframe = 14
         self.nfft = 512  # TODO: remove hardcoded param value
@@ -73,10 +74,12 @@ class gesn_pred_freq_mimo:
         self.weight_initialization = "model_based" # 'model_based', 'ones'
         self.batch_size = batch_size
         self.method = method
+        self.window_weight_application = 'none'
 
         seed = 10
         self.RS = np.random.RandomState(seed)
         self.type = self.rc_config.type # 'real', 'complex'
+        self.dtype = tf.complex64
 
         # Calculate weight matrix dimensions
         if method == 'per_antenna_pair':
@@ -325,8 +328,8 @@ class gesn_pred_freq_mimo:
 
         # Loop over all possible graphs (MIMO to SISO simplification)
         for i in range(len(antenna_selections)):
-            if self.edge_weighting_method == "grad_descent":
-                print("\n\nGraph {}/{}".format(i+1, len(antenna_selections)))
+            # if self.edge_weighting_method == "grad_descent":
+                # print("\n\nGraph {}/{}".format(i+1, len(antenna_selections)))
             tx_ant_idx = antenna_selections[i]['transmitter_indices']
             rx_ant_idx = antenna_selections[i]['receiver_indices']
 
@@ -421,8 +424,8 @@ class gesn_pred_freq_mimo:
         )
         
         all_trainable_variables = [edge_weights_4_4, edge_weights_4_2, edge_weights_2_2]
-
-        optimizer.build(all_trainable_variables)
+        if self.edge_weighting_method == 'grad_descent':
+            optimizer.build(all_trainable_variables)
 
         current_iteration = 0
 
@@ -431,8 +434,8 @@ class gesn_pred_freq_mimo:
                 
                 current_iteration += 1
 
-                if self.edge_weighting_method == "grad_descent":
-                    print("\n\nGraph {}/{}".format(current_iteration, self.num_tx_nodes * self.num_rx_nodes))
+                # if self.edge_weighting_method == "grad_descent":
+                #     print("\n\nGraph {}/{}".format(current_iteration, self.num_tx_nodes * self.num_rx_nodes))
 
                 if tx_node_idx == 0:
                     tx_ant_idx = np.arange(0,self.num_bs_ant)
@@ -454,7 +457,7 @@ class gesn_pred_freq_mimo:
                     edge_weights = edge_weights_2_2
 
                 curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
-                channel_test_input_list = [tf.cast(curr_channels[num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+                channel_test_input_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
 
                 self.adjacency_matrix = self.cal_edge_weights_tf(csi_history=curr_channels)
 
@@ -463,8 +466,8 @@ class gesn_pred_freq_mimo:
                 # Generate output from trained model
                 channel_pred_temp = self.test_train_predict(channel_test_input_list)
 
-                print("predicting for rx antennas: ", rx_ant_idx)
-                print("predicting for tx antennas: ", tx_ant_idx)
+                # print("predicting for rx antennas: ", rx_ant_idx)
+                # print("predicting for tx antennas: ", tx_ant_idx)
 
                 hold = 1
 
@@ -473,7 +476,7 @@ class gesn_pred_freq_mimo:
                     for count_tx, tx in enumerate(tx_ant_idx):
                         node_idx = count_rx * tx_ant_idx.size + count_tx
 
-                        channel_pred[:, rx, tx, :] = tf.transpose(channel_pred_temp[node_idx])
+                        channel_pred[:, rx, tx, :] = tf.transpose(channel_pred_temp[node_idx][:,self.syms_per_subframe:])
                 
                 hold = 1
 
@@ -513,17 +516,10 @@ class gesn_pred_freq_mimo:
             # For debugging, calculate the initial loss and print it out along with the initial edge weights
             self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
             self.W_out = self.RS.randn(self.N_out, (self.N_n_per_vertex + self.N_in) * self.N_v) + 1j * self.RS.randn(self.N_out, (self.N_n_per_vertex + self.N_in) * self.N_v)
-            # self.fitting_time_parallel(channel_train_input_list, channel_train_gt_list)
-            self.fitting_time(channel_train_input_list, channel_train_gt_list)
-            input_channel_list = [curr_channels[self.syms_per_subframe:num_training_steps, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))] # Taking the second-last subframe as input
-            # pred_channel_list = self.test_train_predict_parallel(input_channel_list)
-            pred_channel_list = self.test_train_predict(input_channel_list)
-            pred_channel = tf.convert_to_tensor(pred_channel_list)
-            gt_channel_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]  # Taking the last subframe as ground truth
-            gt_channel = tf.convert_to_tensor(gt_channel_list)
-            gt_channel = tf.transpose(gt_channel, perm=[0,2,1])
+            pred_channel = self.fitting_time(channel_train_input_list, channel_train_gt_list)
+            gt_channel = tf.convert_to_tensor(channel_train_gt_list)
             loss = self.cal_nmse(gt_channel, pred_channel)
-            print(f"Initial loss: {float(loss)}")
+            # print(f"Initial loss: {float(loss)}")
 
             best_loss = loss
             best_edge_weights = edge_weights
@@ -542,15 +538,9 @@ class gesn_pred_freq_mimo:
                     self.adjacency_matrix = tf.linalg.set_diag(self.adjacency_matrix, tf.ones([self.N_v], dtype=tf.float32))
                     
                     # Train the model
-                    self.fitting_time(channel_train_input_list, channel_train_gt_list)
+                    pred_channel = self.fitting_time(channel_train_input_list, channel_train_gt_list)
                     
                     # Calculate training loss
-                    input_channel_list = [curr_channels[self.syms_per_subframe:num_training_steps, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))] # Taking the second-last subframe as input
-                    pred_channel_list = self.test_train_predict(input_channel_list)
-                    pred_channel = tf.convert_to_tensor(pred_channel_list)
-                    gt_channel_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))] # Taking the last subframe as ground truth
-                    gt_channel = tf.convert_to_tensor(gt_channel_list)
-                    gt_channel = tf.transpose(gt_channel, perm=[0,2,1])
                     loss = self.cal_nmse(gt_channel, pred_channel)
 
                 # Compute gradients and update edge_weights
@@ -574,10 +564,10 @@ class gesn_pred_freq_mimo:
             self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
             self.fitting_time(channel_train_input_list, channel_train_gt_list)
 
-            print(f"Lowest loss: {float(best_loss)}")
+            # print(f"Lowest loss: {float(best_loss)}")
 
             end_time = time.time()
-            print("total gradient descent time = ", end_time - start_time)
+            # print("total gradient descent time = ", end_time - start_time)
 
         elif self.edge_weighting_method == "model_based":
 
@@ -810,12 +800,15 @@ class gesn_pred_freq_mimo:
     #     self.W_out = tf.matmul(target_reshaped, self.reg_p_inv_parallel(S_3D_reshaped))
     
     
-    def fitting_time(self, input, target):
+    def fitting_time(self, input, target, curr_window_weights=None):
 
         # internal_states_history = self.state_transit_parallel(input)
+        if self.enable_window:
+            input = self.form_window_input_signal(input, curr_window_weights)  # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
         internal_states_history = self.state_transit_parallel_v2(input)
         
         self.W_out = tf.cast(self.W_out, tf.complex64)
+        pred_channel = []
 
         for vertex_idx in range(self.N_v):
 
@@ -840,6 +833,42 @@ class gesn_pred_freq_mimo:
                 curr_W_out_indices,
                 updates
             )
+
+            pred_channel.append(tf.transpose(updates @ S_2D))
+
+        pred_channel = tf.convert_to_tensor(pred_channel)
+
+        return pred_channel
+    
+    def form_window_input_signal(self, Y_2D_complex, curr_window_weights):
+        # Y_2D: [N_r, N_symbols * (N_fft + N_cp)]
+        Y_2D_complex = tf.convert_to_tensor(Y_2D_complex)
+        if self.window_weight_application == 'across_inputs' or self.window_weight_application == 'across_time_and_inputs':
+            Y_2D_complex = Y_2D_complex * curr_window_weights
+
+        if self.type == 'real':
+            Y_2D = np.concatenate((Y_2D_complex.real, Y_2D_complex.imag), axis=0)
+        else:
+            Y_2D = copy.deepcopy(Y_2D_complex)
+        Y_2D_window = []
+        for n in range(self.window_length):
+            shift_y_2d = np.roll(Y_2D, shift=n, axis=-1)
+            if self.type == 'real':
+                shift_y_2d[:, :n] = 0.
+            else:
+                shift_y_2d[:, :n] = 0. + 0.j
+            Y_2D_window.append(shift_y_2d) # a method to explore
+        
+        # Y_2D_window = np.concatenate(Y_2D_window, axis = 0) # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
+        if self.type == 'real':
+            Y_2D_window = np.concatenate(Y_2D_window, axis=-1)
+        else:
+            Y_2D_window = np.concatenate(Y_2D_window, axis=-1)
+        
+        if self.window_weight_application == 'across_time' or self.window_weight_application == 'across_time_and_inputs':
+            Y_2D_window = Y_2D_window * curr_window_weights
+
+        return Y_2D_window
 
 
     def cal_nmse(self, H, H_hat):
@@ -881,7 +910,10 @@ class gesn_pred_freq_mimo:
 
         return tf.matmul(X_conj_T, regularized_matrix_inv)
 
-    def test_train_predict_parallel(self, channel_train_input):
+    def test_train_predict_parallel(self, channel_train_input, curr_window_weights=None):
+
+        if self.enable_window:
+            channel_train_input = self.form_window_input_signal(channel_train_input, curr_window_weights)  # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
 
         self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
         Y_2D_org = tf.convert_to_tensor(channel_train_input)
@@ -900,7 +932,11 @@ class gesn_pred_freq_mimo:
         return pred_channel
 
     # @tf.function(jit_compile=True)
-    def test_train_predict(self, channel_train_input):
+    def test_train_predict(self, channel_train_input, curr_window_weights=None):
+
+        if self.enable_window:
+            channel_train_input = self.form_window_input_signal(channel_train_input, curr_window_weights)  # [N_r * window_length, N_symbols * (N_fft + N_cp)+delay]
+            channel_train_input = tf.cast(channel_train_input, self.dtype)
 
         self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
         Y_2D_org = channel_train_input

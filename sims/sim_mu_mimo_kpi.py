@@ -66,7 +66,7 @@ if __name__ == "__main__":
     # Simulation settings
     rc_config = RCConfig()
     cfg = SimConfig()
-    cfg.total_slots = 34        # total number of slots in ns-3 channels
+    cfg.total_slots = 50        # total number of slots in ns-3 channels
     cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
@@ -75,11 +75,13 @@ if __name__ == "__main__":
     if arguments == []:
         mobility = 'high_mobility'
         drop_idx = '1'
-        # rx_ues_arr = [1,2,4,6]
         rx_ues_arr = [1]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
     rc_config.lr = 0.2
     rc_config.num_epochs = 50
+    rc_config.enable_window = True
+    rc_config.window_length = 9
+    rc_config.num_neurons = 16
     cfg.graph_formulation = 'per_antenna_pair'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
@@ -114,10 +116,11 @@ if __name__ == "__main__":
         cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
 
         cfg.precoding_method = "ZF"
-        pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent, pred_nmse_vanilla = sim_mu_mimo_all(cfg)
+        pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair = sim_mu_mimo_all(cfg, rc_config)
 
-        folder_path = "results/channels_multiple_mu_mimo/results_{}_epochs_{}_lr_{}/{}".format(cfg.graph_formulation, rc_config.num_epochs, rc_config.lr, folder_name)
+        folder_path = "results/channels_multiple_mu_mimo/results_{}_epochs_{}_lr_{}_window_length_{}/{}".format(cfg.graph_formulation, 
+                                                                    rc_config.num_epochs, rc_config.lr, rc_config.window_length, folder_name)
         os.makedirs(folder_path, exist_ok=True)
         np.savez("{}/mu_mimo_results_UE_{}_pred.npz".format(folder_path, rx_ues_arr[ue_arr_idx]),
-                pred_nmse_gesn_model_based=pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent=pred_nmse_gesn_grad_descent,
-                pred_nmse_vanilla=pred_nmse_vanilla)
+                pred_nmse_esn=pred_nmse_esn, pred_nmse_wesn=pred_nmse_wesn,
+                pred_nmse_gesn_per_antenna_pair=pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair=pred_nmse_wgesn_per_antenna_pair)

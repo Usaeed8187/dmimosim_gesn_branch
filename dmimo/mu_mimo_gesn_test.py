@@ -15,7 +15,7 @@ from sionna.mapping import Mapper, Demapper
 from sionna.utils import BinarySource
 from sionna.utils.metrics import compute_ber, compute_bler
 
-from dmimo.config import Ns3Config, SimConfig, NetworkConfig
+from dmimo.config import Ns3Config, SimConfig, NetworkConfig, RCConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_mimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
@@ -27,7 +27,7 @@ from .rxs_mimo import RxSquad
 
 class MU_MIMO(Model):
 
-    def __init__(self, cfg: SimConfig, **kwargs):
+    def __init__(self, cfg: SimConfig, rc_config: RCConfig, **kwargs):
         """
         Create MU-MIMO simulation object
 
@@ -36,6 +36,7 @@ class MU_MIMO(Model):
         super().__init__(trainable=False, **kwargs)
 
         self.cfg = cfg
+        self.rc_config = rc_config
         self.batch_size = cfg.num_slots_p2  # batch processing for all slots in phase 2
 
         # CFO and STO settings
@@ -157,7 +158,7 @@ class MU_MIMO(Model):
             if self.cfg.predictor == 'standard_rc':
                 rc_predictor = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2)
             elif self.cfg.predictor == 'gesn':
-                rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
+                rc_predictor = gesn_pred_freq_mimo('MU_MIMO', self.rc_config, num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
                                                     num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method='per_node_pair', 
                                                     num_neurons=16, edge_weighting_method='model_based') # edge_weighting_method: 'model_based', 'grad_descent'
             
@@ -166,46 +167,47 @@ class MU_MIMO(Model):
             h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
                                                                 self.rg_csi, dmimo_chans)
             # Do channel prediction
-            # h_freq_csi = rc_predictor.predict(h_freq_csi_history)
-            # _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
 
-            # # Get true and outdated channels for comparison
-            # h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-            #                                                  batch_size=self.batch_size)
-            # h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
-            # h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
+            # Get Vanilla RC NMSE for comparison
+            self.rc_config.enable_window = True
+            rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', self.rc_config, num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
+                                                    num_neurons=self.rc_config.num_neurons)
+            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                    batch_size=self.batch_size)
+            h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
+            h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
+            pred_nmse_wesn = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
 
-            # pred_nmse_testing_per_node_pair = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi)
-
-            # # Get Vanilla RC NMSE for comparison
-            # rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=64)
-            # h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
-            # h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-            #                                     batch_size=self.batch_size)
-            # # h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
-            # h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
-            # pred_nmse = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
+            self.rc_config.enable_window = False
+            rc_predictor_vanilla = standard_rc_pred_freq_mimo('MU_MIMO', self.rc_config, num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, num_neurons=self.rc_config.num_neurons)
+            h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
+            pred_nmse_esn = rc_predictor_vanilla.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
             
             # Compare with gradient descent GESN
-            h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-                                                    batch_size=self.batch_size)
             h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
-            h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
-
-            rc_predictor = gesn_pred_freq_mimo('MU_MIMO', num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
+            self.rc_config.enable_window = False
+            rc_predictor = gesn_pred_freq_mimo('MU_MIMO', self.rc_config, num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
                                                     num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method=self.cfg.graph_formulation, 
                                                     num_neurons=16, edge_weighting_method='grad_descent') # edge_weighting_method: 'model_based', 'grad_descent'
             h_freq_csi_grad_descent = rc_predictor.predict(h_freq_csi_history, h_freq_csi_true[0,...])
 
-            pred_nmse_testing_per_antenna_pair = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_grad_descent)
-            
-            pred_nmse = None
-            pred_nmse_testing_per_node_pair = None
+            pred_nmse_gesn_per_antenna_pair = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_grad_descent)
 
+            self.rc_config.enable_window = True
+            rc_predictor = gesn_pred_freq_mimo('MU_MIMO', self.rc_config, num_rx_ant = 4 + self.cfg.num_rx_ue_sel*2, 
+                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method=self.cfg.graph_formulation, 
+                                                    num_neurons=16, edge_weighting_method='grad_descent') # edge_weighting_method: 'model_based', 'grad_descent'
+            h_freq_csi_grad_descent = rc_predictor.predict(h_freq_csi_history, h_freq_csi_true[0,...])
+
+            pred_nmse_wgesn_per_antenna_pair = rc_predictor.cal_nmse(h_freq_csi_true[0,...], h_freq_csi_grad_descent)
+
+            
             # Print out all results
-            print("GESN (per_antenna_pair): ", pred_nmse_testing_per_antenna_pair)
-            print("GESN (per_node_pair)): ", pred_nmse_testing_per_node_pair)
-            print("Vanilla ESN: ", pred_nmse, "\n")
+            print("\nESN: ", pred_nmse_esn)
+            print("WESN : ", pred_nmse_wesn)
+            print("GESN (per_antenna_pair): ", pred_nmse_gesn_per_antenna_pair)
+            print("WGESN (per_antenna_pair): ", pred_nmse_wgesn_per_antenna_pair)
+            print("Window size:", rc_predictor_vanilla.window_length)
 
             # Test plots
             plot = False
@@ -245,96 +247,11 @@ class MU_MIMO(Model):
                                                                cfo_sigma=self.cfo_sigma, sto_sigma=self.sto_sigma)
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
                 
-        pred_nmse_vanilla = pred_nmse
 
-        return [pred_nmse_testing_per_node_pair, pred_nmse_testing_per_antenna_pair, pred_nmse_vanilla]
-
-
-def do_rank_link_adaptation(cfg, dmimo_chans, h_est=None, rx_snr_db=None, start_slot_idx=None, mu_mimo=None):
-
-    assert cfg.start_slot_idx >= cfg.csi_delay
-
-    if start_slot_idx == None:
-        cfg.first_slot_idx = cfg.start_slot_idx
-    else:
-        cfg.first_slot_idx = start_slot_idx
-
-    if np.any(h_est == None) or np.any(rx_snr_db == None):
-        
-        cfg.return_estimated_channel = True
-        h_est, rx_snr_db = mu_mimo(dmimo_chans)
-        cfg.return_estimated_channel = False
-
-    # Rank adaptation
-    rank_adaptation = rankAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant, architecture='MU-MIMO',
-                                        snrdb=rx_snr_db, fft_size=cfg.fft_size, precoder='BD', ue_indices=cfg.ue_indices)
-
-    rank_feedback_report = rank_adaptation(h_est, channel_type='dMIMO')
-
-    if rank_adaptation.use_mmse_eesm_method:
-        rank = rank_feedback_report[0]
-        rate = rank_feedback_report[1]
-
-        cfg.num_tx_streams = int(rank)*(cfg.num_rx_ue_sel+2)
-        cfg.ue_ranks = [rank]
-
-        h_eff = rank_adaptation.calculate_effective_channel(rank, h_est)
-        snr_linear = 10**(rx_snr_db/10)
-        snr_linear = np.sum(snr_linear, axis=(2))
-        snr_linear = np.mean(snr_linear)
-
-        n_var = rank_adaptation.cal_n_var(h_eff, snr_linear)
-
-        cfg.n_var = n_var
-
-        # cfg.num_rx_ue_sel = (cfg.num_tx_streams - 4) // 2
-        # cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
-        
-        # print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
-        # print("\n", "rate per user (MU-MIMO) = ", rate, "\n")
-
-    else:
-        rank = rank_feedback_report
-        rate = []
-
-        cfg.num_tx_streams = int(rank)
-
-        # print("\n", "rank per user (MU-MIMO) = ", rank, "\n")
-
-    # Link adaptation
-    data_sym_position = np.arange(0, 14)
-    link_adaptation = linkAdaptation(dmimo_chans.ns3_config.num_bs_ant, dmimo_chans.ns3_config.num_ue_ant, architecture='MU-MIMO',
-                                        snrdb=rx_snr_db, nfft=cfg.fft_size, N_s=rank, data_sym_position=data_sym_position, lookup_table_size='short')
-    
-    mcs_feedback_report = link_adaptation(h_est, channel_type='dMIMO')
-
-    if link_adaptation.use_mmse_eesm_method:
-        qam_order_arr = mcs_feedback_report[0]
-        code_rate_arr = mcs_feedback_report[1]
-
-        # Majority vote for MCS selection for now
-        values, counts = np.unique(qam_order_arr, return_counts=True)
-        most_frequent_value = values[np.argmax(counts)]
-        cfg.modulation_order = int(most_frequent_value)
-
-        values, counts = np.unique(code_rate_arr, return_counts=True)
-        most_frequent_value = values[np.argmax(counts)]
-        cfg.code_rate = most_frequent_value
-
-        # print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
-        # print("\n", "Code-rate per stream per user (MU-MIMO) = ", cfg.code_rate, "\n")
-    else:
-        qam_order_arr = mcs_feedback_report[0]
-        code_rate_arr = []
-
-        cfg.modulation_order = int(np.min(qam_order_arr))
-
-        # print("\n", "Bits per stream per user (MU-MIMO) = ", cfg.modulation_order, "\n")
-    
-    return rank, rate, qam_order_arr, code_rate_arr
+        return [pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair]
 
 
-def sim_mu_mimo(cfg: SimConfig):
+def sim_mu_mimo(cfg: SimConfig, rc_config:RCConfig):
     """
     Simulation of MU-MIMO scenarios using different settings
 
@@ -353,28 +270,29 @@ def sim_mu_mimo(cfg: SimConfig):
         ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
 
     # Create MU-MIMO simulation
-    mu_mimo = MU_MIMO(cfg)
+    mu_mimo = MU_MIMO(cfg, rc_config)
 
     # The binary source will create batches of information bits
     binary_source = BinarySource()
     info_bits = binary_source([cfg.num_slots_p2, mu_mimo.num_bits_per_frame])
 
     # MU-MIMO transmission (P2)
-    [pred_nmse_testing_per_node_pair, pred_nmse_testing_per_antenna_pair, pred_nmse_vanilla] = mu_mimo(dmimo_chans, info_bits)
+    [pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair] = mu_mimo(dmimo_chans, info_bits)
 
-    return pred_nmse_testing_per_node_pair, pred_nmse_testing_per_antenna_pair, pred_nmse_vanilla
+    return pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair
 
 
-def sim_mu_mimo_all(cfg: SimConfig):
+def sim_mu_mimo_all(cfg: SimConfig, rc_config:RCConfig):
     """"
     Simulation of MU-MIMO scenario according to the frame structure
     """
 
     total_cycles = 0
     
-    pred_nmse_gesn_model_based = []
-    pred_nmse_gesn_grad_descent = []
-    pred_nmse_vanilla = []
+    pred_nmse_esn = []
+    pred_nmse_wesn = []
+    pred_nmse_gesn_per_antenna_pair = []
+    pred_nmse_wgesn_per_antenna_pair = []
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
 
         print("first_slot_idx: ", first_slot_idx, "\n")
@@ -391,10 +309,12 @@ def sim_mu_mimo_all(cfg: SimConfig):
         #     print("Continued \n")
         #     continue
 
-        curr_pred_nmse_gesn_model_based, curr_pred_nmse_gesn_grad_descent, curr_pred_nmse_vanilla = sim_mu_mimo(cfg)
+        curr_pred_nmse_esn, curr_pred_nmse_wesn, curr_pred_nmse_gesn_per_antenna_pair, curr_pred_nmse_wgesn_per_antenna_pair = sim_mu_mimo(cfg, rc_config)
 
-        pred_nmse_gesn_model_based.append(curr_pred_nmse_gesn_model_based)
-        pred_nmse_gesn_grad_descent.append(curr_pred_nmse_gesn_grad_descent)
-        pred_nmse_vanilla.append(curr_pred_nmse_vanilla)
+        pred_nmse_esn.append(curr_pred_nmse_esn)
+        pred_nmse_wesn.append(curr_pred_nmse_wesn)
+        pred_nmse_gesn_per_antenna_pair.append(curr_pred_nmse_gesn_per_antenna_pair)
+        pred_nmse_wgesn_per_antenna_pair.append(curr_pred_nmse_wgesn_per_antenna_pair)
 
-    return pred_nmse_gesn_model_based, pred_nmse_gesn_grad_descent, pred_nmse_vanilla
+
+    return pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair
