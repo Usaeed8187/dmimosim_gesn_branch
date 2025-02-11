@@ -80,8 +80,9 @@ if __name__ == "__main__":
     rc_config.lr = 0.2
     rc_config.num_epochs = 50
     rc_config.enable_window = True
-    rc_config.window_length = 9
+    rc_config.window_length = 6
     rc_config.num_neurons = 16
+    rc_config.vector_inputs = True
     cfg.graph_formulation = 'per_antenna_pair'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
