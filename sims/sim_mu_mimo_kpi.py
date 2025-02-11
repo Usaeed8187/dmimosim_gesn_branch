@@ -119,7 +119,7 @@ if __name__ == "__main__":
         cfg.precoding_method = "ZF"
         pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair = sim_mu_mimo_all(cfg, rc_config)
 
-        folder_path = "results/channels_multiple_mu_mimo/results_{}_epochs_{}_lr_{}_window_length_{}/{}".format(cfg.graph_formulation, 
+        folder_path = "results/channels_multiple_mu_mimo_vector_inputs_{}/results_{}_epochs_{}_lr_{}_window_length_{}/{}".format(rc_config.vector_inputs, cfg.graph_formulation, 
                                                                     rc_config.num_epochs, rc_config.lr, rc_config.window_length, folder_name)
         os.makedirs(folder_path, exist_ok=True)
         np.savez("{}/mu_mimo_results_UE_{}_pred.npz".format(folder_path, rx_ues_arr[ue_arr_idx]),
