@@ -15,6 +15,8 @@ import tensorflow as tf
 from dmimo.config import SimConfig, RCConfig
 from dmimo.mu_mimo_gesn_test import sim_mu_mimo_all
 
+os.environ['PYTHONHASHSEED'] = '10'
+tf.random.set_seed(10)
 
 sys.path.append(os.path.join('..'))
 source_dir = '~/data/ns3_channels_q4/'
@@ -82,7 +84,7 @@ if __name__ == "__main__":
     rc_config.enable_window = True
     rc_config.window_length = 6
     rc_config.num_neurons = 16
-    rc_config.vector_inputs = 'rx_ants'
+    rc_config.vector_inputs = 'all'
     cfg.graph_formulation = 'per_antenna_pair'
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
