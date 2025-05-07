@@ -15,7 +15,7 @@ from .bd_precoding import mumimo_bd_precoder, mumimo_bd_equalizer
 from .zf_precoding import sumimo_zf_precoder, mumimo_zf_precoder
 from .fiveG_precoding import baseline_fiveG_precoder, dMIMO_p1_fiveG_max_min_precoder
 from .slnr_precoding import mumimo_slnr_precoder, mumimo_slnr_equalizer
-from .node_selection import update_node_selection
+from .node_selection import update_node_selection, update_node_selection_mass
 from .rank_adaptation import rankAdaptation
 from .link_adaptation import linkAdaptation
 from .quantized_CSI_feedback import quantized_CSI_feedback

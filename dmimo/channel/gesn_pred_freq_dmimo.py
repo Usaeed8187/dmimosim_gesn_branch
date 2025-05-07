@@ -12,7 +12,7 @@ import time
 from dmimo.config import Ns3Config, RCConfig
 from dmimo.channel import lmmse_channel_estimation
 
-class gesn_pred_freq_mimo:
+class gesn_pred_freq_dmimo:
 
     def __init__(self, 
                 architecture,
@@ -41,13 +41,7 @@ class gesn_pred_freq_mimo:
         self.num_bs_ant = ns3_config.num_bs_ant
         self.num_ue_ant = ns3_config.num_ue_ant
         
-        if architecture == 'baseline':
-            self.N_t = ns3_config.num_bs_ant
-            self.N_r = ns3_config.num_bs_ant
-        elif architecture == 'SU_MIMO':
-            self.N_t = num_tx_ant
-            self.N_r = ns3_config.num_bs_ant * 2
-        elif architecture == 'MU_MIMO':
+        if architecture == 'MU_MIMO':
             self.N_t = num_tx_ant
             self.N_r = num_rx_ant
         else:
@@ -89,12 +83,12 @@ class gesn_pred_freq_mimo:
         # Calculate weight matrix dimensions
         if method == 'per_antenna_pair':
             # one antenna pair is one vertex
-            self.num_tx_nodes = int((self.N_t - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
-            self.num_rx_nodes = int((self.N_r - ns3_config.num_bs_ant)/ns3_config.num_ue_ant) + 1
-            self.N_v = ns3_config.num_bs_ant * ns3_config.num_bs_ant                                        # number of vertices in the graph. Will be updated in *predict_per_antenna_pair()
+            self.num_tx_nodes = int(self.N_t / ns3_config.num_ue_ant)
+            self.num_rx_nodes = self.N_r
+            self.N_v = self.num_rx_nodes * self.num_tx_nodes                                        # number of vertices in the graph. Will be updated in *predict_per_antenna_pair()
             self.N_e = int((self.N_v*(self.N_v-1))/2)                                                       # number of edges in the graph (assumes fully connected). Will be updated in *predict_per_antenna_pair()
             if self.rc_config.treatment == 'SISO':
-                self.N_f = self.N_RB                                                                        # length of feature vector for each vertex
+                self.N_f = self.N_RB * self.num_ue_ant                                                                       # length of feature vector for each vertex
             else:
                 raise ValueError("\n The GESN treatment specified is not defined")                          # length of feature vector for each vertex
 
@@ -185,6 +179,39 @@ class gesn_pred_freq_mimo:
 
         return h_freq_csi_history
 
+    def get_csi_history_mass(self, first_slot_idx, csi_delay, rg_csi, dmimo_chans):
+        """
+        Returns a tf tensor of shape:
+        [history_length, batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_sym, fft_size]
+        containing channel estimates (complex).
+        """
+        first_csi_history_idx = first_slot_idx - (csi_delay * self.history_len)
+        channel_history_slots = tf.range(first_csi_history_idx, first_slot_idx, csi_delay)
+
+        h_freq_csi_history = tf.zeros((tf.size(channel_history_slots), self.batch_size, 1, self.num_rx_nodes+1,
+                                       1, (self.num_tx_nodes-1)*self.num_ue_ant+self.num_bs_ant, self.syms_per_subframe, self.num_subcarriers), dtype=tf.complex64)
+        for loop_idx, slot_idx in enumerate(channel_history_slots):
+            # h_freq_csi has shape [batch_size, num_rx, num_rx_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
+            folder_path = "ns3/mass_channel_estimates_{}_{}_rx_{}_tx_{}".format(self.rc_config.mobility, self.rc_config.drop_idx,
+                                                                                                self.N_r, self.N_t)
+            file_path = "{}/dmimochans_{}".format(folder_path, slot_idx)
+            try:
+                data = np.load("{}.npz".format(file_path))
+                h_freq_csi = data['h_freq_csi']
+            except:
+                h_freq_csi, _ = lmmse_channel_estimation(dmimo_chans, rg_csi, slot_idx=slot_idx)
+                
+                h_freq_csi = tf.gather(h_freq_csi, tf.range(0, h_freq_csi.shape[2], 2), axis=2)
+
+                os.makedirs(folder_path, exist_ok=True)
+                np.savez(file_path, h_freq_csi=h_freq_csi)
+                
+            indices = tf.constant([[loop_idx]])
+            updates = tf.expand_dims(h_freq_csi, axis=0)
+            h_freq_csi_history = tf.tensor_scatter_nd_update(h_freq_csi_history, indices, updates)
+
+        return h_freq_csi_history
+
     def get_ideal_csi_history(self, first_slot_idx, csi_delay, dmimo_chans, batch_size=1):
         
         # Get channel estimate history starting from (csi_delay * self.history_len) slots in the past to the most up-to-date fed back estimate
@@ -214,21 +241,12 @@ class gesn_pred_freq_mimo:
         self.gt_channel = gt_channel
 
         if self.rc_config.treatment == 'SISO':
-            if self.method == 'per_node_pair':
-                channel_pred = self.siso_predict_per_node_pair(h_freq_csi_history)
-            elif self.method == 'per_antenna_pair':
+            if self.method == 'per_antenna_pair':
                 channel_pred = self.siso_predict_per_antenna_pair(h_freq_csi_history)
             else:
-                raise ValueError("\n Only node-pair and antenna-pair treatment has been defined.")
-        elif self.rc_config.treatment == 'dMIMO':
-            if self.method == 'input_is_MISO_output':
-                self.method = 'per_antenna_pair'
-                channel_pred_tmp = self.siso_predict_per_antenna_pair(h_freq_csi_history)
-                channel_pred = self.dmimo_predict(channel_pred_tmp)
-            elif self.method == 'input_is_MISO_output_and_states':
-                raise ValueError("\n Method has not been defined yet.")            
+                raise ValueError("\n Not defined for MASS.")
         else:
-            raise ValueError("\n Only SISO and MIMO treatment has been defined.")
+            raise ValueError("\n Not defined for MASS.")
         
         return channel_pred
 
@@ -314,79 +332,6 @@ class gesn_pred_freq_mimo:
         
         return selections
 
-    def siso_predict_per_node_pair(self, h_freq_csi_history):
-
-        h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
-        h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
-
-        num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
-        h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
-        h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
-
-        antenna_selections = self.generate_antenna_selections(self.num_tx_nodes, self.num_rx_nodes)
-
-        channel_pred = np.zeros(h_freq_csi_history_reshaped[:self.syms_per_subframe,...].shape, dtype=complex)
-
-        if self.edge_weight_update_method=='grad_descent':
-            optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-        else:
-            optimizer = None
-
-        edge_weights = tf.Variable(
-            initial_value=tf.random.uniform(
-                [int(self.N_v * (self.N_v - 1) / 2)], 
-                minval=0.0, 
-                maxval=1.0
-            ),
-            trainable=True,
-            dtype=tf.float32,
-            name="edge_weights"
-        )
-
-        # Loop over all possible graphs (MIMO to SISO simplification)
-        for i in range(len(antenna_selections)):
-            # if self.edge_weight_update_method == "grad_descent":
-                # print("\n\nGraph {}/{}".format(i+1, len(antenna_selections)))
-            tx_ant_idx = antenna_selections[i]['transmitter_indices']
-            rx_ant_idx = antenna_selections[i]['receiver_indices']
-
-            curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
-            channel_test_input_list = [curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :] for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-
-            if self.edge_weight_initialization == 'model_based':
-                self.adjacency_matrix = self.cal_edge_weights_tf(csi_history=curr_channels)
-            elif self.edge_weight_initialization == 'ones':
-                self.adjacency_matrix = tf.ones((self.N_v, self.N_v), dtype=float)
-            lower_triangular_mask = tf.linalg.band_part(tf.ones_like(self.adjacency_matrix), -1, 0) - tf.eye(tf.shape(self.adjacency_matrix)[0])
-            curr_weights = tf.boolean_mask(self.adjacency_matrix, lower_triangular_mask > 0)
-            edge_weights.assign(curr_weights)
-            self.adjacency_matrix = tf.cast(self.adjacency_matrix, tf.complex64)
-            
-            # Find antenna elements of current graph
-            tx_ant_idx = antenna_selections[i]['transmitter_indices']
-            rx_ant_idx = antenna_selections[i]['receiver_indices']
-
-            # Train the model and calculate training loss:
-            start_time = time.time()
-            loss = self.training(edge_weights, curr_channels, tx_ant_idx, rx_ant_idx, optimizer)
-            end_time = time.time()
-            # print("total training time: ", end_time - start_time)
-            
-            # Generate output from trained model
-            channel_pred_temp = self.test_train_predict(channel_test_input_list)
-
-            # Store output
-            for count_rx, rx in enumerate(rx_ant_idx):
-                for count_tx, tx in enumerate(tx_ant_idx):
-                    node_idx = count_rx * self.num_tx_nodes + count_tx
-
-                    channel_pred[:, rx, tx, :] = tf.transpose(channel_pred_temp[node_idx])
-            
-        channel_pred = tf.convert_to_tensor(channel_pred)
-        channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
-        return channel_pred
-
-
     def siso_predict_per_antenna_pair(self, h_freq_csi_history):
 
         h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
@@ -395,8 +340,6 @@ class gesn_pred_freq_mimo:
         num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
         h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
         h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
-
-        num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
 
         channel_pred = np.zeros(h_freq_csi_history_reshaped[:self.syms_per_subframe,...].shape, dtype=complex)
 
@@ -409,9 +352,9 @@ class gesn_pred_freq_mimo:
 
         if self.vector_inputs == 'tx_ants':
 
-            edge_weights_4_4 = tf.Variable(
+            edge_weights = tf.Variable(
                 initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
+                    [int(self.N_e)], 
                     minval=0.0,
                     maxval=1.0
                 ),
@@ -420,390 +363,95 @@ class gesn_pred_freq_mimo:
                 name="edge_weights_4_4"
             )
 
-            edge_weights_4_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_4_2"
-            )
+            all_trainable_variables = [edge_weights]
 
-            edge_weights_2_4 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_2_4"
-            )
-
-            edge_weights_2_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_2_2"
-            )
-
-            all_trainable_variables = [edge_weights_4_4, edge_weights_4_2, edge_weights_2_4, edge_weights_2_2]
-
-        elif self.vector_inputs == 'rx_ants':
-            
-            edge_weights_4_4 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_4_4"
-            )
-
-            edge_weights_4_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_4_2"
-            )
-
-            edge_weights_2_4 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_2_4"
-            )
-
-            edge_weights_2_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_2_2"
-            )
-
-            all_trainable_variables = [edge_weights_4_4, edge_weights_4_2, edge_weights_2_4, edge_weights_2_2]
-
-        elif self.vector_inputs == 'rx_ants':
-            
-            edge_weights_4_4 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_4_4"
-            )
-
-            edge_weights_4_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_4_2"
-            )
-
-            edge_weights_2_4 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant * (self.num_bs_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_2_4"
-            )
-
-            edge_weights_2_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_ue_ant * (self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_2_2"
-            )
-
-            all_trainable_variables = [edge_weights_4_4, edge_weights_4_2, edge_weights_2_4, edge_weights_2_2]
         else:
-            edge_weights_4_4 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant*self.num_bs_ant * (self.num_bs_ant*self.num_bs_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_4_4"
-            )
-
-            edge_weights_4_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_bs_ant*self.num_ue_ant * (self.num_bs_ant*self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_4_2"
-            )
-
-            edge_weights_2_2 = tf.Variable(
-                initial_value=tf.random.uniform(
-                    [int(self.num_ue_ant*self.num_ue_ant * (self.num_ue_ant*self.num_ue_ant - 1) / 2)], 
-                    minval=0.0,
-                    maxval=1.0
-                ),
-                trainable=True,
-                dtype=tf.float32,
-                name="edge_weights_2_2"
-            )
-        
-            all_trainable_variables = [edge_weights_4_4, edge_weights_4_2, edge_weights_2_2]
+            raise ValueError("\n Not defined for the MASS implementation")
         
         if self.edge_weight_update_method == 'grad_descent':
             optimizer.build(all_trainable_variables)
-
-        current_iteration = 0
-
+        
+        self.adjacency_matrix = self.cal_edge_weights_tf(csi_history=h_freq_csi_history_reshaped)
+        
+        all_tx_ant_idx = []
+        
         for tx_node_idx in range(self.num_tx_nodes):
-            for rx_node_idx in range(self.num_rx_nodes):
                 
-                current_iteration += 1
+            tx_ant_idx = np.arange(tx_node_idx*self.num_ue_ant,(tx_node_idx+1)*self.num_ue_ant)
 
-                # if self.edge_weight_update_method == "grad_descent":
-                #     print("\n\nGraph {}/{}".format(current_iteration, self.num_tx_nodes * self.num_rx_nodes))
+            all_tx_ant_idx.append(tx_ant_idx)
 
-                if tx_node_idx == 0:
-                    tx_ant_idx = np.arange(0,self.num_bs_ant)
-                else:
-                    tx_ant_idx = np.arange(self.num_bs_ant + (tx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (tx_node_idx)*self.num_ue_ant)
-                
-                if rx_node_idx == 0:
-                    rx_ant_idx = np.arange(0,self.num_bs_ant)
-                else:
-                    rx_ant_idx = np.arange(self.num_bs_ant + (rx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (rx_node_idx)*self.num_ue_ant)
+        channel_train_input_list, channel_train_gt_list, mapping = self.reshape_to_vertices(h_freq_csi_history_reshaped, all_tx_ant_idx, pad=False)        
 
-                self.update_graph_dimensions(tx_ant_idx, rx_ant_idx)
-                
-                if self.vector_inputs == 'tx_ants' or self.vector_inputs == 'rx_ants':
-                    if tx_ant_idx.size == self.num_bs_ant and rx_ant_idx.size == self.num_bs_ant:
-                        edge_weights = edge_weights_4_4
-                    elif tx_ant_idx.size == self.num_bs_ant:
-                        edge_weights = edge_weights_2_4
-                    elif rx_ant_idx.size == self.num_bs_ant:
-                        edge_weights = edge_weights_4_2
-                    else:
-                        edge_weights = edge_weights_2_2
-                elif self.vector_inputs == 'all':
-                    edge_weights = None
-                else:
-                    if tx_ant_idx.size == self.num_bs_ant and rx_ant_idx.size == self.num_bs_ant:
-                        edge_weights = edge_weights_4_4
-                    elif tx_ant_idx.size == self.num_bs_ant or rx_ant_idx.size == self.num_bs_ant:
-                        edge_weights = edge_weights_4_2
-                    else:
-                        edge_weights = edge_weights_2_2
+        channel_test_input_list = channel_train_gt_list.copy()
+        lower_triangular_mask = tf.linalg.band_part(tf.ones_like(self.adjacency_matrix), -1, 0) - tf.eye(tf.shape(self.adjacency_matrix)[0])
+        curr_weights = tf.boolean_mask(self.adjacency_matrix, lower_triangular_mask > 0)
+        edge_weights.assign(curr_weights)
+        self.adjacency_matrix = tf.cast(self.adjacency_matrix, tf.complex64)
 
-                if self.vector_inputs == 'tx_ants':
-                    curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
-                    curr_channels = curr_channels.reshape(*curr_channels.shape[:2], 1, -1)
-                    tx_ant_idx_tmp = tx_ant_idx
-                    tx_ant_idx = np.array([0])
-                    channel_test_input_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-                elif self.vector_inputs == 'rx_ants':
-                    curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
-                    curr_channels = curr_channels.transpose(0,2,1,3)
-                    curr_channels = curr_channels.reshape(*curr_channels.shape[:2], 1, -1)
-                    curr_channels = curr_channels.transpose(0,2,1,3)
-                    rx_ant_idx_tmp = rx_ant_idx
-                    rx_ant_idx = np.array([0])
-                    channel_test_input_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-                elif self.vector_inputs == 'all':
-                    curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
-                    curr_channels = curr_channels.reshape(*curr_channels.shape[:1], 1, 1, -1)
-                    tx_ant_idx_tmp = tx_ant_idx
-                    rx_ant_idx_tmp = rx_ant_idx
-                    tx_ant_idx = np.array([0])
-                    rx_ant_idx = np.array([0])
-                    channel_test_input_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-                else:
-                    curr_channels = h_freq_csi_history_reshaped[:,rx_ant_idx, :, :][:, :, tx_ant_idx, :]
-                    channel_test_input_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+        self.training(edge_weights, channel_train_input_list, channel_train_gt_list, optimizer)
 
-                self.adjacency_matrix = self.cal_edge_weights_tf(csi_history=curr_channels)
+        # Generate output from trained model
+        channel_pred_temp = self.test_train_predict(channel_test_input_list)
+        channel_pred_temp = tf.convert_to_tensor(channel_pred_temp)
+        channel_pred_temp = channel_pred_temp[..., -self.syms_per_subframe:]
 
-                if (self.vector_inputs != 'all') and self.edge_weight_initialization != 'uniform':
-                    lower_triangular_mask = tf.linalg.band_part(tf.ones_like(self.adjacency_matrix), -1, 0) - tf.eye(tf.shape(self.adjacency_matrix)[0])
-                    curr_weights = tf.boolean_mask(self.adjacency_matrix, lower_triangular_mask > 0)
-                    edge_weights.assign(curr_weights)
-                    self.adjacency_matrix = tf.cast(self.adjacency_matrix, tf.complex64)
+        # Store output
+        channel_pred = np.zeros((self.num_rx_nodes, self.N_t, self.N_RB, self.syms_per_subframe), dtype=complex)
+        for rx in range(self.num_rx_nodes):
+            for tx_node_idx in range(self.num_tx_nodes):
 
-                self.training(edge_weights, curr_channels, tx_ant_idx, rx_ant_idx, optimizer)
+                tx_ant_idx = np.arange(tx_node_idx*self.num_ue_ant,(tx_node_idx+1)*self.num_ue_ant)
 
-                # Generate output from trained model
-                channel_pred_temp = self.test_train_predict(channel_test_input_list)
-
-                # Store output
-                if self.vector_inputs == 'tx_ants':
-                    tx_ant_idx = tx_ant_idx_tmp
-                    for count_rx, rx in enumerate(rx_ant_idx):
-                        node_idx = count_rx
-                        channel_pred_temp_reshaped = tf.transpose(channel_pred_temp[node_idx][:,self.syms_per_subframe:])
-                        channel_pred_temp_reshaped = tf.reshape(channel_pred_temp_reshaped, channel_pred[:, rx, tx_ant_idx, :].shape)
-                        channel_pred[:, rx, tx_ant_idx, :] = channel_pred_temp_reshaped
-                elif self.vector_inputs == 'rx_ants':
-                    rx_ant_idx = rx_ant_idx_tmp
-                    for count_tx, tx in enumerate(tx_ant_idx):
-                        node_idx = count_tx
-                        channel_pred_temp_reshaped = tf.transpose(channel_pred_temp[node_idx][:,self.syms_per_subframe:])
-                        channel_pred_temp_reshaped = tf.reshape(channel_pred_temp_reshaped, channel_pred[:, rx_ant_idx, tx, :].shape)
-                        channel_pred[:, rx_ant_idx, tx, :] = channel_pred_temp_reshaped
-                elif self.vector_inputs == 'all':
-                    channel_pred_reshaped = tf.transpose(channel_pred_temp[0][:,self.syms_per_subframe:])
-                    channel_pred_reshaped = tf.reshape(channel_pred_reshaped, [channel_pred_reshaped.shape[0], rx_ant_idx_tmp.size, tx_ant_idx_tmp.size, -1])
-                    channel_pred[:, rx_ant_idx_tmp[:, None], tx_ant_idx_tmp, :] = channel_pred_reshaped
-                else:
-                    for count_rx, rx in enumerate(rx_ant_idx):
-                        for count_tx, tx in enumerate(tx_ant_idx):
-                            node_idx = count_rx * tx_ant_idx.size + count_tx
-                            channel_pred[:, rx, tx, :] = tf.transpose(channel_pred_temp[node_idx][:,self.syms_per_subframe:])
-                
-                hold = 1
+                v = rx * self.num_tx_nodes + tx_node_idx              # vertex index
+                block = channel_pred_temp[v,...]                      # (n_ant_node*n_rb, n_time)
+                block = np.reshape(block, [self.num_ue_ant, self.N_RB, self.syms_per_subframe])
+                channel_pred[rx, tx_ant_idx, :, :] = block            # insert in antenna slots
 
         channel_pred = tf.convert_to_tensor(channel_pred)
-        channel_pred = tf.transpose(channel_pred, perm=[1,2,3,0])
 
         return channel_pred
+    
+    def reshape_to_vertices(self, H, tx_nodes, pad=True):
+        """
+        Returns:
+        vertices    list (or stacked array) holding one tensor per vertex
+        mapping     list of (rx_index, tx_node_index) pairs
+        """
+        T, N_rx, _, N_RB = H.shape
+        channel_train_input_list, channel_train_gt_list, channel_test_input_list, mapping = [], [], [], []
 
-
-    def dmimo_predict(self, h_freq_csi_history):
-
-        h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
-        h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
-
-        num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
-        h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
-        h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
-
-        num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
-
-        channel_pred = np.zeros(h_freq_csi_history_reshaped[:self.syms_per_subframe,...].shape, dtype=complex)
-
-        if self.edge_weight_update_method=='grad_descent':
-            optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-        else:
-            optimizer = None
-
-    def update_graph_dimensions(self, tx_ant_idx, rx_ant_idx):
-        
-        if self.vector_inputs == 'tx_ants':
-            self.N_v = rx_ant_idx.size
-            self.N_e = int((self.N_v*(self.N_v-1))/2)
-            self.N_n = self.rc_config.num_neurons * self.N_v
-            self.N_n_per_vertex = self.rc_config.num_neurons
-
-            self.N_f = self.N_RB * tx_ant_idx.size
-            self.N_out = self.N_f * self.N_v
-            self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
-
-            self.max_adjacency = self.N_v
-
-            if self.enable_window:
-                self.N_in = self.N_f * self.window_length
-            else:
-                self.N_in = self.N_f
-            
-            self.init_weights()
-        elif self.vector_inputs == 'rx_ants':
-            
-            self.N_v = tx_ant_idx.size
-            self.N_e = int((self.N_v*(self.N_v-1))/2)
-            self.N_n = self.rc_config.num_neurons * self.N_v
-            self.N_n_per_vertex = self.rc_config.num_neurons
-
-            self.N_f = self.N_RB * rx_ant_idx.size
-            self.N_out = self.N_f * self.N_v
-            self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
-
-            self.max_adjacency = self.N_v
-
-            if self.enable_window:
-                self.N_in = self.N_f * self.window_length
-            else:
-                self.N_in = self.N_f
-            
-            self.init_weights()
-        elif self.vector_inputs == 'all':
-
-            self.N_v = 1
-            self.N_e = int((self.N_v*(self.N_v-1))/2)
-            self.N_n = self.rc_config.num_neurons * self.N_v
-            self.N_n_per_vertex = self.rc_config.num_neurons
-
-            self.N_f = self.N_RB * rx_ant_idx.size * tx_ant_idx.size
-            self.N_out = self.N_f * self.N_v
-            self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
-
-            self.max_adjacency = self.N_v
-
-            if self.enable_window:
-                self.N_in = self.N_f * self.window_length
-            else:
-                self.N_in = self.N_f
-            
-            self.init_weights()
-
-
-        else:
-            self.N_v = tx_ant_idx.size * rx_ant_idx.size
-            self.N_e = int((self.N_v*(self.N_v-1))/2)
-            self.N_n = self.rc_config.num_neurons * self.N_v
-            self.N_n_per_vertex = self.rc_config.num_neurons
-
-            self.N_out = self.N_f * self.N_v
-            self.S_0 = tf.zeros([self.N_n], dtype=tf.complex64)
-
-            # Initialize adjacency matrix (currently static for all time steps)
-            self.max_adjacency = self.N_v
-
-            # Initialize weight matrices
-            self.init_weights()
-
-    # @tf.function(jit_compile=True)
-    def training(self, edge_weights, curr_channels, tx_ant_idx, rx_ant_idx, optimizer):
+        max_ant = max(len(g) for g in tx_nodes)             # for optional padding
+        feat_len = max_ant * N_RB                           # pad target length
 
         num_training_steps = (self.history_len-1) * self.syms_per_subframe
         
-        # Get input-label pair for training data and testing data
-        channel_train_input_list = [tf.cast(curr_channels[:num_training_steps, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-        channel_train_gt_list = [tf.cast(curr_channels[-num_training_steps:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
-        channel_test_input_list = [tf.cast(curr_channels[-self.syms_per_subframe:, rx_idx, tx_idx, :], tf.complex64) for rx_idx in range(len(rx_ant_idx)) for tx_idx in range(len(tx_ant_idx))]
+        for rx in range(N_rx):
+            for n, ant_idx in enumerate(tx_nodes):
+                # Slice out the channel for this (rx, tx_node) pair
+                # Result: (T, len(ant_idx), N_RB)
+                ch = H[:, rx, ant_idx, :]
+
+                # Flatten antennas and RBs into one axis: (T, len(ant_idx)*N_RB)
+                ch = ch.reshape(T, -1)
+
+                if pad and ch.shape[1] < feat_len:
+                    pad_width = feat_len - ch.shape[1]
+                    ch = np.pad(ch, ((0, 0), (0, pad_width)), mode='constant')
+
+                channel_train_input_list.append(tf.cast(ch[:num_training_steps, ...], tf.complex64))        # each ch is now (T, feature_len)
+                channel_train_gt_list.append(tf.cast(ch[-num_training_steps:, ...], tf.complex64))        # each ch is now (T, feature_len)
+                mapping.append((rx, n))    # bookkeeping: which vertex this is
+
+        # Optionally stack into single array of shape (N_vertices, T, feature_len)
+        channel_train_input_list = np.stack(channel_train_input_list, axis=0) if pad else channel_train_input_list
+        channel_train_gt_list = np.stack(channel_train_gt_list, axis=0) if pad else channel_train_gt_list
+        
+        return channel_train_input_list, channel_train_gt_list, mapping
+
+
+    # @tf.function(jit_compile=True)
+    def training(self, edge_weights, channel_train_input_list, channel_train_gt_list, optimizer):
 
         if self.edge_weight_update_method=='grad_descent':
             
@@ -949,57 +597,44 @@ class gesn_pred_freq_mimo:
             tf.Tensor: Adjacency matrix of shape (N_v, N_v).
         """
         
-        if self.edge_weight_initialization == 'ones':
-            adjacency_matrix = tf.ones((self.N_v, self.N_v))
-        elif self.method == 'per_node_pair' and self.edge_weight_initialization == 'model_based_delays':
-            # Calculate IFFT
-            h_time_csi = tf.signal.ifft(csi_history)
-            power = tf.abs(h_time_csi) ** 2
-
-            # Compute range of power and thresholds
-            range_power = tf.reduce_max(power, axis=-1) - tf.reduce_min(power, axis=-1)
-            threshold = tf.reduce_min(power, axis=-1) + 0.1 * range_power
-            threshold = tf.expand_dims(threshold, axis=-1)
-
-            # Identify significant taps
-            significant_taps = tf.cast(power > threshold, tf.float32)
-            if self.vector_inputs == 'tx_ants':
-                batch_size, num_rx_antennas, _, _ = significant_taps.shape
-                flattened_taps = tf.reshape(significant_taps, (batch_size, num_rx_antennas, -1))
-            elif self.vector_inputs == 'rx_ants':
-                batch_size, _, num_tx_antennas, _ = significant_taps.shape
-                flattened_taps = tf.reshape(significant_taps, (batch_size, num_tx_antennas, -1))
-            else:
-                batch_size, num_rx_antennas, num_tx_antennas, _ = significant_taps.shape
-                flattened_taps = tf.reshape(significant_taps, (batch_size, num_rx_antennas * num_tx_antennas, -1))
-
-            # Compute correlation coefficients for all pairs (vectorized)
-            mean_taps = tf.reduce_mean(flattened_taps, axis=-1, keepdims=True)
-            centered_taps = flattened_taps - mean_taps
-            norms = tf.sqrt(tf.reduce_sum(centered_taps**2, axis=-1, keepdims=True))
-            normalized_taps = centered_taps / (norms + 1e-8)  # Add epsilon for numerical stability
-
-            # Compute adjacency matrix
-            adjacency_matrix = tf.matmul(normalized_taps, normalized_taps, transpose_b=True)
-            adjacency_matrix = tf.reduce_mean(adjacency_matrix, axis=0)
-        
-        elif self.method == 'per_antenna_pair' and self.edge_weight_initialization == 'model_based_freq_corr':
+        if self.method == 'per_antenna_pair' and self.edge_weight_initialization == 'model_based_freq_corr':
             num_time_steps, num_rx, num_tx, num_RBs = csi_history.shape
             csi_history_reordered = np.transpose(csi_history, (1, 2, 0, 3))
-            csi_history_reshaped = csi_history_reordered.reshape(num_rx * num_tx, num_time_steps * num_RBs)
 
-            adjacency_matrix = np.abs(np.corrcoef(csi_history_reshaped))
+            bases = []
+
+            for rx in range(self.num_rx_nodes):
+                for tx in range(self.num_tx_nodes):
+
+                    tx_ant_idx = np.arange(tx*self.num_ue_ant,(tx+1)*self.num_ue_ant)
+
+                    M = csi_history_reordered[rx, tx_ant_idx, :, :]
+                    M = M.transpose(1, 2, 0).reshape(-1, len(tx_ant_idx)).astype(np.complex64)
+
+                    # M -= M.mean(axis=0, keepdims=True)
+
+                    _, _, Vh = np.linalg.svd(M, full_matrices=False)
+                    V2 = Vh.conj().T[:, :2]                   # (m_g, 2)
+
+                    if len(tx_ant_idx) == 2:
+                        V2 = np.pad(V2, ((0, 2), (0, 0)))    # (4, 2)
+
+                    Q, _ = np.linalg.qr(V2)
+
+                    bases.append(V2)
+
+            bases = np.stack(bases, axis=0)                  # (12, 4, 2)
+
+            r = 2
+            Vh = bases.conj().transpose(0, 2, 1)             # (12, 2, 4)
+            inner = Vh[:, None] @ bases[None, :]             # (12, 12, 2, 2)
+            fro2  = np.sum(np.abs(inner)**2, axis=(2, 3))    # ||Vi^H Vj||_F^2
+            adjacency_matrix = np.sqrt(np.maximum(r - fro2, 0.0))           # (12, 12)
+            np.fill_diagonal(adjacency_matrix, 1.0)
             adjacency_matrix = adjacency_matrix.astype(np.float32)
-        elif self.method == 'per_antenna_pair' and self.vector_inputs == 'none' and self.edge_weight_initialization == 'model_based_aoa_aod':
-            num_time_steps, num_rx, num_tx, num_RBs = csi_history.shape
-            aoas, aods = self.estimate_single_aoa_aod(csi_history)
-            angles = np.concatenate([aoas, aods], axis=0)
-            angles_reshaped = angles.reshape(2 * num_time_steps, num_rx * num_tx, num_RBs)
-            angles_flattened = angles_reshaped.transpose(1, 0, 2).reshape(num_rx * num_tx, -1)
-            adjacency_matrix = np.corrcoef(angles_flattened)
-            adjacency_matrix = adjacency_matrix.astype(np.float32)
+            
         else:
-            raise ValueError("\n The edge weighting method specified is not implemented")
+            raise ValueError("\n Not defined for the MASS implementation")
 
         return adjacency_matrix
     
@@ -1087,75 +722,6 @@ class gesn_pred_freq_mimo:
                 aods.append(aod_peaks)
 
         return np.array(aoas), np.array(aods)
-
-    def mimo_predict(self, h_freq_csi_history):
-
-        h_freq_csi_history = np.squeeze(np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6]))
-        h_freq_csi_history = self.rb_mapper(h_freq_csi_history)
-
-        num_time_steps = h_freq_csi_history.shape[0] * h_freq_csi_history.shape[-1]
-        h_freq_csi_history_reshaped = np.moveaxis(h_freq_csi_history, -1, 1)
-        h_freq_csi_history_reshaped = h_freq_csi_history_reshaped.reshape((num_time_steps,) + h_freq_csi_history.shape[1:-1])
-
-        num_training_steps = (h_freq_csi_history.shape[0]-1)*self.syms_per_subframe
-
-        channel_train_input_list = []
-        channel_train_gt_list = []
-        channel_test_input_list = []
-
-        for tx_node_idx in range(self.num_tx_nodes):
-            for rx_node_idx in range(self.num_rx_nodes):
-                
-                if tx_node_idx == 0:
-                    tx_ant_idx = np.arange(0,self.num_bs_ant)
-                else:
-                    tx_ant_idx = np.arange(self.num_bs_ant + (tx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (tx_node_idx)*self.num_ue_ant)
-                
-                if rx_node_idx == 0:
-                    rx_ant_idx = np.arange(0,self.num_bs_ant)
-                else:
-                    rx_ant_idx = np.arange(self.num_bs_ant + (rx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (rx_node_idx)*self.num_ue_ant)
-                
-                channel_train_input_list.append(h_freq_csi_history_reshaped[:num_training_steps,rx_ant_idx, :, :][:,:, tx_ant_idx, :])
-                channel_train_gt_list.append(h_freq_csi_history_reshaped[-num_training_steps:,rx_ant_idx, :, :][:,:, tx_ant_idx, :])
-                channel_test_input_list.append(h_freq_csi_history_reshaped[-self.syms_per_subframe:,rx_ant_idx,...][:, :, tx_ant_idx, :]) # TRY: If this doesn't work, try making them all 2x2 matrices
-
-        self.fitting_time(channel_train_input_list, channel_train_gt_list)
-
-        channel_pred_temp = self.test_train_predict(channel_test_input_list)
-        
-        channel_pred = np.zeros(h_freq_csi_history[0,...].shape,dtype=np.complex64)
-        
-        for tx_node_idx in range(self.num_tx_nodes):
-            for rx_node_idx in range(self.num_rx_nodes):
-                if tx_node_idx == 0:
-                    tx_ant_idx = np.arange(0,self.num_bs_ant)
-                else:
-                    tx_ant_idx = np.arange(self.num_bs_ant + (tx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (tx_node_idx)*self.num_ue_ant)
-                
-                if rx_node_idx == 0:
-                    rx_ant_idx = np.arange(0,self.num_bs_ant)
-                else:
-                    rx_ant_idx = np.arange(self.num_bs_ant + (rx_node_idx-1)*self.num_ue_ant,self.num_bs_ant + (rx_node_idx)*self.num_ue_ant)
-
-                vertex_idx = tx_node_idx * self.num_rx_nodes + rx_node_idx
-
-                if vertex_idx in np.arange(0, self.num_rx_nodes):
-                    N_t = self.num_bs_ant
-                else:
-                    N_t = self.num_ue_ant
-                
-                if vertex_idx % self.num_rx_nodes == 0:
-                    N_r = self.num_bs_ant
-                else:
-                    N_r = self.num_ue_ant
-
-                curr_chan_pred = channel_pred_temp[vertex_idx]
-
-                channel_pred[np.ix_(rx_ant_idx, tx_ant_idx, np.arange(channel_pred.shape[2]), np.arange(channel_pred.shape[3]))] = curr_chan_pred.reshape(N_r, N_t, self.N_RB, -1)
-
-        channel_pred = tf.convert_to_tensor(channel_pred)
-        return channel_pred
 
 
     def init_weights(self):
@@ -1258,8 +824,6 @@ class gesn_pred_freq_mimo:
     def form_window_input_signal(self, Y_2D_complex, curr_window_weights):
         # Y_2D: [N_r, N_symbols * (N_fft + N_cp)]
         Y_2D_complex = tf.convert_to_tensor(Y_2D_complex)
-        if self.window_weight_application == 'across_inputs' or self.window_weight_application == 'across_time_and_inputs':
-            Y_2D_complex = Y_2D_complex * curr_window_weights
 
         if self.type == 'real':
             Y_2D = np.concatenate((Y_2D_complex.real, Y_2D_complex.imag), axis=0)
@@ -1280,9 +844,6 @@ class gesn_pred_freq_mimo:
         else:
             Y_2D_window = np.concatenate(Y_2D_window, axis=-1)
         
-        if self.window_weight_application == 'across_time' or self.window_weight_application == 'across_time_and_inputs':
-            Y_2D_window = Y_2D_window * curr_window_weights
-
         return Y_2D_window
 
 
@@ -1414,7 +975,7 @@ class gesn_pred_freq_mimo:
 
         for t in range(T):
             # Gather inputs for all vertices at the current time step
-            curr_inputs = tf.gather(Y_4D, t, axis=1)  # Shape: [N_v, num_rbs]
+            curr_inputs = tf.squeeze(tf.gather(Y_4D, t, axis=1))  # Shape: [N_v, num_rbs]
             curr_inputs = tf.transpose(curr_inputs, perm=[1,0])  # Shape: [num_rbs, N_v]
 
             # neighbors_states = tf.stack(

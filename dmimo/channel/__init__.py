@@ -11,4 +11,5 @@ from .channel_estimation import estimate_freq_cov, estimate_freq_time_cov, lmmse
 
 from .rc_pred_freq_mimo import standard_rc_pred_freq_mimo
 from .gesn_pred_freq_mimo import gesn_pred_freq_mimo
+from .gesn_pred_freq_dmimo import gesn_pred_freq_dmimo
 

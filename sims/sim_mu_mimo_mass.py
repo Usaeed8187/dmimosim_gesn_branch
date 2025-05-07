@@ -13,7 +13,7 @@ import numpy as np
 import tensorflow as tf
 
 from dmimo.config import SimConfig, RCConfig
-from dmimo.mu_mimo_gesn_test import sim_mu_mimo_all
+from dmimo.mu_mimo_gesn_mass import sim_mu_mimo_all
 
 os.environ['PYTHONHASHSEED'] = '10'
 tf.random.set_seed(10)
@@ -90,6 +90,8 @@ if __name__ == "__main__":
     rc_config.mobility = mobility
     rc_config.drop_idx = drop_idx
     cfg.graph_formulation = 'per_antenna_pair' # "per_node_pair", "per_antenna_pair", "supergraph"
+    cfg.rx_antenna_selection = 'MASS' # 'MASS': 1 rx antenna per node in RX Squad
+    cfg.num_tx_streams = 1
 
     folder_name = os.path.basename(os.path.abspath(cfg.ns3_folder))
     os.makedirs(os.path.join("results", folder_name), exist_ok=True)
