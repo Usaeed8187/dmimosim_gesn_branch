@@ -150,6 +150,8 @@ def mumimo_zf_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
     norm = tf.sqrt(tf.reduce_sum(tf.abs(g)**2, axis=-2, keepdims=True))
     g = g/tf.cast(norm, g.dtype)
 
+    g = g / tf.cast(tf.sqrt(tf.reduce_sum(tf.abs(g)**2, axis=-2, keepdims=True)), g.dtype)
+
     # Expand last dim of `x` for precoding
     x_precoded = tf.expand_dims(x, -1)
 

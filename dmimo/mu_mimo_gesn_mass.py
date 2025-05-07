@@ -4,7 +4,7 @@ from tensorflow.python.keras import Model
 import matplotlib.pyplot as plt
 import time
 
-from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer
+from sionna.ofdm import ResourceGrid, ResourceGridMapper, LSChannelEstimator, LMMSEEqualizer, RemoveNulledSubcarriers
 from sionna.mimo import StreamManagement
 
 from sionna.fec.ldpc.encoding import LDPC5GEncoder
@@ -14,6 +14,8 @@ from sionna.fec.interleaving import RowColumnInterleaver, Deinterleaver
 from sionna.mapping import Mapper, Demapper
 from sionna.utils import BinarySource
 from sionna.utils.metrics import compute_ber, compute_bler
+from sionna.channel import ApplyOFDMChannel
+from sionna.utils import expand_to_rank, complex_normal, flatten_last_dims
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig, RCConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_dmimo
@@ -48,17 +50,11 @@ class MU_MIMO(Model):
         self.num_streams_per_tx = cfg.num_tx_streams
 
         self.num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # gNB always present with 4 antennas
-        self.num_ue_ant = 2  # assuming 2 antennas per UE for reshaping data/channels
-        if cfg.ue_indices is None:
-            # no rank/link adaptation
-            self.num_rxs_ant = self.num_streams_per_tx
-            self.num_rx_ue = self.num_rxs_ant // self.num_ue_ant
-        else:
-            # rank adaptation support
-            self.num_rxs_ant = cfg.ue_indices.shape[0]
-            self.num_rx_ue = self.num_rxs_ant
-            if cfg.ue_ranks is None:
-                cfg.ue_ranks = 1  # no rank adaptation
+        self.num_ue_ant = 1  # assuming 2 antennas per UE for reshaping data/channels
+        self.num_rxs_ant = cfg.ue_indices.shape[0] // self.num_ue_ant
+        self.num_rx_ue = self.num_rxs_ant
+        if cfg.ue_ranks is None:
+            cfg.ue_ranks = 1  # no rank adaptation
 
         self.num_streams_per_tx = cfg.num_tx_streams * self.num_rx_ue
         cfg.num_tx_streams = self.num_streams_per_tx
@@ -67,7 +63,7 @@ class MU_MIMO(Model):
 
         # Create an RX-TX association matrix
         # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
-        rx_tx_association = np.ones((self.num_rx_ue, 1))
+        rx_tx_association = np.ones((self.num_rx_ue, 1), dtype=int)
 
         # Instantiate a StreamManagement object
         # This determines which data streams are determined for which receiver.
@@ -145,6 +141,10 @@ class MU_MIMO(Model):
 
         # The decoder provides hard-decisions on the information bits
         self.decoder = LDPC5GDecoder(self.encoder, hard_out=True)
+
+        self.apply_channel = ApplyOFDMChannel(add_awgn=False, dtype=tf.as_dtype(tf.complex64))
+
+        self.removed_nulled_scs = RemoveNulledSubcarriers(self.rg)
 
     def call(self, dmimo_chans: dMIMOChannels, info_bits=None):
         """
@@ -260,58 +260,111 @@ class MU_MIMO(Model):
         # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
         h_freq_csi_grad_descent = tf.transpose(h_freq_csi_grad_descent, perm=[0,1,3,2])
         h_freq_csi_grad_descent = h_freq_csi_grad_descent[tf.newaxis, tf.newaxis, :, tf.newaxis, :, :, :]
+        h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0,1,3,2])
+        h_freq_csi_outdated = h_freq_csi_outdated[tf.newaxis, tf.newaxis, :, tf.newaxis, :, :, :]
+        h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0, 2, 1, 3, 4, 5, 6])
 
         # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
         h_freq_csi_grad_descent =tf.reshape(h_freq_csi_grad_descent, (-1, self.num_rx_ue, 1, *h_freq_csi_grad_descent.shape[3:]))
         h_freq_csi_vanilla =tf.reshape(h_freq_csi_vanilla, (-1, self.num_rx_ue, 1, *h_freq_csi_vanilla.shape[3:]))
-
-        h_freq_csi = h_freq_csi_grad_descent
-        h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
-        h_freq_csi = h_freq_csi[..., :512]
         
-        # apply precoding to OFDM grids
-        if self.cfg.precoding_method == "ZF":
-            ue_indices = [[i] for i in range(self.num_rx_ue)]
-            ue_ranks = self.cfg.num_tx_streams / self.num_rx_ue
-            x_precoded, g = self.zf_precoder([x_rg, h_freq_csi, ue_indices, ue_ranks])
-        else:
-            ValueError("unsupported precoding method for MASS")
+        SNR_range = np.arange(0, 20, 2)
+        uncoded_bers = np.zeros((3, np.arange(0, 20, 2).shape[0]))
+        
+        for snr_idx, snr in enumerate(SNR_range):
+            
+            rx_snr_db = snr
 
-        # apply dMIMO channels to the resource grid in the frequency domain.
-        y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
+            for curr_method in range(3):
 
-        # make proper shape
-        y = tf.gather(y, tf.range(0, y.shape[2], 2), axis=2)
-        y = tf.reshape(y, (self.batch_size, self.num_rx_ue, 1, 14, -1))
+                if curr_method == 0:
+                    h_freq_csi = h_freq_csi_outdated
+                elif curr_method == 1:
+                    h_freq_csi = h_freq_csi_vanilla
+                elif curr_method == 2:
+                    h_freq_csi = h_freq_csi_grad_descent
+                
+                h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
+                h_freq_csi = h_freq_csi[..., :512]
 
-        # LS channel estimation with linear interpolation
-        no = 0.1  # initial noise estimation (tunable param)
-        h_hat, err_var = self.ls_estimator([y, no])
+                # apply precoding to OFDM grids
+                if self.cfg.precoding_method == "ZF":
+                    ue_indices = [[i] for i in range(self.num_rx_ue)]
+                    ue_ranks = self.cfg.num_tx_streams / self.num_rx_ue
+                    # x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, ue_indices, ue_ranks])
+                else:
+                    ValueError("unsupported precoding method for MASS")
 
-        # LMMSE equalization
-        x_hat, no_eff = self.lmmse_equ([y, h_hat, err_var, no]) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols]
+                # apply dMIMO channels to the resource grid in the frequency domain.
+                h_freq, _ = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                                    batch_size=self.batch_size)
+                # rx_snr_db = tf.gather(rx_snr_db, tf.range(0, rx_snr_db.shape[2], 2), axis=2)
+                h_freq = tf.gather(h_freq, tf.range(0, h_freq.shape[2], 2), axis=2)
+                
+                # x_precoded, h_eff = self.zf_precoder([x_rg, tf.transpose(h_freq, perm=[0, 2, 1, 3, 4, 5, 6]), ue_indices, ue_ranks])
+                x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, ue_indices, ue_ranks])
+                
+                debug = False
+                if debug:
+                    # h_freq[0,:,:,tf.newaxis, ...]
+                    plt.figure()
+                    debug_rx_ant = 3
+                    debug_tx_ant = 1
+                    debug_ofdm_sym = 10
+                    plt.plot(np.real(h_freq[0,0,debug_rx_ant,0,debug_tx_ant,debug_ofdm_sym,:]))
+                    plt.plot(np.real(h_freq_csi_history[-1,0,0,debug_rx_ant,0,debug_tx_ant,debug_ofdm_sym,:]))
+                    plt.savefig('a')
+                debug = False
+                # y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
+                # # make proper shape
+                # y = tf.gather(y, tf.range(0, y.shape[2], 2), axis=2)
+                # y = tf.reshape(y, (self.batch_size, self.num_rx_ue, 1, 14, -1))
+                y = self.apply_channel([x_precoded, h_freq])
+                no = np.power(10.0, rx_snr_db / (-10.0))
+                y = self.awgn([y, no])
 
-        # Soft-output QAM demapper
-        llr = self.demapper([x_hat, no_eff])
+                # LS channel estimation with linear interpolation
+                no = tf.reduce_mean(no)
+                no = tf.cast(no, tf.float32)
+                h_hat, err_var = self.ls_estimator([y, no])
 
-        # Hard-decision bit error rate
-        d_hard = tf.cast(llr > 0, tf.float32) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols * QAM order]
-        uncoded_ber = compute_ber(d, d_hard).numpy()
+                x_hat = np.zeros(x_rg.shape, dtype=np.complex64)
+                x_hat = x_hat[..., :self.rg.num_effective_subcarriers]
+                for rx_node in range(self.num_rx_ue):
+                    curr_y = tf.gather(y, rx_node, axis=2)
+                    curr_y = tf.gather(curr_y, self.rg.effective_subcarrier_ind, axis=-1)
+                    curr_y = tf.squeeze(curr_y)
 
-        # Hard-decision symbol error rate
-        llr = tf.reshape(llr, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords, self.encoder.n])
+                    curr_h = tf.gather(h_hat, rx_node, axis=2)
+                    curr_h = tf.squeeze(curr_h)
+                    curr_h = tf.gather(curr_h, rx_node, axis=1)
 
-        # LDPC hard-decision decoding
-        dec_bits = self.decoder(llr) # Shape: [nbatches, 1, number of streams, 1, number of effective subcarriers * number of data OFDM symbols * QAM order * code rate]
+                    curr_x_hat = curr_y / curr_h
+                    curr_x_hat = curr_x_hat[:, np.newaxis, ...]
+                    curr_x_hat = np.asarray(curr_x_hat)
 
-        return [pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair], dec_bits, uncoded_ber, uncoded_ser, node_wise_uncoded_ser, x_hat
-        x_hard = self.mapper(d_hard)
-        uncoded_ser = np.count_nonzero(x - x_hard) / np.prod(x.shape)
-        num_tx_streams_per_node = int(self.cfg.num_tx_streams/(self.cfg.num_rx_ue_sel+2))
-        node_wise_uncoded_ser = compute_UE_wise_SER(x ,x_hard, num_tx_streams_per_node, self.cfg.num_tx_streams)
+                    x_hat[:,:,rx_node,:,:] = curr_x_hat
+                
+                all_symbols = tf.range(self.rg.num_ofdm_symbols)
+                pilot_symbols = self.rg._pilot_ofdm_symbol_indices
 
-        # LLR deinterleaver for LDPC decoding
-        llr = self.dintlvr(llr)
+                # Get the set difference: symbols not used for pilots
+                data_symbol_indices = tf.sets.difference(
+                    tf.expand_dims(all_symbols, 0), tf.expand_dims(pilot_symbols, 0)
+                ).values
+                x_hat = x_hat[:,:,:,data_symbol_indices ,:]
+                x_hat = tf.reshape(x_hat, (x_hat.shape[0], x_hat.shape[1], x_hat.shape[2], x_hat.shape[3] * x_hat.shape[4]))
+                x_hat = tf.convert_to_tensor(x_hat)
+
+                # Soft-output QAM demapper
+                llr = self.demapper([x_hat, no])
+
+                # Hard-decision bit error rate
+                d_hard = tf.cast(llr > 0, tf.float32) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols * QAM order]
+                uncoded_bers[curr_method, snr_idx] = compute_ber(d, d_hard).numpy()
+
+        return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair], uncoded_bers, x_hat
+    
 
     def nmse(self, H_true, H_pred, standard=True):
         # Promote both inputs to the same backend first
@@ -333,6 +386,23 @@ class MU_MIMO(Model):
         denom = backend.reduce_sum(denom_term) if backend is tf else backend.sum(denom_term)
         return backend.cast(num / denom, backend.float32 if backend is tf else backend.float64)
 
+    def awgn(self, inputs):
+
+        x, no = inputs
+
+        # Create tensors of real-valued Gaussian noise for each complex dim.
+        noise = complex_normal(tf.shape(x), dtype=x.dtype)
+
+        # Add extra dimensions for broadcasting
+        no = expand_to_rank(no, tf.rank(x), axis=-1)
+
+        # Apply variance scaling
+        noise *= tf.cast(tf.sqrt(no), noise.dtype)
+
+        # Add noise to input
+        y = x + noise
+
+        return y
 
 
 def sim_mu_mimo(cfg: SimConfig, rc_config:RCConfig):
@@ -362,9 +432,9 @@ def sim_mu_mimo(cfg: SimConfig, rc_config:RCConfig):
     info_bits = binary_source([cfg.num_slots_p2, mu_mimo.num_bits_per_frame])
 
     # MU-MIMO transmission (P2)
-    [pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair], dec_bits, uncoded_ber, uncoded_ser, node_wise_uncoded_ser, x_hat = mu_mimo(dmimo_chans, info_bits)
+    [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair], uncoded_bers, x_hat = mu_mimo(dmimo_chans, info_bits)
 
-    return pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair
+    return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair], uncoded_bers
 
 
 def sim_mu_mimo_all(cfg: SimConfig, rc_config:RCConfig):
@@ -374,32 +444,29 @@ def sim_mu_mimo_all(cfg: SimConfig, rc_config:RCConfig):
 
     total_cycles = 0
     
-    pred_nmse_esn = []
+    pred_nmse_pred_nmse_outdated = []
     pred_nmse_wesn = []
-    pred_nmse_gesn_per_antenna_pair = []
     pred_nmse_wgesn_per_antenna_pair = []
+    
+    uncoded_ber_outdated = []
+    uncoded_ber_wesn = []
+    uncoded_ber_wgesn = []
+
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
 
         print("first_slot_idx: ", first_slot_idx, "\n")
 
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
-        # try:
-        #     curr_pred_nmse_gesn, curr_pred_nmse_vanilla = sim_mu_mimo(cfg)
 
-        #     pred_nmse_gesn.append(curr_pred_nmse_gesn)
-        #     pred_nmse_vanilla.append(curr_pred_nmse_vanilla)
+        [curr_pred_nmse_outdated, curr_pred_nmse_wesn, curr_pred_nmse_wgesn_per_antenna_pair], curr_uncoded_bers = sim_mu_mimo(cfg, rc_config)
 
-        # except:
-        #     print("Continued \n")
-        #     continue
-
-        curr_pred_nmse_esn, curr_pred_nmse_wesn, curr_pred_nmse_gesn_per_antenna_pair, curr_pred_nmse_wgesn_per_antenna_pair = sim_mu_mimo(cfg, rc_config)
-
-        pred_nmse_esn.append(curr_pred_nmse_esn)
+        pred_nmse_pred_nmse_outdated.append(curr_pred_nmse_outdated)
         pred_nmse_wesn.append(curr_pred_nmse_wesn)
-        pred_nmse_gesn_per_antenna_pair.append(curr_pred_nmse_gesn_per_antenna_pair)
         pred_nmse_wgesn_per_antenna_pair.append(curr_pred_nmse_wgesn_per_antenna_pair)
 
+        uncoded_ber_outdated.append(curr_uncoded_bers[0])
+        uncoded_ber_wesn.append(curr_uncoded_bers[1])
+        uncoded_ber_wgesn.append(curr_uncoded_bers[2])
 
-    return pred_nmse_esn, pred_nmse_wesn, pred_nmse_gesn_per_antenna_pair, pred_nmse_wgesn_per_antenna_pair
+    return pred_nmse_pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, uncoded_ber_outdated, uncoded_ber_wesn, uncoded_ber_wgesn

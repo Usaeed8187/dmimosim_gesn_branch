@@ -36,8 +36,8 @@ if __name__ == "__main__":
 
     # Simulation settings
     cfg = SimConfig()
-    cfg.total_slots = 90        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 70     # starting slots (must be greater than csi_delay + 5)
+    cfg.total_slots = 70        # total number of slots in ns-3 channels
+    cfg.start_slot_idx = 50     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.rank_adapt = False      # disable rank adaptation
     cfg.link_adapt = False      # disable link adaptation
