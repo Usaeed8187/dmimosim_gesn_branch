@@ -30,7 +30,7 @@ class SimConfig(CarrierConfig, MCSConfig):
         self._enable_txsquad = False                    # enable simulation of TxSquad transmission
         self._enable_rxsquad = False                    # enable simulation of TxSquad transmission
         self._CSI_feedback_method = '5G'                # which CSI feedback method to use. choices: '5G', 'RVQ'
-        self._predictor = 'gesn' # standard_rc, gesn
+        self._predictor = 'gesn' # standard_rc, gesn, kalman
         super().__init__(**kwargs)
 
     @property

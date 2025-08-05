@@ -77,8 +77,9 @@ if __name__ == "__main__":
     if arguments == []:
         mobility = 'high_mobility'
         drop_idx = '2'
-        rx_ues_arr = [10]
+        rx_ues_arr = [3]
         vector_inputs = 'tx_ants' # tx_ants, rx_ants, none, all
+        csi_delays = [2, 3, 4, 5, 6, 7, 8,]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
     rc_config.lr = 0.01
     rc_config.num_epochs = 50
@@ -122,17 +123,35 @@ if __name__ == "__main__":
 
     for ue_arr_idx in range(np.size(rx_ues_arr)):
 
-        cfg.num_rx_ue_sel = rx_ues_arr[ue_arr_idx]
-        cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+        for csi_delay_idx in range(np.size(csi_delays)):
 
-        cfg.precoding_method = "ZF"
-        pred_nmse_pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, uncoded_ber_outdated, uncoded_ber_wesn, uncoded_ber_wgesn = sim_mu_mimo_all(cfg, rc_config)
+            cfg.num_rx_ue_sel = rx_ues_arr[ue_arr_idx]
+            cfg.csi_delay = csi_delays[csi_delay_idx]
 
-        folder_path = "results/mass/channels_multiple_mu_mimo_vector_inputs_{}/results_{}_epochs_{}_lr_{}_window_length_{}_weight_initialization_{}/{}".format(rc_config.vector_inputs, cfg.graph_formulation, 
-                                                                    rc_config.num_epochs, rc_config.lr, rc_config.window_length, 
-                                                                    rc_config.weight_initialization, folder_name)
-        os.makedirs(folder_path, exist_ok=True)
-        np.savez("{}/mu_mimo_results_num_UEs_{}_pred.npz".format(folder_path, rx_ues_arr[ue_arr_idx]),
-                pred_nmse_pred_nmse_outdated=pred_nmse_pred_nmse_outdated, pred_nmse_wesn=pred_nmse_wesn,
-                pred_nmse_wgesn_per_antenna_pair=pred_nmse_wgesn_per_antenna_pair, uncoded_ber_outdated=uncoded_ber_outdated, 
-                uncoded_ber_wesn=uncoded_ber_wesn, uncoded_ber_wgesn=uncoded_ber_wgesn)
+            cfg.ue_indices = np.reshape(np.arange((cfg.num_rx_ue_sel + 2) * 2), (cfg.num_rx_ue_sel + 2, -1))
+
+            cfg.precoding_method = "ZF"
+            (pred_nmse_pred_nmse_outdated,
+            pred_nmse_wesn,
+            pred_nmse_wgesn_per_antenna_pair,
+            pred_nmse_kalman,
+            uncoded_ber_outdated,
+            uncoded_ber_wesn,
+            uncoded_ber_wgesn,
+            uncoded_ber_kalman) = sim_mu_mimo_all(cfg, rc_config)
+
+            folder_path = "results/mass/channels_multiple_mu_mimo_vector_inputs_{}/results_{}_epochs_{}_lr_{}_window_length_{}_weight_initialization_{}/{}".format(rc_config.vector_inputs, cfg.graph_formulation, 
+                                                                        rc_config.num_epochs, rc_config.lr, rc_config.window_length, 
+                                                                        rc_config.weight_initialization, folder_name)
+            os.makedirs(folder_path, exist_ok=True)
+            np.savez(
+                "{}/mu_mimo_results_num_UEs_{}_pred.npz".format(folder_path, rx_ues_arr[ue_arr_idx]),
+                pred_nmse_pred_nmse_outdated=pred_nmse_pred_nmse_outdated,
+                pred_nmse_wesn=pred_nmse_wesn,
+                pred_nmse_wgesn_per_antenna_pair=pred_nmse_wgesn_per_antenna_pair,
+                pred_nmse_kalman=pred_nmse_kalman,
+                uncoded_ber_outdated=uncoded_ber_outdated,
+                uncoded_ber_wesn=uncoded_ber_wesn,
+                uncoded_ber_wgesn=uncoded_ber_wgesn,
+                uncoded_ber_kalman=uncoded_ber_kalman,
+            )

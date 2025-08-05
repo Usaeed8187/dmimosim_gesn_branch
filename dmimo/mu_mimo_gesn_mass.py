@@ -19,6 +19,7 @@ from sionna.utils import expand_to_rank, complex_normal, flatten_last_dims
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig, RCConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_dmimo
+from dmimo.channel.kalman_pred_freq_dmimo import kalman_pred_freq_dmimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection, update_node_selection_mass
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val, compute_UE_wise_BER, compute_UE_wise_SER
@@ -57,9 +58,8 @@ class MU_MIMO(Model):
             cfg.ue_ranks = 1  # no rank adaptation
 
         self.num_streams_per_tx = cfg.num_tx_streams * self.num_rx_ue
-        cfg.num_tx_streams = self.num_streams_per_tx
 
-        assert self.cfg.num_tx_ue_sel*2 + 4 >= cfg.num_tx_streams, "TxSquad should have antennas >= transmit streams"
+        assert self.cfg.num_tx_ue_sel*2 + 4 >= self.num_streams_per_tx, "TxSquad should have antennas >= transmit streams"
 
         # Create an RX-TX association matrix
         # rx_tx_association[i,j]=1 means that receiver i gets at least one stream from transmitter j.
@@ -198,6 +198,14 @@ class MU_MIMO(Model):
             
             h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
             pred_nmse_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
+
+            # Kalman filter baseline prediction
+            rc_predictor_kf = kalman_pred_freq_dmimo('MU_MIMO', self.rc_config,
+                                                     num_rx_ant=self.num_rx_ue,
+                                                     num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4)
+            h_freq_csi_kalman = rc_predictor_kf.predict(h_freq_csi_history)
+            h_freq_csi_kalman = tf.transpose(h_freq_csi_kalman, perm=[0,1,2,3,4,6,5])
+            pred_nmse_kalman = self.nmse(h_freq_csi_true[0,...], h_freq_csi_kalman[0,...])
             
             # Compare with gradient descent GESN
             self.rc_config.enable_window = True
@@ -219,6 +227,7 @@ class MU_MIMO(Model):
             # Print out all results
             print("Outdated : ", pred_nmse_outdated)
             print("WESN : ", pred_nmse_wesn)
+            print("Kalman : ", pred_nmse_kalman)
             print("WGESN (per_antenna_pair): ", pred_nmse_wgesn_per_antenna_pair)
             print("Window size:", rc_predictor_vanilla.window_length)
 
@@ -267,15 +276,16 @@ class MU_MIMO(Model):
         # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
         h_freq_csi_grad_descent =tf.reshape(h_freq_csi_grad_descent, (-1, self.num_rx_ue, 1, *h_freq_csi_grad_descent.shape[3:]))
         h_freq_csi_vanilla =tf.reshape(h_freq_csi_vanilla, (-1, self.num_rx_ue, 1, *h_freq_csi_vanilla.shape[3:]))
+        h_freq_csi_kalman = tf.reshape(h_freq_csi_kalman, (-1, self.num_rx_ue, 1, *h_freq_csi_kalman.shape[3:]))
         
         SNR_range = np.arange(0, 20, 2)
-        uncoded_bers = np.zeros((3, np.arange(0, 20, 2).shape[0]))
+        uncoded_bers = np.zeros((4, np.arange(0, 20, 2).shape[0]))
         
         for snr_idx, snr in enumerate(SNR_range):
             
             rx_snr_db = snr
 
-            for curr_method in range(3):
+            for curr_method in range(4):
 
                 if curr_method == 0:
                     h_freq_csi = h_freq_csi_outdated
@@ -283,6 +293,8 @@ class MU_MIMO(Model):
                     h_freq_csi = h_freq_csi_vanilla
                 elif curr_method == 2:
                     h_freq_csi = h_freq_csi_grad_descent
+                else:
+                    h_freq_csi = h_freq_csi_kalman
                 
                 h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
                 h_freq_csi = h_freq_csi[..., :512]
@@ -290,8 +302,9 @@ class MU_MIMO(Model):
                 # apply precoding to OFDM grids
                 if self.cfg.precoding_method == "ZF":
                     ue_indices = [[i] for i in range(self.num_rx_ue)]
-                    ue_ranks = self.cfg.num_tx_streams / self.num_rx_ue
-                    # x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, ue_indices, ue_ranks])
+                    ue_ranks = self.num_streams_per_tx / self.num_rx_ue
+                    # x_precoded, h_eff = self.zf_precoder([x_rg, tf.transpose(h_freq, perm=[0, 2, 1, 3, 4, 5, 6]), ue_indices, ue_ranks])
+                    x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, ue_indices, ue_ranks])
                 else:
                     ValueError("unsupported precoding method for MASS")
 
@@ -301,12 +314,8 @@ class MU_MIMO(Model):
                 # rx_snr_db = tf.gather(rx_snr_db, tf.range(0, rx_snr_db.shape[2], 2), axis=2)
                 h_freq = tf.gather(h_freq, tf.range(0, h_freq.shape[2], 2), axis=2)
                 
-                # x_precoded, h_eff = self.zf_precoder([x_rg, tf.transpose(h_freq, perm=[0, 2, 1, 3, 4, 5, 6]), ue_indices, ue_ranks])
-                x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, ue_indices, ue_ranks])
-                
                 debug = False
                 if debug:
-                    # h_freq[0,:,:,tf.newaxis, ...]
                     plt.figure()
                     debug_rx_ant = 3
                     debug_tx_ant = 1
@@ -315,10 +324,6 @@ class MU_MIMO(Model):
                     plt.plot(np.real(h_freq_csi_history[-1,0,0,debug_rx_ant,0,debug_tx_ant,debug_ofdm_sym,:]))
                     plt.savefig('a')
                 debug = False
-                # y = dmimo_chans([x_precoded, self.cfg.first_slot_idx]) # Shape: [nbatches, num_rxs_antennas/2, 2, number of OFDM symbols, number of total subcarriers]
-                # # make proper shape
-                # y = tf.gather(y, tf.range(0, y.shape[2], 2), axis=2)
-                # y = tf.reshape(y, (self.batch_size, self.num_rx_ue, 1, 14, -1))
                 y = self.apply_channel([x_precoded, h_freq])
                 no = np.power(10.0, rx_snr_db / (-10.0))
                 y = self.awgn([y, no])
@@ -363,7 +368,7 @@ class MU_MIMO(Model):
                 d_hard = tf.cast(llr > 0, tf.float32) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols * QAM order]
                 uncoded_bers[curr_method, snr_idx] = compute_ber(d, d_hard).numpy()
 
-        return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair], uncoded_bers, x_hat
+        return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman], uncoded_bers, x_hat
     
 
     def nmse(self, H_true, H_pred, standard=True):
@@ -432,9 +437,10 @@ def sim_mu_mimo(cfg: SimConfig, rc_config:RCConfig):
     info_bits = binary_source([cfg.num_slots_p2, mu_mimo.num_bits_per_frame])
 
     # MU-MIMO transmission (P2)
-    [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair], uncoded_bers, x_hat = mu_mimo(dmimo_chans, info_bits)
+    [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman], uncoded_bers, x_hat = mu_mimo(dmimo_chans, info_bits)
 
-    return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair], uncoded_bers
+
+    return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman], uncoded_bers
 
 
 def sim_mu_mimo_all(cfg: SimConfig, rc_config:RCConfig):
@@ -447,10 +453,12 @@ def sim_mu_mimo_all(cfg: SimConfig, rc_config:RCConfig):
     pred_nmse_pred_nmse_outdated = []
     pred_nmse_wesn = []
     pred_nmse_wgesn_per_antenna_pair = []
+    pred_nmse_kalman = []
     
     uncoded_ber_outdated = []
     uncoded_ber_wesn = []
     uncoded_ber_wgesn = []
+    uncoded_ber_kalman = []    
 
     for first_slot_idx in np.arange(cfg.start_slot_idx, cfg.total_slots, cfg.num_slots_p1 + cfg.num_slots_p2):
 
@@ -459,14 +467,16 @@ def sim_mu_mimo_all(cfg: SimConfig, rc_config:RCConfig):
         total_cycles += 1
         cfg.first_slot_idx = first_slot_idx
 
-        [curr_pred_nmse_outdated, curr_pred_nmse_wesn, curr_pred_nmse_wgesn_per_antenna_pair], curr_uncoded_bers = sim_mu_mimo(cfg, rc_config)
+        [curr_pred_nmse_outdated, curr_pred_nmse_wesn, curr_pred_nmse_wgesn_per_antenna_pair, curr_pred_nmse_kalman], curr_uncoded_bers = sim_mu_mimo(cfg, rc_config)
 
         pred_nmse_pred_nmse_outdated.append(curr_pred_nmse_outdated)
         pred_nmse_wesn.append(curr_pred_nmse_wesn)
         pred_nmse_wgesn_per_antenna_pair.append(curr_pred_nmse_wgesn_per_antenna_pair)
+        pred_nmse_kalman.append(curr_pred_nmse_kalman)
 
         uncoded_ber_outdated.append(curr_uncoded_bers[0])
         uncoded_ber_wesn.append(curr_uncoded_bers[1])
         uncoded_ber_wgesn.append(curr_uncoded_bers[2])
+        uncoded_ber_kalman.append(curr_uncoded_bers[3])
 
-    return pred_nmse_pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, uncoded_ber_outdated, uncoded_ber_wesn, uncoded_ber_wgesn
+    return pred_nmse_pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman, uncoded_ber_outdated, uncoded_ber_wesn, uncoded_ber_wgesn, uncoded_ber_kalman
