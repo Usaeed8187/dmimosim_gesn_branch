@@ -7,10 +7,14 @@ This scripts should be called from the "tests" folder
 # add system folder for the dmimo library
 import sys
 import os
+os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "3")
+os.environ.setdefault("TF_FORCE_GPU_ALLOW_GROWTH", "true")
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+tf.get_logger().setLevel("ERROR")          # silence Python-side TF logs
 
 from dmimo.config import SimConfig, RCConfig
 from dmimo.mu_mimo_gesn_mass import sim_mu_mimo_all
@@ -19,31 +23,23 @@ os.environ['PYTHONHASHSEED'] = '10'
 tf.random.set_seed(10)
 
 sys.path.append(os.path.join('..'))
-source_dir = '/home/data/ns3_channels_q4/'
-destination_dir = 'ns3/'
-if not os.path.exists(destination_dir):
-    os.makedirs(destination_dir)
-for root, dirs, files in os.walk(source_dir):
-    # Construct the relative path to replicate the directory structure
-    relative_path = os.path.relpath(root, source_dir)
-    destination_subdir = os.path.join(destination_dir, relative_path)
+src = Path('~/dMIMO/ns3_channels_q4').expanduser()
+dst = Path('ns3')
 
-    # Create the subdirectory in the destination if it doesn't exist
-    if not os.path.exists(destination_subdir):
-        os.makedirs(destination_subdir)
-    
-    # Create symlinks for each file in the current directory
-    for file in files:
-        source_file = os.path.join(root, file)
-        destination_file = os.path.join(destination_subdir, file)
+if not src.is_dir():
+    raise FileNotFoundError(f"Source dir not found: {src}")
 
-        # If the symlink already exists, remove it
-        if os.path.exists(destination_file):
-            os.remove(destination_file)
-
-        # Create the symlink
-        os.symlink(source_file, destination_file)
-        # print(f"Symlink created for {source_file} -> {destination_file}")
+for f in src.rglob('*'):
+    if not f.is_file():
+        continue
+    rel = f.relative_to(src)
+    out = dst / rel
+    out.parent.mkdir(parents=True, exist_ok=True)
+    # remove existing file or symlink at destination
+    if out.exists() or out.is_symlink():
+        out.unlink()
+    # make symlink using absolute real path (avoids broken links)
+    out.symlink_to(f.resolve())
 
 script_name = sys.argv[0]
 arguments = sys.argv[1:]
