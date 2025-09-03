@@ -201,64 +201,90 @@ class MU_MIMO(Model):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             # Use the new code to do WESN based prediction
             h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
-            h_freq_csi_history = h_freq_csi_history[:,:,:,0:1,:,0:1,...]
             T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
-            Din_raw = int(RxAnt * TxAnt * RB)
+            Din_raw = int(RB)
+            h_freq_csi_standardized_wesn = np.zeros((1, RxAnt, 1, TxAnt, num_syms, RB), dtype=np.complex64)
 
-            X_seqs, Y_seqs = [], []
-            for t in range(T-1):
-                # Inputs at time t: [10,16,14,43] → [14,10,16,43] → [14, Din_raw]
-                x_t = tf.transpose(h_freq_csi_history[t,   0, 0, :, 0, :, :, :], perm=[2, 0, 1, 3])
-                x_t = tf.reshape(x_t, [num_syms, Din_raw])
-                # Targets at time t+1, aligned per symbol i
-                y_tp1 = tf.transpose(h_freq_csi_history[t+1, 0, 0, :, 0, :, :, :], perm=[2, 0, 1, 3])
-                y_tp1 = tf.reshape(y_tp1, [num_syms, Din_raw])
-                X_seqs.append(x_t)
-                Y_seqs.append(y_tp1)
-            
-            X = tf.stack(X_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
-            Y = tf.stack(Y_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
+            for rx_ant_idx in range(RxAnt):
+                for tx_ant_idx in range(TxAnt):
+                    # h_freq_csi_history = h_freq_csi_history[:,:,:,RxAnt:RxAnt+1,:,TxAnt:TxAnt+1,...]
+                    X_seqs, Y_seqs = [], []
+                    for t in range(T-1):
+                        # Inputs at time t: [10,16,14,43] → [14,10,16,43] → [14, Din_raw]
+                        x_t = tf.transpose(h_freq_csi_history[t,   0, 0, rx_ant_idx:rx_ant_idx+1, 0, tx_ant_idx:tx_ant_idx+1, :, :], perm=[2, 0, 1, 3])
+                        x_t = tf.reshape(x_t, [num_syms, Din_raw])
+                        # Targets at time t+1, aligned per symbol i
+                        y_tp1 = tf.transpose(h_freq_csi_history[t+1, 0, 0, rx_ant_idx:rx_ant_idx+1, 0, tx_ant_idx:tx_ant_idx+1, :, :], perm=[2, 0, 1, 3])
+                        y_tp1 = tf.reshape(y_tp1, [num_syms, Din_raw])
+                        X_seqs.append(x_t)
+                        Y_seqs.append(y_tp1)
+                    
+                    X = tf.stack(X_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
+                    Y = tf.stack(Y_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
 
-            if X.dtype.is_complex:
-                X = tf.concat([tf.math.real(X), tf.math.imag(X)], axis=-1)
-                Y = tf.concat([tf.math.real(Y), tf.math.imag(Y)], axis=-1)
+                    if X.dtype.is_complex:
+                        X = tf.concat([tf.math.real(X), tf.math.imag(X)], axis=-1)
+                        Y = tf.concat([tf.math.real(Y), tf.math.imag(Y)], axis=-1)
 
-            Din = int(X.shape[-1])
-            Dout = int(Y.shape[-1])
+                    Din = int(X.shape[-1])
+                    Dout = int(Y.shape[-1])
 
-            # --- Build and train WESN ---
-            # win_len=0 lets the RNN carry context; set >0 if you also want explicit input lags per step
-            layer = WESN(units=256, win_len=3, readout_units=Dout)
-            inp = tf.keras.Input(shape=(num_syms, Din))   # (timesteps=14 fixed; you could also use None)
-            out = layer(inp)
-            model = tf.keras.Model(inp, out)
-            model.compile(optimizer="adam", loss="mse")
-            model.fit(X, Y, epochs=100, verbose=1)     # small dataset; consider more epochs or weight decay
+                    # --- Build and train WESN ---
+                    # win_len=0 lets the RNN carry context; set >0 if you also want explicit input lags per step
+                    layer = WESN(units=self.rc_config.num_neurons, win_len=self.rc_config.window_length, readout_units=Dout)
+                    inp = tf.keras.Input(shape=(num_syms, Din))   # (timesteps=14 fixed; you could also use None)
+                    out = layer(inp)
+                    model = tf.keras.Model(inp, out)
+                    model.compile(optimizer="adam", loss="mse")
+                    model.fit(X, Y, epochs=100, verbose=1)     # small dataset; consider more epochs or weight decay
 
-            # --- Inference: predict subframe at t=3 from subframe at t=2 ---
-            X_last = tf.transpose(h_freq_csi_history[-1, 0, 0, :, 0, :, :, :], perm=[2, 0, 1, 3])   # [14,10,16,43]
-            X_last = tf.reshape(X_last, [1, num_syms, Din_raw])                       # [1,14,Din_raw]
-            if X_last.dtype.is_complex:
-                X_last = tf.concat([tf.math.real(X_last), tf.math.imag(X_last)], axis=-1)
+                    # --- Inference: predict subframe at t=3 from subframe at t=2 ---
+                    X_last = tf.transpose(h_freq_csi_history[-1, 0, 0, rx_ant_idx:rx_ant_idx+1, 0, tx_ant_idx:tx_ant_idx+1, :, :], perm=[2, 0, 1, 3])   # [14,10,16,43]
+                    X_last = tf.reshape(X_last, [1, num_syms, Din_raw])                       # [1,14,Din_raw]
+                    if X_last.dtype.is_complex:
+                        X_last = tf.concat([tf.math.real(X_last), tf.math.imag(X_last)], axis=-1)
 
-            Y_pred = model.predict(X_last, verbose=0)[0]   # [14, Dout]
+                    Y_pred = model.predict(X_last, verbose=0)[0]   # [14, Dout]
 
-            # If you stacked Re/Im, convert back to complex and original shape [14,10,16,43]
-            if Dout == 2 * Din_raw:
-                Dhalf = Dout // 2
-                Y_pred_c = tf.complex(Y_pred[:, :Dhalf], Y_pred[:, Dhalf:])
-                Y_pred_c = tf.reshape(Y_pred_c, [num_syms, RxAnt, TxAnt, RB])  # [14,10,16,43]
+                    # If you stacked Re/Im, convert back to complex and original shape [14,10,16,43]
+                    if Dout == 2 * Din_raw:
+                        Dhalf = Dout // 2
+                        Y_pred_c = tf.complex(Y_pred[:, :Dhalf], Y_pred[:, Dhalf:])
+                        Y_pred_c = tf.reshape(Y_pred_c, [num_syms, 1, 1, RB])  # [14,10,16,43]
+                    
+                    tmp = tf.transpose(Y_pred_c, perm=[1,2,0,3])
+                    tmp = tmp[tf.newaxis, :, tf.newaxis, :, :, :]
+
+                    h_freq_csi_standardized_wesn[:, rx_ant_idx:rx_ant_idx+1, :, tx_ant_idx:tx_ant_idx+1, :, :] = np.asarray(tmp)
+                    hold = 1
 
 
-            h_freq_csi_standardized_wesn = tf.transpose(Y_pred_c, perm=[1,2,0,3])
-            h_freq_csi_standardized_wesn = h_freq_csi_standardized_wesn[tf.newaxis, :, tf.newaxis, :, :, :]
-
-            pred_nmse_standardized_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
 
 
+            # h_freq_csi_standardized_wesn = tf.transpose(Y_pred_c, perm=[1,2,0,3])
+            # h_freq_csi_standardized_wesn = h_freq_csi_standardized_wesn[tf.newaxis, :, tf.newaxis, :, :, :]
+            h_freq_csi_standardized_wesn = tf.convert_to_tensor(h_freq_csi_standardized_wesn)
 
+            pred_nmse_standardized_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_standardized_wesn)
+
+
+            hold = 1
 
 
 
