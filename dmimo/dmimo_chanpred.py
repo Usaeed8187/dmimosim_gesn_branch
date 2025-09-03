@@ -264,16 +264,24 @@ class MU_MIMO(Model):
                     # --- Inference: predict subframe at t=3 from subframe at t=2 ---
                     X_last = tf.transpose(h_freq_csi_history[-1, 0, 0, rx_ant_idx:rx_ant_idx+1, 0, tx_ant_idx:tx_ant_idx+1, :, :], perm=[2, 0, 1, 3])   # [14,10,16,43]
                     X_last = tf.reshape(X_last, [1, num_syms, Din_raw])                       # [1,14,Din_raw]
-                    if X_last.dtype.is_complex:
-                        X_last = tf.concat([tf.math.real(X_last), tf.math.imag(X_last)], axis=-1)
+                    # If the model was trained on stacked real/imaginary parts the
+                    # expected input dimension will be twice the raw dimension.
+                    # In that case, stack here as well.  Otherwise, feed the complex
+                    # tensor directly.
+                    if X_last.dtype.is_complex and Din == 2 * Din_raw:
+                        X_last = tf.concat([tf.math.real(X_last),
+                                            tf.math.imag(X_last)], axis=-1)
 
                     Y_pred = model.predict(X_last, verbose=0)[0]   # [14, Dout]
 
-                    # If you stacked Re/Im, convert back to complex and original shape [14,10,16,43]
+                    # If the network output stacks real and imaginary parts, convert
+                    # back to a complex tensor and original shape [14,10,16,43].
                     if Dout == 2 * Din_raw:
                         Dhalf = Dout // 2
-                        Y_pred_c = tf.complex(Y_pred[:, :Dhalf], Y_pred[:, Dhalf:])
-                        Y_pred_c = tf.reshape(Y_pred_c, [num_syms, 1, 1, RB])  # [14,10,16,43]
+                        Y_pred = tf.complex(Y_pred[:, :Dhalf],
+                                             Y_pred[:, Dhalf:])
+                    
+                    Y_pred_c = tf.reshape(Y_pred, [num_syms, 1, 1, RB])  # [14,10,16,43]
                     
                     tmp = tf.transpose(Y_pred_c, perm=[1,2,0,3])
                     tmp = tmp[tf.newaxis, :, tf.newaxis, :, :, :]
