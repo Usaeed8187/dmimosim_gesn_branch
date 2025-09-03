@@ -26,7 +26,7 @@ class standard_rc_pred_freq_mimo:
         # self.nfft = int(np.ceil(self.nfft_full / self.subcarriers_per_RB))
         self.nfft = self.nfft_full
 
-        self.window_weighting_method = 'exponential_decay' # 'autocorrelation', 'same_weights', 'exponential_decay'
+        self.window_weighting_method = 'none' # 'autocorrelation', 'same_weights', 'exponential_decay', 'none'
         self.window_weight_application = 'none' # across_time, across_inputs, across_time_and_inputs
         self.match_testing_training_input_size = True
         
@@ -272,6 +272,8 @@ class standard_rc_pred_freq_mimo:
             # x = np.linspace(0, self.window_length-1, self.history_len*self.num_ofdm_sym)
             x = np.linspace(0, self.window_length-1, h_freq_csi_history.shape[1])
             window_weights = np.exp(-x/2)
+        elif self.window_weighting_method == 'none':
+            window_weights = np.ones(h_freq_csi_history.shape[1])
         else:
             raise ValueError("\n The window_weighting_method specified is not implemented")
         

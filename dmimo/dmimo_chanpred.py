@@ -238,22 +238,28 @@ class MU_MIMO(Model):
                     X = tf.stack(X_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
                     Y = tf.stack(Y_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
 
-                    if X.dtype.is_complex:
-                        X = tf.concat([tf.math.real(X), tf.math.imag(X)], axis=-1)
-                        Y = tf.concat([tf.math.real(Y), tf.math.imag(Y)], axis=-1)
+                    # if X.dtype.is_complex:
+                    #     X = tf.concat([tf.math.real(X), tf.math.imag(X)], axis=-1)
+                    #     Y = tf.concat([tf.math.real(Y), tf.math.imag(Y)], axis=-1)
 
                     Din = int(X.shape[-1])
                     Dout = int(Y.shape[-1])
 
                     # --- Build and train WESN ---
                     # win_len=0 lets the RNN carry context; set >0 if you also want explicit input lags per step
-                    layer = WESN(units=self.rc_config.num_neurons, win_len=self.rc_config.window_length, readout_units=Dout)
+                    layer = WESN(units=self.rc_config.num_neurons,
+                                 win_len=self.rc_config.window_length,
+                                 readout_units=Dout,
+                                 connectivity=self.rc_config.W_tran_sparsity,
+                                 spectral_radius=self.rc_config.W_tran_radius,
+                                 input_scale=self.rc_config.input_scale,
+                                 inv_regularization=self.rc_config.regularization)
                     inp = tf.keras.Input(shape=(num_syms, Din))   # (timesteps=14 fixed; you could also use None)
                     out = layer(inp)
                     model = tf.keras.Model(inp, out)
                     layer.ls_initialize(X, Y)
                     model.compile(optimizer="adam", loss="mse")
-                    model.fit(X, Y, epochs=1, verbose=0)     # small dataset; consider more epochs or weight decay
+                    model.fit(X, Y, epochs=0, verbose=1)     # small dataset; consider more epochs or weight decay
 
                     # --- Inference: predict subframe at t=3 from subframe at t=2 ---
                     X_last = tf.transpose(h_freq_csi_history[-1, 0, 0, rx_ant_idx:rx_ant_idx+1, 0, tx_ant_idx:tx_ant_idx+1, :, :], perm=[2, 0, 1, 3])   # [14,10,16,43]

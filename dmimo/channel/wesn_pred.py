@@ -3,6 +3,16 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, initializers, activations
 
+def complex_initializer(real_init):
+    """Create a complex initializer from a real-valued initializer."""
+
+    def _init(shape, dtype=None):
+        real = real_init(shape, dtype=tf.float32)
+        imag = real_init(shape, dtype=tf.float32)
+        return tf.complex(real, imag)
+
+    return _init
+
 class ESNCell(tf.keras.layers.Layer):
     """Echo State recurrent Network (ESN) cell.
 
@@ -20,20 +30,22 @@ class ESNCell(tf.keras.layers.Layer):
         spectral_radius: float = 0.9,
         use_norm2: bool = False,
         use_bias: bool = True,
-        activation="tanh",
+        activation=tf.math.tanh,
         kernel_initializer="glorot_uniform",
         recurrent_initializer="glorot_uniform",
         bias_initializer="zeros",
         **kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(dtype=tf.complex64, **kwargs)
         self.units = units
         self.connectivity = connectivity
         self.leaky = leaky
         self.spectral_radius = spectral_radius
         self.use_norm2 = use_norm2
         self.use_bias = use_bias
-        self.activation = activations.get(activation)
+        # ``activation`` may be passed as a string or callable.  ``tf.math.tanh``
+        # is used by default as it supports complex inputs.
+        self.activation = activation if callable(activation) else activations.get(activation)
         self.kernel_initializer = initializers.get(kernel_initializer)
         self.recurrent_initializer = initializers.get(recurrent_initializer)
         self.bias_initializer = initializers.get(bias_initializer)
@@ -57,25 +69,25 @@ class ESNCell(tf.keras.layers.Layer):
         # Define a custom recurrent initializer for the reservoir matrix.
         def _esn_recurrent_initializer(shape, dtype=None):
             # Initialize the recurrent weights.
-            recurrent_weights = self.recurrent_initializer(shape, dtype=dtype)
+            real = self.recurrent_initializer(shape, dtype=tf.float32)
+            imag = self.recurrent_initializer(shape, dtype=tf.float32)
+            recurrent_weights = tf.complex(real, imag)
             # Create a binary connectivity mask.
-            connectivity_mask = tf.cast(
-                tf.random.uniform(shape, dtype=dtype) <= self.connectivity,
-                dtype=dtype,
-            )
-            recurrent_weights *= connectivity_mask
+            connectivity_mask = tf.random.uniform(shape, dtype=tf.float32) <= self.connectivity
+            recurrent_weights = tf.where(connectivity_mask, recurrent_weights, tf.zeros_like(recurrent_weights))
 
             # Scale the recurrent weights to satisfy the echo state property.
             if self.use_norm2:
                 recurrent_norm2 = tf.norm(recurrent_weights, ord=2)
                 scaling_factor = self.spectral_radius / (
-                    recurrent_norm2 + tf.cast(tf.equal(recurrent_norm2, 0), dtype=dtype)
+                    tf.cast(recurrent_norm2, tf.float32)
+                    + tf.cast(tf.equal(recurrent_norm2, 0), tf.float32)
                 )
             else:
                 abs_eig_values = tf.abs(tf.linalg.eigvals(recurrent_weights))
                 max_abs_eig = tf.reduce_max(abs_eig_values)
                 scaling_factor = tf.math.divide_no_nan(self.spectral_radius, max_abs_eig)
-            return recurrent_weights * scaling_factor
+            return recurrent_weights * tf.cast(scaling_factor, tf.complex64)
 
         # Create the recurrent weight matrix (non-trainable).
         self.recurrent_kernel = self.add_weight(
@@ -83,21 +95,24 @@ class ESNCell(tf.keras.layers.Layer):
             shape=(self.units, self.units),
             initializer=_esn_recurrent_initializer,
             trainable=False,
+            dtype=tf.complex64,
         )
         # Create the input kernel weight matrix (non-trainable).
         self.kernel = self.add_weight(
             name="kernel",
             shape=(input_dim, self.units),
-            initializer=self.kernel_initializer,
+            initializer=complex_initializer(self.kernel_initializer),
             trainable=False,
+            dtype=tf.complex64,
         )
         # Optionally, create the bias vector (non-trainable).
         if self.use_bias:
             self.bias = self.add_weight(
                 name="bias",
                 shape=(self.units,),
-                initializer=self.bias_initializer,
+                initializer=complex_initializer(self.bias_initializer),
                 trainable=False,
+                dtype=tf.complex64,
             )
         else:
             self.bias = None
@@ -120,7 +135,8 @@ class ESNCell(tf.keras.layers.Layer):
         # Apply the activation function.
         output = self.activation(output)
         # Use leaky integration to combine previous state with the new output.
-        output = (1 - self.leaky) * prev_state + self.leaky * output
+        leaky = tf.cast(self.leaky, output.dtype)
+        output = (1 - leaky) * prev_state + leaky * output
         return output, [output]
 
     def get_config(self):
@@ -155,8 +171,11 @@ class WESN(tf.keras.layers.Layer):
             bias_initializer="zeros",
             win_len: int = 0,
             readout_units: int = 1,
+            input_scale: float = 1.0,
+            complex_input: bool = False,
+            inv_regularization: int = 1,
             **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(dtype=tf.complex64, **kwargs)
         self.cell = ESNCell(
                 units=units,
                 connectivity=connectivity,
@@ -172,8 +191,16 @@ class WESN(tf.keras.layers.Layer):
         self.reservoir = tf.keras.layers.RNN(self.cell, return_sequences=True, return_state=False)
         self.win_len = win_len
         self.readout_units = readout_units
+        self.input_scale = input_scale
+        self.complex_input = complex_input
+        self.inv_regularization = inv_regularization
         # Bias is deliberately disabled so the readout is a pure linear mapping
-        self.readout = tf.keras.layers.Dense(readout_units, use_bias=False)
+        self.readout = tf.keras.layers.Dense(
+            readout_units,
+            use_bias=False,
+            dtype=tf.complex64,
+            kernel_initializer=complex_initializer(tf.keras.initializers.GlorotUniform()),
+        )
 
     # The Dense read‑out is created lazily in build() once the input dimensionality is known
     def build(self, inputs_shape):
@@ -190,18 +217,18 @@ class WESN(tf.keras.layers.Layer):
 
     def _stack_inputs(self, inputs):
         """Run the reservoir and stack optional input lags."""
+        inputs = tf.cast(inputs, tf.complex64) * self.input_scale
         res_out = self.reservoir(inputs)  # [batch, timesteps, units]
-        res_out = tf.cast(res_out, tf.float32)
 
         stacked_inp = [res_out]
         # Make sure win_len <= inputs.shape[1]
         if self.win_len:
             if self.win_len > inputs.shape[1]:
                 raise ValueError(f"win_len ({self.win_len}) cannot be greater than input timesteps ({inputs.shape[1]})")
-            stacked_inp.append(tf.cast(inputs, tf.float32))
+            stacked_inp.append(inputs)
             for k in range(1, self.win_len):
                 lag_k = tf.pad(inputs[:, :-k, :], paddings=[[0, 0], [k, 0], [0, 0]])
-                stacked_inp.append(tf.cast(lag_k, tf.float32))
+                stacked_inp.append(lag_k)
         
         return tf.concat(stacked_inp, axis=-1)
     
@@ -227,6 +254,8 @@ class WESN(tf.keras.layers.Layer):
         if not self.built:
             self.build(inputs.shape)
 
+        inputs = tf.cast(inputs, tf.complex64)
+        targets = tf.cast(targets, tf.complex64)
         stacked_inp = self._stack_inputs(inputs)
         shape = tf.shape(stacked_inp)
         bt = shape[0] * shape[1]
@@ -236,7 +265,35 @@ class WESN(tf.keras.layers.Layer):
         y = tf.cast(y, dtype=x.dtype)
 
         # Solve for weights without an explicit bias term
-        w = tf.linalg.pinv(x) @ y  # [feature_dim, readout_units]
+        w = self.reg_p_inv(x) @ y  # [feature_dim, readout_units]
         self.readout.kernel.assign(w)
+    
+    def reg_p_inv(self, X):
+        """
+        Compute regularized pseudoinverse:
+        (Xᴴ (X Xᴴ + reg*I)⁻¹)
+
+        Args:
+            X: [N, F] complex tensor
+            reg: ridge parameter (float)
+
+        Returns:
+            [F, N] complex tensor (regularized pseudoinverse of X)
+        """
+        X = tf.convert_to_tensor(X)
+        N = tf.shape(X)[0]
+
+        # Identity [N, N]
+        I = tf.eye(N, dtype=X.dtype)
+
+        # X @ Xᴴ   [N, N]
+        XXH = tf.matmul(X, X, adjoint_b=True)
+
+        # (XXᴴ + reg I)⁻¹   [N, N]
+        inv_term = tf.linalg.inv(XXH + tf.cast(self.inv_regularization, X.dtype) * I)
+
+        # Xᴴ @ inv_term   [F, N]
+        return tf.matmul(X, inv_term, adjoint_a=True)
+
 
 
