@@ -251,8 +251,9 @@ class MU_MIMO(Model):
                     inp = tf.keras.Input(shape=(num_syms, Din))   # (timesteps=14 fixed; you could also use None)
                     out = layer(inp)
                     model = tf.keras.Model(inp, out)
+                    layer.ls_initialize(X, Y)
                     model.compile(optimizer="adam", loss="mse")
-                    model.fit(X, Y, epochs=100, verbose=1)     # small dataset; consider more epochs or weight decay
+                    model.fit(X, Y, epochs=1, verbose=0)     # small dataset; consider more epochs or weight decay
 
                     # --- Inference: predict subframe at t=3 from subframe at t=2 ---
                     X_last = tf.transpose(h_freq_csi_history[-1, 0, 0, rx_ant_idx:rx_ant_idx+1, 0, tx_ant_idx:tx_ant_idx+1, :, :], perm=[2, 0, 1, 3])   # [14,10,16,43]

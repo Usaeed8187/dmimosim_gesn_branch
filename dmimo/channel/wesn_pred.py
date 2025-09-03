@@ -172,7 +172,8 @@ class WESN(tf.keras.layers.Layer):
         self.reservoir = tf.keras.layers.RNN(self.cell, return_sequences=True, return_state=False)
         self.win_len = win_len
         self.readout_units = readout_units
-        self.readout = tf.keras.layers.Dense(readout_units)
+        # Bias is deliberately disabled so the readout is a pure linear mapping
+        self.readout = tf.keras.layers.Dense(readout_units, use_bias=False)
 
     # The Dense read‑out is created lazily in build() once the input dimensionality is known
     def build(self, inputs_shape):
@@ -187,20 +188,55 @@ class WESN(tf.keras.layers.Layer):
         
         super().build(inputs_shape)
 
-    def call(self, inputs):
-        # 1) run through the untrained ESN reservoir
+    def _stack_inputs(self, inputs):
+        """Run the reservoir and stack optional input lags."""
         res_out = self.reservoir(inputs)  # [batch, timesteps, units]
+        res_out = tf.cast(res_out, tf.float32)
 
         stacked_inp = [res_out]
         # Make sure win_len <= inputs.shape[1]
         if self.win_len:
             if self.win_len > inputs.shape[1]:
                 raise ValueError(f"win_len ({self.win_len}) cannot be greater than input timesteps ({inputs.shape[1]})")
-            stacked_inp.append(inputs)
+            stacked_inp.append(tf.cast(inputs, tf.float32))
             for k in range(1, self.win_len):
                 lag_k = tf.pad(inputs[:, :-k, :], paddings=[[0, 0], [k, 0], [0, 0]])
-                stacked_inp.append(lag_k)
-        stacked_inp = tf.concat(stacked_inp, axis=-1)
+                stacked_inp.append(tf.cast(lag_k, tf.float32))
+        
+        return tf.concat(stacked_inp, axis=-1)
+    
+    def call(self, inputs):
+        # 1) run through the untrained ESN reservoir
+        stacked_inp = self._stack_inputs(inputs)
         output = self.readout(stacked_inp)  # [batch, timesteps, readout_units]
         return output
+
+    def ls_initialize(self, inputs, targets):
+        """Compute a least-squares solution for the readout weights.
+
+        The Dense readout is initialized via a pseudo-inverse solution before
+        subsequent gradient-based optimisation.
+
+        Parameters
+        ----------
+        inputs : tf.Tensor
+            Input sequences with shape ``[batch, timesteps, features]``.
+        targets : tf.Tensor
+            Target sequences with shape ``[batch, timesteps, readout_units]``.
+        """
+        if not self.built:
+            self.build(inputs.shape)
+
+        stacked_inp = self._stack_inputs(inputs)
+        shape = tf.shape(stacked_inp)
+        bt = shape[0] * shape[1]
+        f = shape[2]
+        x = tf.reshape(stacked_inp, [bt, f])
+        y = tf.reshape(targets, [bt, -1])
+        y = tf.cast(y, dtype=x.dtype)
+
+        # Solve for weights without an explicit bias term
+        w = tf.linalg.pinv(x) @ y  # [feature_dim, readout_units]
+        self.readout.kernel.assign(w)
+
 
