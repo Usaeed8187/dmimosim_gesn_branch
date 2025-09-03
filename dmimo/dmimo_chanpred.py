@@ -19,6 +19,7 @@ from sionna.utils import expand_to_rank, complex_normal, flatten_last_dims
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig, RCConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_dmimo
+from dmimo.channel.wesn_pred import WESN
 from dmimo.channel.kalman_pred_freq_dmimo import kalman_pred_freq_dmimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
@@ -197,6 +198,80 @@ class MU_MIMO(Model):
             
             h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history)
             pred_nmse_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
+
+
+
+            # Use the new code to do WESN based prediction
+            h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
+            h_freq_csi_history = h_freq_csi_history[:,:,:,0:1,:,0:1,...]
+            T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
+            Din_raw = int(RxAnt * TxAnt * RB)
+
+            X_seqs, Y_seqs = [], []
+            for t in range(T-1):
+                # Inputs at time t: [10,16,14,43] → [14,10,16,43] → [14, Din_raw]
+                x_t = tf.transpose(h_freq_csi_history[t,   0, 0, :, 0, :, :, :], perm=[2, 0, 1, 3])
+                x_t = tf.reshape(x_t, [num_syms, Din_raw])
+                # Targets at time t+1, aligned per symbol i
+                y_tp1 = tf.transpose(h_freq_csi_history[t+1, 0, 0, :, 0, :, :, :], perm=[2, 0, 1, 3])
+                y_tp1 = tf.reshape(y_tp1, [num_syms, Din_raw])
+                X_seqs.append(x_t)
+                Y_seqs.append(y_tp1)
+            
+            X = tf.stack(X_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
+            Y = tf.stack(Y_seqs, axis=0)   # [batch=2, timesteps=14, Din_raw]
+
+            if X.dtype.is_complex:
+                X = tf.concat([tf.math.real(X), tf.math.imag(X)], axis=-1)
+                Y = tf.concat([tf.math.real(Y), tf.math.imag(Y)], axis=-1)
+
+            Din = int(X.shape[-1])
+            Dout = int(Y.shape[-1])
+
+            # --- Build and train WESN ---
+            # win_len=0 lets the RNN carry context; set >0 if you also want explicit input lags per step
+            layer = WESN(units=256, win_len=3, readout_units=Dout)
+            inp = tf.keras.Input(shape=(num_syms, Din))   # (timesteps=14 fixed; you could also use None)
+            out = layer(inp)
+            model = tf.keras.Model(inp, out)
+            model.compile(optimizer="adam", loss="mse")
+            model.fit(X, Y, epochs=100, verbose=1)     # small dataset; consider more epochs or weight decay
+
+            # --- Inference: predict subframe at t=3 from subframe at t=2 ---
+            X_last = tf.transpose(h_freq_csi_history[-1, 0, 0, :, 0, :, :, :], perm=[2, 0, 1, 3])   # [14,10,16,43]
+            X_last = tf.reshape(X_last, [1, num_syms, Din_raw])                       # [1,14,Din_raw]
+            if X_last.dtype.is_complex:
+                X_last = tf.concat([tf.math.real(X_last), tf.math.imag(X_last)], axis=-1)
+
+            Y_pred = model.predict(X_last, verbose=0)[0]   # [14, Dout]
+
+            # If you stacked Re/Im, convert back to complex and original shape [14,10,16,43]
+            if Dout == 2 * Din_raw:
+                Dhalf = Dout // 2
+                Y_pred_c = tf.complex(Y_pred[:, :Dhalf], Y_pred[:, Dhalf:])
+                Y_pred_c = tf.reshape(Y_pred_c, [num_syms, RxAnt, TxAnt, RB])  # [14,10,16,43]
+
+
+            h_freq_csi_standardized_wesn = tf.transpose(Y_pred_c, perm=[1,2,0,3])
+            h_freq_csi_standardized_wesn = h_freq_csi_standardized_wesn[tf.newaxis, :, tf.newaxis, :, :, :]
+
+            pred_nmse_standardized_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
             # Kalman filter baseline prediction
             # rc_predictor_kf = kalman_pred_freq_dmimo('MU_MIMO', self.rc_config,
