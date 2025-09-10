@@ -95,7 +95,7 @@ class multimode_esn_pred:
                  sigma=None,  # elementwise non-linearity
                  alpha=1.0,  # leaky integration factor
                  dtype=tf.complex64,
-                 target_rho=0.9):
+                 target_rho=0.8):
         """Initialize random reservoir and input coupling matrices.
 
         Parameters correspond to the tensor sizes described above.  Weight
@@ -148,28 +148,55 @@ class multimode_esn_pred:
 
     def build_feature_queue(self, S, Y_tilde):
         """
-        Simple 3D block-diagonal feature queue:
-            - place S at the "top-left-front" block
-            - place Y_tilde at the "bottom-right-back" block
-        Return shape: [d_f + L*N_f, d_t + N_t, d_r + N_r]
+        Construct feature tensor concatenating state and input per mode.
+
+        Instead of a block-diagonal layout, the state ``S`` and the windowed
+        input ``Y_tilde`` are concatenated along each mode individually.  The
+        resulting tensor has dimensions ``[d_f + L*N_f, d_t + N_t, d_r + N_r]``
+        and contains overlap regions ensuring state–input cross terms exist.
         """
         S = tf.convert_to_tensor(S, dtype=self.dtype)               # [d_f, d_t, d_r]
         Y_tilde = tf.convert_to_tensor(Y_tilde, dtype=self.dtype)   # [L*N_f, N_t, N_r]
 
-        # Pad S to the upper-left-front corner
-        S_pad = tf.pad(S,
-                    paddings=[[0, self.window_len * self.N_f],  # mode-0
-                                [0, self.N_t],                    # mode-1
-                                [0, self.N_r]])                   # mode-2
+        # Start with state padded to the feature dimensions
+        G = tf.pad(S,
+                   paddings=[[0, self.window_len * self.N_f],  # mode-0
+                             [0, self.N_t],                    # mode-1
+                             [0, self.N_r]])                   # mode-2
 
-        # Pad Y_tilde to the bottom-right-back corner
-        Y_pad = tf.pad(Y_tilde,
-                    paddings=[[self.d_f, 0],   # mode-0
-                                [self.d_t, 0],   # mode-1
-                                [self.d_r, 0]])  # mode-2
+        # Input placed along each mode individually.  Inclusion–exclusion
+        # removes double counting from overlapping regions.
+        Y_f = tf.pad(Y_tilde,
+                     paddings=[[self.d_f, 0],
+                               [0, self.d_t],
+                               [0, self.d_r]])
+        Y_t = tf.pad(Y_tilde,
+                     paddings=[[0, self.d_f],
+                               [self.d_t, 0],
+                               [0, self.d_r]])
+        Y_r = tf.pad(Y_tilde,
+                     paddings=[[0, self.d_f],
+                               [0, self.d_t],
+                               [self.d_r, 0]])
 
-        # Since the pads don't overlap, summing gives a super-block-diagonal tensor
-        G = S_pad + Y_pad
+        Y_ft = tf.pad(Y_tilde,
+                      paddings=[[self.d_f, 0],
+                                [self.d_t, 0],
+                                [0, self.d_r]])
+        Y_fr = tf.pad(Y_tilde,
+                      paddings=[[self.d_f, 0],
+                                [0, self.d_t],
+                                [self.d_r, 0]])
+        Y_tr = tf.pad(Y_tilde,
+                      paddings=[[0, self.d_f],
+                                [self.d_t, 0],
+                                [self.d_r, 0]])
+        Y_ftr = tf.pad(Y_tilde,
+                       paddings=[[self.d_f, 0],
+                                 [self.d_t, 0],
+                                 [self.d_r, 0]])
+
+        G = G + Y_f + Y_t + Y_r - Y_ft - Y_fr - Y_tr + Y_ftr
 
         return G  # [df_feat, dt_feat, dr_feat]
     
@@ -193,7 +220,7 @@ class multimode_esn_pred:
 
         return feats, targets
 
-    def fit_readout_features(self, features, targets, lambdas=(0.0, 0.0, 0.0), iters=2):
+    def fit_readout_features(self, features, targets, lambdas=(0.0, 0.0, 0.0), iters=3):
         """
         Train mode-wise readout from the FEATURE QUEUE via ridge-ALS.
 
@@ -371,6 +398,17 @@ class multimode_esn_pred:
         # --- Fit readout on feature queue ---
         self.fit_readout_features(all_feats, all_targets, lambdas=lambdas, iters=iters)
 
+        # --- DEBUG: training reconstruction NMSE ---
+        def nmse(a, b, eps=1e-12):
+            num = tf.reduce_sum(tf.abs(a - b) ** 2)
+            den = tf.reduce_sum((tf.abs(a) + tf.abs(b)) ** 2) + eps
+            return (num / den).numpy()
+        
+        train_preds = [self._readout(G=g) for g in all_feats]
+        train_nmse = nmse(tf.stack(all_targets, 0), tf.stack(train_preds, 0))
+        print(f"[DEBUG] train recon NMSE: {train_nmse:.6f}")
+
+
         # --- Predict the next subframe (per symbol index), then pack back to 8-D ---
         next_subframe_syms = []
         for m in m_range:
@@ -383,8 +421,8 @@ class multimode_esn_pred:
 
         Y_next = tf.stack(next_subframe_syms, axis=0)             # [M, N_f, N_t, N_r]
         # pack to [1, 1, 1, N_r, 1, N_t, M, N_f]
-        pred = Y_next[tf.newaxis, tf.newaxis, tf.newaxis, ...]
-        pred = tf.transpose(pred, perm=[0, 1, 6, 2, 5, 3, 4])
+        pred = Y_next[tf.newaxis, tf.newaxis, ...]
+        pred = tf.transpose(pred, perm=[0, 5, 1, 4, 2, 3])
 
         return pred
 

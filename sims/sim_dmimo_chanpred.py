@@ -80,7 +80,7 @@ if __name__ == "__main__":
     rc_config.lr = 0.01
     rc_config.num_epochs = 50
     rc_config.enable_window = True
-    rc_config.window_length = 3
+    rc_config.window_length = 1
     rc_config.num_neurons = 16
     rc_config.vector_inputs = vector_inputs
     rc_config.weight_initialization = 'model_based_freq_corr' # "model_based_aoa_aod", "model_based_freq_corr", "model_based_delays" #TODO: find a better edge update method than grad descent. maybe attention based mechanism
