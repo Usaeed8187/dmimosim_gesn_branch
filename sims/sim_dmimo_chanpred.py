@@ -65,7 +65,7 @@ if __name__ == "__main__":
     rc_config = RCConfig()
     cfg = SimConfig()
     cfg.total_slots = 50        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 30     # starting slots (must be greater than csi_delay + 5)
+    cfg.start_slot_idx = 35     # starting slots (must be greater than csi_delay + 5)
     cfg.csi_delay = 4           # feedback delay in number of subframe
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
@@ -75,7 +75,7 @@ if __name__ == "__main__":
         drop_idx = '2'
         rx_ues_arr = [3]
         vector_inputs = 'tx_ants' # tx_ants, rx_ants, none, all
-        csi_delays = [2, 3, 4, 5, 6, 7, 8,]
+        csi_delays = [2, 3, 4, 5, 6, 7, 8]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
     rc_config.lr = 0.01
     rc_config.num_epochs = 50
@@ -86,6 +86,7 @@ if __name__ == "__main__":
     rc_config.weight_initialization = 'model_based_freq_corr' # "model_based_aoa_aod", "model_based_freq_corr", "model_based_delays" #TODO: find a better edge update method than grad descent. maybe attention based mechanism
     rc_config.mobility = mobility
     rc_config.drop_idx = drop_idx
+    rc_config.history_len = 8
     cfg.graph_formulation = 'per_antenna_pair' # "per_node_pair", "per_antenna_pair", "supergraph"
     cfg.num_tx_streams = 1
     cfg.modulation_order = 2

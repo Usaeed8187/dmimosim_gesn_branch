@@ -214,25 +214,69 @@ class multimode_esn_pred:
         out = mode_n_product(out, self.C_r, 2)
         return out
 
-    def predict(self, history):
-        """Predict the next channel tensor given a history buffer.
+    def predict(self, history, washout=0, lambdas=(1e-3, 1e-3, 1e-3), iters=2):
+        """
+        Train readout from `history` and return the next-step prediction.
 
         Parameters
         ----------
         history : tf.Tensor
-            Sequence of past channels of shape ``[T, _, _, N_f, N_t, N_r]`` where ``T``
-            is the history length (number of subframes/slots).
+            Shape [N_subframes, 1, 1, N_r, 1, N_t, N_syms, N_f],
+            this function reshapes to Shape [T=N_subframes*N_syms, N_f, N_t, N_r], containing Y_0 ... Y_{T-1}.
+        washout : int
+            Number of initial steps to discard when forming training pairs.
+        lambdas : tuple(float, float, float)
+            Ridge regularization for (C_f, C_t, C_r).
+        iters : int
+            Number of ALS sweeps.
 
         Returns
         -------
         tf.Tensor
-            Predicted tensor of shape ``[N_f, N_t, N_r]``.
+            One-step-ahead prediction Y_hat_T with shape [N_f, N_t, N_r].
         """
-        self.reset_state()
-        history = tf.convert_to_tensor(history, dtype=self.dtype)
-        for Y in tf.unstack(history):
-            self.step(Y)
-        return self._readout(self.S)
+
+        x = tf.convert_to_tensor(history, dtype=self.dtype)
+        x = tf.squeeze(x)                                # [S, N_r, N_t, M, N_f]
+        x = tf.transpose(x, perm=[3, 0, 4, 2, 1])        # [M, S, N_f, N_t, N_r]
+
+        # Inputs and labels: across *subframes* for each symbol m
+        inputs  = x[:, :-1, ...]   # [M, S-1, N_f, N_t, N_r]
+        labels  = x[:,  1:, ...]   # [M, S-1, N_f, N_t, N_r]
+
+        M = inputs.shape[0] or tf.shape(inputs)[0]
+
+        all_states, all_targets = [], []
+        for m in range(M if isinstance(M, int) else int(M.numpy())):
+            seq_in  = inputs[m]   # [S-1, N_f, N_t, N_r]
+            seq_out = labels[m]   # [S-1, N_f, N_t, N_r]
+
+            # Build (state_k, target_k) along subframe time for this symbol m
+            self.reset_state()
+            seq_in_list  = tf.unstack(seq_in)            # length S-1
+            seq_out_list = tf.unstack(seq_out)
+            for k in range(len(seq_in_list)):
+                S_k = self.step(seq_in_list[k])          # state after ingesting input at subframe s=k
+                if k >= washout:
+                    all_states.append(S_k)
+                    all_targets.append(seq_out_list[k])   # label is Y at subframe s=k+1 for same m
+
+        self.fit_readout(all_states, all_targets, lambdas=lambdas, iters=iters)
+
+        next_subframe_syms = []
+        for m in range(M if isinstance(M, int) else int(M.numpy())):
+            seq_full = x[m]  # [S, N_f, N_t, N_r]  (all observed subframes for symbol m)
+            self.reset_state()
+            for Y in tf.unstack(seq_full):
+                self.step(Y)                 # after last Y, self.S = state at s = S-1
+            next_subframe_syms.append(self._readout(self.S))  # [N_f, N_t, N_r]
+
+        Y_next = tf.stack(next_subframe_syms, axis=0)          # [M=N_syms, N_f, N_t, N_r]
+        pred = Y_next[tf.newaxis, tf.newaxis, tf.newaxis, ...]
+        pred = tf.transpose(pred, perm=[0, 1, 6, 2, 5, 3, 4])
+
+        return pred
+    
 
     def stack_unfoldings(self, tensors, mode):
         """Concatenate mode-``mode`` unfoldings of a list of tensors."""
@@ -343,11 +387,6 @@ class multimode_esn_pred:
             A3 = tf.matmul(Z3, Z3, adjoint_b=True) + lam_r * eye_r
             B3 = tf.matmul(Y3, Z3, adjoint_b=True)
             self.C_r = tf.transpose(tf.linalg.solve(A3, tf.transpose(B3)))
-
-    def train(self, Y_seq, washout=0, lambdas=(0.0, 0.0, 0.0), iters=2):
-        """Convenience wrapper around ``collect_states`` and ``fit_readout``."""
-        states, targets = self.collect_states(Y_seq, washout)
-        self.fit_readout(states, targets, lambdas=lambdas, iters=iters)
 
     def forecast(self, Y_init, steps):
         """Autoregressively predict ``steps`` future channel tensors.

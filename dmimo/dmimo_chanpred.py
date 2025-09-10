@@ -233,8 +233,9 @@ class MU_MIMO(Model):
                                                         d_t=4,
                                                         d_r=4,
                                                         window_len=self.rc_config.window_length)
-            h_freq_csi_multimode_esn = multimode_predictor.predict(h_freq_csi_history)
-
+            h_freq_csi_multimode_wesn = multimode_predictor.predict(h_freq_csi_history)
+            pred_nmse_multimode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_multimode_wesn)
+            hold = 1
 
 
 
