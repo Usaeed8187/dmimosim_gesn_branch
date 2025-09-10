@@ -225,6 +225,7 @@ class MU_MIMO(Model):
 
             # Use multimode ESN to do WESN based prediction
             h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
+            # h_freq_csi_history = h_freq_csi_history[:,:,:,:2,:,:4,:,:]
             T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
             multimode_predictor = multimode_esn_pred(   N_f=RB,
                                                         N_t=TxAnt,
