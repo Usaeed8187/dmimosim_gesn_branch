@@ -13,5 +13,5 @@ from .rc_pred_freq_mimo import standard_rc_pred_freq_mimo
 from .gesn_pred_freq_mimo import gesn_pred_freq_mimo
 from .gesn_pred_freq_dmimo import gesn_pred_freq_dmimo
 from .kalman_pred_freq_dmimo import kalman_pred_freq_dmimo
-
+from .multimode_esn_pred import multimode_esn_pred
 

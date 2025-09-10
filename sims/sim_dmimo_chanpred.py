@@ -23,7 +23,7 @@ os.environ['PYTHONHASHSEED'] = '10'
 tf.random.set_seed(10)
 
 sys.path.append(os.path.join('..'))
-src = Path('~/dMIMO/ns3_channels_q4').expanduser()
+src = Path('/home/data/ns3_channels_q4/').expanduser()
 dst = Path('ns3')
 
 if not src.is_dir():
