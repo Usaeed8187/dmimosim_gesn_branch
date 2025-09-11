@@ -226,14 +226,28 @@ class MU_MIMO(Model):
             # Use multimode ESN to do WESN based prediction
             h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
             T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
-            multimode_predictor = multimode_esn_pred(   N_f=RB,
-                                                        N_t=TxAnt,
-                                                        N_r=RxAnt,
-                                                        d_f=64,
-                                                        d_t=4,
-                                                        d_r=4,
-                                                        window_len=self.rc_config.window_length)
-            h_freq_csi_multimode_wesn = multimode_predictor.predict(h_freq_csi_history)
+            multimode_predictor = multimode_esn_pred(
+                N_f=RB, N_t=TxAnt, N_r=RxAnt,
+                d_f=64, d_t=4, d_r=4,
+                window_len=self.rc_config.window_length,
+                debug=False,          # <— turn on
+                safe_solve=False      # <— try safer linear algebra first
+            )
+            h_freq_csi_multimode_wesn = multimode_predictor.predict(
+                h_freq_csi_history,
+                washout=0,
+                lambdas=(1.0, 1.0, 1.0),   # start a bit stronger if you see big cond(A)
+                iters=2
+            )
+
+            # multimode_predictor = multimode_esn_pred(   N_f=RB,
+            #                                             N_t=TxAnt,
+            #                                             N_r=RxAnt,
+            #                                             d_f=64,
+            #                                             d_t=4,
+            #                                             d_r=4,
+            #                                             window_len=self.rc_config.window_length)
+            # h_freq_csi_multimode_wesn = multimode_predictor.predict(h_freq_csi_history)
             pred_nmse_multimode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_multimode_wesn)
             print("Multimode ESN NMSE: ", pred_nmse_multimode_wesn)
 
@@ -242,7 +256,7 @@ class MU_MIMO(Model):
             plt.figure()
             plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
             plt.plot(np.real(h_freq_csi_history[-1,0,0,0,0,0,0,:]), label='outdated channel')
-            plt.plot(norm * np.real(h_freq_csi_multimode_wesn[0,0,0,0,0,:]), label='predicted channel')
+            plt.plot(np.real(h_freq_csi_multimode_wesn[0,0,0,0,0,:]), label='predicted channel')
             plt.legend()
             plt.savefig('a')
 

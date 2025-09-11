@@ -64,9 +64,8 @@ if __name__ == "__main__":
     # Simulation settings
     rc_config = RCConfig()
     cfg = SimConfig()
-    cfg.total_slots = 90        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 80     # starting slots (must be greater than csi_delay + 5)
-    cfg.csi_delay = 4           # feedback delay in number of subframe
+    cfg.total_slots = 95        # total number of slots in ns-3 channels
+    cfg.start_slot_idx = 91     # starting slots (must be greater than csi_delay + 5)
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 6
@@ -75,7 +74,7 @@ if __name__ == "__main__":
         drop_idx = '2'
         rx_ues_arr = [3]
         vector_inputs = 'tx_ants' # tx_ants, rx_ants, none, all
-        csi_delays = [2, 3, 4, 5, 6, 7, 8]
+        csi_delays = [1, 2, 3, 4, 5, 6, 7, 8]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
     rc_config.lr = 0.01
     rc_config.num_epochs = 50

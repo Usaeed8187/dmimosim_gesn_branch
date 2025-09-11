@@ -1,0 +1,1137 @@
+/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/channel/multimode_esn_pred.py:267: ComplexWarning: Casting complex values to real discards the imaginary part
+  fro = float(tf.linalg.norm(U).numpy())
+Script Name: sims/sim_dmimo_chanpred.py
+Arguments: []
+Using channels in channels_high_mobility_2
+first_slot_idx:  91 
+
+DBG init A_f: spectral radius ~ 0.8000
+DBG init A_t: spectral radius ~ 0.8000
+DBG init A_r: spectral radius ~ 0.8000
+DBG init U_f: ‖·‖_F = 1.121e+01 shape=(64, 43)
+DBG init U_t: ‖·‖_F = 3.117e+00 shape=(4, 16)
+DBG init U_r: ‖·‖_F = 2.606e+00 shape=(4, 10)
+DBG predict(): history dtype=complex128 shape=(8, 1, 1, 10, 1, 16, 14, 43) washout=0
+DBG [Y_k](43, 16, 10): mean(r)=-7.700e-04 mean(i)=6.845e-04 std|·|=4.023e-01 rms=5.942e-01 max|·|=2.058e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-7.700e-04 mean(i)=6.845e-04 std|·|=4.023e-01 rms=5.942e-01 max|·|=2.058e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.312e-02 mean(i)=-2.518e-02 std|·|=1.087e+00 rms=1.772e+00 max|·|=6.912e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.910e-03 mean(i)=-2.465e-02 std|·|=3.157e-01 rms=8.822e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.910e-03 mean(i)=-2.465e-02 std|·|=3.157e-01 rms=8.822e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.910e-03 mean(i)=-2.465e-02 std|·|=3.157e-01 rms=8.822e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-7.700e-04 mean(i)=6.845e-04 std|·|=4.023e-01 rms=5.942e-01 max|·|=2.058e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.455e-07 mean(i)=-3.959e-06 std|·|=2.938e-03 rms=4.236e-03 max|·|=1.658e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.455e-03 mean(i)=-1.061e-03 std|·|=3.998e-01 rms=5.900e-01 max|·|=2.001e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.455e-03 mean(i)=-1.061e-03 std|·|=3.998e-01 rms=5.900e-01 max|·|=2.001e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.910e-03 mean(i)=-2.465e-02 std|·|=3.157e-01 rms=8.822e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=2.457e-03 mean(i)=1.067e-02 std|·|=1.478e-01 rms=2.816e-01 max|·|=9.112e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.604e-02 mean(i)=-2.530e-02 std|·|=1.075e+00 rms=1.760e+00 max|·|=7.302e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=7.434e-03 mean(i)=-1.238e-02 std|·|=3.136e-01 rms=8.910e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=7.434e-03 mean(i)=-1.238e-02 std|·|=3.136e-01 rms=8.910e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=7.434e-03 mean(i)=-1.238e-02 std|·|=3.136e-01 rms=8.910e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.455e-03 mean(i)=-1.061e-03 std|·|=3.998e-01 rms=5.900e-01 max|·|=2.001e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.398e-06 mean(i)=-3.853e-06 std|·|=2.939e-03 rms=4.228e-03 max|·|=1.694e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.111e-03 mean(i)=-5.206e-03 std|·|=3.968e-01 rms=5.881e-01 max|·|=2.056e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.111e-03 mean(i)=-5.206e-03 std|·|=3.968e-01 rms=5.881e-01 max|·|=2.056e+00
+DBG [S_prev](64, 4, 4): mean(r)=7.434e-03 mean(i)=-1.238e-02 std|·|=3.136e-01 rms=8.910e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-3.390e-03 mean(i)=9.279e-03 std|·|=1.482e-01 rms=2.873e-01 max|·|=9.661e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.828e-02 mean(i)=-1.989e-02 std|·|=1.067e+00 rms=1.758e+00 max|·|=7.394e+00
+DBG step: tanh saturation frac ≈ 0.188
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=4.313e-03 mean(i)=-1.111e-02 std|·|=3.114e-01 rms=8.954e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=4.313e-03 mean(i)=-1.111e-02 std|·|=3.114e-01 rms=8.954e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=4.313e-03 mean(i)=-1.111e-02 std|·|=3.114e-01 rms=8.954e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.111e-03 mean(i)=-5.206e-03 std|·|=3.968e-01 rms=5.881e-01 max|·|=2.056e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.326e-06 mean(i)=-9.099e-06 std|·|=2.935e-03 rms=4.224e-03 max|·|=1.678e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.249e-03 mean(i)=-6.727e-03 std|·|=3.943e-01 rms=5.813e-01 max|·|=2.095e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.249e-03 mean(i)=-6.727e-03 std|·|=3.943e-01 rms=5.813e-01 max|·|=2.095e+00
+DBG [S_prev](64, 4, 4): mean(r)=4.313e-03 mean(i)=-1.111e-02 std|·|=3.114e-01 rms=8.954e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-5.787e-03 mean(i)=8.850e-03 std|·|=1.512e-01 rms=2.892e-01 max|·|=1.068e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.127e-03 mean(i)=-1.280e-02 std|·|=1.076e+00 rms=1.752e+00 max|·|=7.425e+00
+DBG step: tanh saturation frac ≈ 0.181
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-3.034e-03 mean(i)=-1.091e-02 std|·|=3.223e-01 rms=8.906e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-3.034e-03 mean(i)=-1.091e-02 std|·|=3.223e-01 rms=8.906e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-3.034e-03 mean(i)=-1.091e-02 std|·|=3.223e-01 rms=8.906e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.249e-03 mean(i)=-6.727e-03 std|·|=3.943e-01 rms=5.813e-01 max|·|=2.095e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.711e-06 mean(i)=-1.108e-05 std|·|=2.931e-03 rms=4.202e-03 max|·|=1.672e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.205e-03 mean(i)=-1.212e-02 std|·|=3.910e-01 rms=5.760e-01 max|·|=2.128e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.205e-03 mean(i)=-1.212e-02 std|·|=3.910e-01 rms=5.760e-01 max|·|=2.128e+00
+DBG [S_prev](64, 4, 4): mean(r)=-3.034e-03 mean(i)=-1.091e-02 std|·|=3.223e-01 rms=8.906e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-8.558e-03 mean(i)=7.898e-03 std|·|=1.533e-01 rms=2.908e-01 max|·|=1.198e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.036e-02 mean(i)=-2.174e-03 std|·|=1.075e+00 rms=1.738e+00 max|·|=7.344e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-3.106e-03 mean(i)=-6.597e-03 std|·|=3.242e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-3.106e-03 mean(i)=-6.597e-03 std|·|=3.242e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-3.106e-03 mean(i)=-6.597e-03 std|·|=3.242e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.205e-03 mean(i)=-1.212e-02 std|·|=3.910e-01 rms=5.760e-01 max|·|=2.128e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.292e-06 mean(i)=-1.738e-05 std|·|=2.945e-03 rms=4.211e-03 max|·|=1.737e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.627e-03 mean(i)=-1.212e-02 std|·|=3.871e-01 rms=5.701e-01 max|·|=2.130e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.627e-03 mean(i)=-1.212e-02 std|·|=3.871e-01 rms=5.701e-01 max|·|=2.130e+00
+DBG [S_prev](64, 4, 4): mean(r)=-3.106e-03 mean(i)=-6.597e-03 std|·|=3.242e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.168e-02 mean(i)=8.413e-03 std|·|=1.524e-01 rms=2.914e-01 max|·|=1.175e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=7.678e-03 mean(i)=-2.120e-04 std|·|=1.082e+00 rms=1.743e+00 max|·|=7.121e+00
+DBG step: tanh saturation frac ≈ 0.182
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-5.896e-03 mean(i)=-6.477e-03 std|·|=3.276e-01 rms=8.851e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-5.896e-03 mean(i)=-6.477e-03 std|·|=3.276e-01 rms=8.851e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-5.896e-03 mean(i)=-6.477e-03 std|·|=3.276e-01 rms=8.851e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.627e-03 mean(i)=-1.212e-02 std|·|=3.871e-01 rms=5.701e-01 max|·|=2.130e+00
+DBG [G(feature)](107, 20, 14): mean(r)=4.974e-06 mean(i)=-1.736e-05 std|·|=2.940e-03 rms=4.200e-03 max|·|=1.833e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.787e-03 mean(i)=-1.395e-02 std|·|=3.821e-01 rms=5.601e-01 max|·|=2.042e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.787e-03 mean(i)=-1.395e-02 std|·|=3.821e-01 rms=5.601e-01 max|·|=2.042e+00
+DBG [S_prev](64, 4, 4): mean(r)=-5.896e-03 mean(i)=-6.477e-03 std|·|=3.276e-01 rms=8.851e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.238e-02 mean(i)=7.796e-03 std|·|=1.550e-01 rms=2.957e-01 max|·|=1.157e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=-8.715e-04 mean(i)=3.697e-03 std|·|=1.092e+00 rms=1.758e+00 max|·|=6.993e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.277e-02 mean(i)=-9.145e-03 std|·|=3.282e-01 rms=8.863e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.277e-02 mean(i)=-9.145e-03 std|·|=3.282e-01 rms=8.863e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-1.277e-02 mean(i)=-9.145e-03 std|·|=3.282e-01 rms=8.863e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.787e-03 mean(i)=-1.395e-02 std|·|=3.821e-01 rms=5.601e-01 max|·|=2.042e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.482e-06 mean(i)=-2.031e-05 std|·|=2.922e-03 rms=4.158e-03 max|·|=1.859e-02
+DBG [Y_k](43, 16, 10): mean(r)=-7.279e-04 mean(i)=3.339e-04 std|·|=4.017e-01 rms=5.931e-01 max|·|=2.053e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-7.279e-04 mean(i)=3.339e-04 std|·|=4.017e-01 rms=5.931e-01 max|·|=2.053e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.238e-02 mean(i)=-2.493e-02 std|·|=1.084e+00 rms=1.768e+00 max|·|=6.925e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.595e-03 mean(i)=-2.430e-02 std|·|=3.160e-01 rms=8.816e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.595e-03 mean(i)=-2.430e-02 std|·|=3.160e-01 rms=8.816e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.595e-03 mean(i)=-2.430e-02 std|·|=3.160e-01 rms=8.816e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-7.279e-04 mean(i)=3.339e-04 std|·|=4.017e-01 rms=5.931e-01 max|·|=2.053e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.392e-07 mean(i)=-4.355e-06 std|·|=2.934e-03 rms=4.230e-03 max|·|=1.660e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.385e-03 mean(i)=-1.344e-03 std|·|=3.993e-01 rms=5.891e-01 max|·|=2.000e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.385e-03 mean(i)=-1.344e-03 std|·|=3.993e-01 rms=5.891e-01 max|·|=2.000e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.595e-03 mean(i)=-2.430e-02 std|·|=3.160e-01 rms=8.816e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=2.272e-03 mean(i)=1.070e-02 std|·|=1.475e-01 rms=2.810e-01 max|·|=9.198e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.515e-02 mean(i)=-2.475e-02 std|·|=1.073e+00 rms=1.756e+00 max|·|=7.301e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=7.256e-03 mean(i)=-1.229e-02 std|·|=3.137e-01 rms=8.899e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=7.256e-03 mean(i)=-1.229e-02 std|·|=3.137e-01 rms=8.899e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=7.256e-03 mean(i)=-1.229e-02 std|·|=3.137e-01 rms=8.899e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.385e-03 mean(i)=-1.344e-03 std|·|=3.993e-01 rms=5.891e-01 max|·|=2.000e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.270e-06 mean(i)=-4.210e-06 std|·|=2.935e-03 rms=4.222e-03 max|·|=1.691e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.193e-03 mean(i)=-5.441e-03 std|·|=3.964e-01 rms=5.870e-01 max|·|=2.060e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.193e-03 mean(i)=-5.441e-03 std|·|=3.964e-01 rms=5.870e-01 max|·|=2.060e+00
+DBG [S_prev](64, 4, 4): mean(r)=7.256e-03 mean(i)=-1.229e-02 std|·|=3.137e-01 rms=8.899e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-3.647e-03 mean(i)=9.238e-03 std|·|=1.481e-01 rms=2.868e-01 max|·|=9.825e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.731e-02 mean(i)=-1.957e-02 std|·|=1.066e+00 rms=1.755e+00 max|·|=7.403e+00
+DBG step: tanh saturation frac ≈ 0.186
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=3.837e-03 mean(i)=-1.115e-02 std|·|=3.120e-01 rms=8.944e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=3.837e-03 mean(i)=-1.115e-02 std|·|=3.120e-01 rms=8.944e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=3.837e-03 mean(i)=-1.115e-02 std|·|=3.120e-01 rms=8.944e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.193e-03 mean(i)=-5.441e-03 std|·|=3.964e-01 rms=5.870e-01 max|·|=2.060e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.340e-06 mean(i)=-9.421e-06 std|·|=2.933e-03 rms=4.219e-03 max|·|=1.653e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.260e-03 mean(i)=-7.018e-03 std|·|=3.937e-01 rms=5.802e-01 max|·|=2.095e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.260e-03 mean(i)=-7.018e-03 std|·|=3.937e-01 rms=5.802e-01 max|·|=2.095e+00
+DBG [S_prev](64, 4, 4): mean(r)=3.837e-03 mean(i)=-1.115e-02 std|·|=3.120e-01 rms=8.944e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-5.974e-03 mean(i)=8.868e-03 std|·|=1.510e-01 rms=2.890e-01 max|·|=1.079e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.912e-03 mean(i)=-1.274e-02 std|·|=1.074e+00 rms=1.748e+00 max|·|=7.409e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-3.367e-03 mean(i)=-1.092e-02 std|·|=3.232e-01 rms=8.895e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-3.367e-03 mean(i)=-1.092e-02 std|·|=3.232e-01 rms=8.895e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-3.367e-03 mean(i)=-1.092e-02 std|·|=3.232e-01 rms=8.895e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.260e-03 mean(i)=-7.018e-03 std|·|=3.937e-01 rms=5.802e-01 max|·|=2.095e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.660e-06 mean(i)=-1.147e-05 std|·|=2.928e-03 rms=4.197e-03 max|·|=1.677e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.138e-03 mean(i)=-1.203e-02 std|·|=3.903e-01 rms=5.747e-01 max|·|=2.125e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.138e-03 mean(i)=-1.203e-02 std|·|=3.903e-01 rms=5.747e-01 max|·|=2.125e+00
+DBG [S_prev](64, 4, 4): mean(r)=-3.367e-03 mean(i)=-1.092e-02 std|·|=3.232e-01 rms=8.895e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-8.763e-03 mean(i)=7.843e-03 std|·|=1.530e-01 rms=2.903e-01 max|·|=1.190e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.003e-02 mean(i)=-2.441e-03 std|·|=1.074e+00 rms=1.735e+00 max|·|=7.333e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-3.429e-03 mean(i)=-6.925e-03 std|·|=3.242e-01 rms=8.843e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-3.429e-03 mean(i)=-6.925e-03 std|·|=3.242e-01 rms=8.843e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-3.429e-03 mean(i)=-6.925e-03 std|·|=3.242e-01 rms=8.843e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.138e-03 mean(i)=-1.203e-02 std|·|=3.903e-01 rms=5.747e-01 max|·|=2.125e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.140e-06 mean(i)=-1.733e-05 std|·|=2.942e-03 rms=4.205e-03 max|·|=1.739e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.846e-03 mean(i)=-1.210e-02 std|·|=3.862e-01 rms=5.685e-01 max|·|=2.121e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.846e-03 mean(i)=-1.210e-02 std|·|=3.862e-01 rms=5.685e-01 max|·|=2.121e+00
+DBG [S_prev](64, 4, 4): mean(r)=-3.429e-03 mean(i)=-6.925e-03 std|·|=3.242e-01 rms=8.843e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.167e-02 mean(i)=8.380e-03 std|·|=1.524e-01 rms=2.913e-01 max|·|=1.177e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=7.199e-03 mean(i)=3.154e-04 std|·|=1.081e+00 rms=1.742e+00 max|·|=7.098e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.188e-03 mean(i)=-6.525e-03 std|·|=3.275e-01 rms=8.845e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.188e-03 mean(i)=-6.525e-03 std|·|=3.275e-01 rms=8.845e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-6.188e-03 mean(i)=-6.525e-03 std|·|=3.275e-01 rms=8.845e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.846e-03 mean(i)=-1.210e-02 std|·|=3.862e-01 rms=5.685e-01 max|·|=2.121e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.207e-06 mean(i)=-1.735e-05 std|·|=2.935e-03 rms=4.190e-03 max|·|=1.827e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.703e-03 mean(i)=-1.393e-02 std|·|=3.814e-01 rms=5.588e-01 max|·|=2.041e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.703e-03 mean(i)=-1.393e-02 std|·|=3.814e-01 rms=5.588e-01 max|·|=2.041e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.188e-03 mean(i)=-6.525e-03 std|·|=3.275e-01 rms=8.845e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.233e-02 mean(i)=7.773e-03 std|·|=1.551e-01 rms=2.954e-01 max|·|=1.154e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=-7.433e-04 mean(i)=4.008e-03 std|·|=1.091e+00 rms=1.756e+00 max|·|=7.000e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.241e-02 mean(i)=-8.973e-03 std|·|=3.283e-01 rms=8.858e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.241e-02 mean(i)=-8.973e-03 std|·|=3.283e-01 rms=8.858e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-1.241e-02 mean(i)=-8.973e-03 std|·|=3.283e-01 rms=8.858e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.703e-03 mean(i)=-1.393e-02 std|·|=3.814e-01 rms=5.588e-01 max|·|=2.041e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.443e-06 mean(i)=-2.026e-05 std|·|=2.917e-03 rms=4.151e-03 max|·|=1.851e-02
+DBG [Y_k](43, 16, 10): mean(r)=-6.857e-04 mean(i)=-1.666e-05 std|·|=4.012e-01 rms=5.921e-01 max|·|=2.049e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-6.857e-04 mean(i)=-1.666e-05 std|·|=4.012e-01 rms=5.921e-01 max|·|=2.049e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.165e-02 mean(i)=-2.468e-02 std|·|=1.082e+00 rms=1.764e+00 max|·|=6.937e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.284e-03 mean(i)=-2.395e-02 std|·|=3.164e-01 rms=8.811e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.284e-03 mean(i)=-2.395e-02 std|·|=3.164e-01 rms=8.811e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.284e-03 mean(i)=-2.395e-02 std|·|=3.164e-01 rms=8.811e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-6.857e-04 mean(i)=-1.666e-05 std|·|=4.012e-01 rms=5.921e-01 max|·|=2.049e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.338e-07 mean(i)=-4.751e-06 std|·|=2.932e-03 rms=4.224e-03 max|·|=1.664e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.314e-03 mean(i)=-1.628e-03 std|·|=3.989e-01 rms=5.883e-01 max|·|=2.000e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.314e-03 mean(i)=-1.628e-03 std|·|=3.989e-01 rms=5.883e-01 max|·|=2.000e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.284e-03 mean(i)=-2.395e-02 std|·|=3.164e-01 rms=8.811e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=2.088e-03 mean(i)=1.073e-02 std|·|=1.472e-01 rms=2.805e-01 max|·|=9.283e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.427e-02 mean(i)=-2.420e-02 std|·|=1.071e+00 rms=1.752e+00 max|·|=7.299e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=7.077e-03 mean(i)=-1.221e-02 std|·|=3.138e-01 rms=8.889e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=7.077e-03 mean(i)=-1.221e-02 std|·|=3.138e-01 rms=8.889e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=7.077e-03 mean(i)=-1.221e-02 std|·|=3.138e-01 rms=8.889e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.314e-03 mean(i)=-1.628e-03 std|·|=3.989e-01 rms=5.883e-01 max|·|=2.000e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.141e-06 mean(i)=-4.570e-06 std|·|=2.932e-03 rms=4.217e-03 max|·|=1.689e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.275e-03 mean(i)=-5.677e-03 std|·|=3.960e-01 rms=5.860e-01 max|·|=2.065e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.275e-03 mean(i)=-5.677e-03 std|·|=3.960e-01 rms=5.860e-01 max|·|=2.065e+00
+DBG [S_prev](64, 4, 4): mean(r)=7.077e-03 mean(i)=-1.221e-02 std|·|=3.138e-01 rms=8.889e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-3.901e-03 mean(i)=9.197e-03 std|·|=1.481e-01 rms=2.864e-01 max|·|=9.987e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.634e-02 mean(i)=-1.926e-02 std|·|=1.065e+00 rms=1.752e+00 max|·|=7.412e+00
+DBG step: tanh saturation frac ≈ 0.184
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=3.341e-03 mean(i)=-1.120e-02 std|·|=3.126e-01 rms=8.934e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=3.341e-03 mean(i)=-1.120e-02 std|·|=3.126e-01 rms=8.934e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=3.341e-03 mean(i)=-1.120e-02 std|·|=3.126e-01 rms=8.934e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.275e-03 mean(i)=-5.677e-03 std|·|=3.960e-01 rms=5.860e-01 max|·|=2.065e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.351e-06 mean(i)=-9.744e-06 std|·|=2.931e-03 rms=4.214e-03 max|·|=1.628e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.271e-03 mean(i)=-7.309e-03 std|·|=3.931e-01 rms=5.792e-01 max|·|=2.094e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.271e-03 mean(i)=-7.309e-03 std|·|=3.931e-01 rms=5.792e-01 max|·|=2.094e+00
+DBG [S_prev](64, 4, 4): mean(r)=3.341e-03 mean(i)=-1.120e-02 std|·|=3.126e-01 rms=8.934e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.159e-03 mean(i)=8.884e-03 std|·|=1.509e-01 rms=2.889e-01 max|·|=1.089e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.697e-03 mean(i)=-1.267e-02 std|·|=1.073e+00 rms=1.744e+00 max|·|=7.393e+00
+DBG step: tanh saturation frac ≈ 0.181
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-3.702e-03 mean(i)=-1.092e-02 std|·|=3.241e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-3.702e-03 mean(i)=-1.092e-02 std|·|=3.241e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-3.702e-03 mean(i)=-1.092e-02 std|·|=3.241e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.271e-03 mean(i)=-7.309e-03 std|·|=3.931e-01 rms=5.792e-01 max|·|=2.094e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.609e-06 mean(i)=-1.185e-05 std|·|=2.927e-03 rms=4.193e-03 max|·|=1.683e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.071e-03 mean(i)=-1.195e-02 std|·|=3.897e-01 rms=5.736e-01 max|·|=2.121e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.071e-03 mean(i)=-1.195e-02 std|·|=3.897e-01 rms=5.736e-01 max|·|=2.121e+00
+DBG [S_prev](64, 4, 4): mean(r)=-3.702e-03 mean(i)=-1.092e-02 std|·|=3.241e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-8.967e-03 mean(i)=7.785e-03 std|·|=1.526e-01 rms=2.898e-01 max|·|=1.182e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=9.700e-03 mean(i)=-2.708e-03 std|·|=1.073e+00 rms=1.733e+00 max|·|=7.322e+00
+DBG step: tanh saturation frac ≈ 0.181
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-3.755e-03 mean(i)=-7.258e-03 std|·|=3.244e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-3.755e-03 mean(i)=-7.258e-03 std|·|=3.244e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-3.755e-03 mean(i)=-7.258e-03 std|·|=3.244e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.071e-03 mean(i)=-1.195e-02 std|·|=3.897e-01 rms=5.736e-01 max|·|=2.121e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.986e-06 mean(i)=-1.729e-05 std|·|=2.939e-03 rms=4.199e-03 max|·|=1.742e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.065e-03 mean(i)=-1.208e-02 std|·|=3.853e-01 rms=5.670e-01 max|·|=2.112e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.065e-03 mean(i)=-1.208e-02 std|·|=3.853e-01 rms=5.670e-01 max|·|=2.112e+00
+DBG [S_prev](64, 4, 4): mean(r)=-3.755e-03 mean(i)=-7.258e-03 std|·|=3.244e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.165e-02 mean(i)=8.345e-03 std|·|=1.525e-01 rms=2.912e-01 max|·|=1.179e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.721e-03 mean(i)=8.427e-04 std|·|=1.080e+00 rms=1.740e+00 max|·|=7.075e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.481e-03 mean(i)=-6.564e-03 std|·|=3.274e-01 rms=8.840e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.481e-03 mean(i)=-6.564e-03 std|·|=3.274e-01 rms=8.840e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-6.481e-03 mean(i)=-6.564e-03 std|·|=3.274e-01 rms=8.840e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.065e-03 mean(i)=-1.208e-02 std|·|=3.853e-01 rms=5.670e-01 max|·|=2.112e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.440e-06 mean(i)=-1.733e-05 std|·|=2.930e-03 rms=4.182e-03 max|·|=1.820e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.620e-03 mean(i)=-1.391e-02 std|·|=3.807e-01 rms=5.577e-01 max|·|=2.040e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.620e-03 mean(i)=-1.391e-02 std|·|=3.807e-01 rms=5.577e-01 max|·|=2.040e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.481e-03 mean(i)=-6.564e-03 std|·|=3.274e-01 rms=8.840e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.228e-02 mean(i)=7.748e-03 std|·|=1.550e-01 rms=2.951e-01 max|·|=1.152e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=-6.150e-04 mean(i)=4.318e-03 std|·|=1.091e+00 rms=1.755e+00 max|·|=7.007e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.202e-02 mean(i)=-8.787e-03 std|·|=3.282e-01 rms=8.854e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.202e-02 mean(i)=-8.787e-03 std|·|=3.282e-01 rms=8.854e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-1.202e-02 mean(i)=-8.787e-03 std|·|=3.282e-01 rms=8.854e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.620e-03 mean(i)=-1.391e-02 std|·|=3.807e-01 rms=5.577e-01 max|·|=2.040e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.409e-06 mean(i)=-2.019e-05 std|·|=2.913e-03 rms=4.145e-03 max|·|=1.843e-02
+DBG [Y_k](43, 16, 10): mean(r)=-6.435e-04 mean(i)=-3.672e-04 std|·|=4.008e-01 rms=5.911e-01 max|·|=2.044e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-6.435e-04 mean(i)=-3.672e-04 std|·|=4.008e-01 rms=5.911e-01 max|·|=2.044e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.091e-02 mean(i)=-2.443e-02 std|·|=1.079e+00 rms=1.761e+00 max|·|=6.949e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=4.977e-03 mean(i)=-2.360e-02 std|·|=3.168e-01 rms=8.806e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=4.977e-03 mean(i)=-2.360e-02 std|·|=3.168e-01 rms=8.806e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=4.977e-03 mean(i)=-2.360e-02 std|·|=3.168e-01 rms=8.806e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-6.435e-04 mean(i)=-3.672e-04 std|·|=4.008e-01 rms=5.911e-01 max|·|=2.044e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.291e-07 mean(i)=-5.147e-06 std|·|=2.929e-03 rms=4.220e-03 max|·|=1.669e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.244e-03 mean(i)=-1.911e-03 std|·|=3.984e-01 rms=5.876e-01 max|·|=2.003e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.244e-03 mean(i)=-1.911e-03 std|·|=3.984e-01 rms=5.876e-01 max|·|=2.003e+00
+DBG [S_prev](64, 4, 4): mean(r)=4.977e-03 mean(i)=-2.360e-02 std|·|=3.168e-01 rms=8.806e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=1.906e-03 mean(i)=1.076e-02 std|·|=1.469e-01 rms=2.800e-01 max|·|=9.367e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.338e-02 mean(i)=-2.366e-02 std|·|=1.070e+00 rms=1.748e+00 max|·|=7.298e+00
+DBG step: tanh saturation frac ≈ 0.175
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=6.896e-03 mean(i)=-1.214e-02 std|·|=3.140e-01 rms=8.880e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=6.896e-03 mean(i)=-1.214e-02 std|·|=3.140e-01 rms=8.880e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=6.896e-03 mean(i)=-1.214e-02 std|·|=3.140e-01 rms=8.880e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.244e-03 mean(i)=-1.911e-03 std|·|=3.984e-01 rms=5.876e-01 max|·|=2.003e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.012e-06 mean(i)=-4.933e-06 std|·|=2.930e-03 rms=4.213e-03 max|·|=1.688e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.356e-03 mean(i)=-5.913e-03 std|·|=3.958e-01 rms=5.851e-01 max|·|=2.070e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.356e-03 mean(i)=-5.913e-03 std|·|=3.958e-01 rms=5.851e-01 max|·|=2.070e+00
+DBG [S_prev](64, 4, 4): mean(r)=6.896e-03 mean(i)=-1.214e-02 std|·|=3.140e-01 rms=8.880e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-4.153e-03 mean(i)=9.155e-03 std|·|=1.481e-01 rms=2.860e-01 max|·|=1.015e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.537e-02 mean(i)=-1.895e-02 std|·|=1.065e+00 rms=1.749e+00 max|·|=7.420e+00
+DBG step: tanh saturation frac ≈ 0.182
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=2.824e-03 mean(i)=-1.126e-02 std|·|=3.132e-01 rms=8.926e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=2.824e-03 mean(i)=-1.126e-02 std|·|=3.132e-01 rms=8.926e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=2.824e-03 mean(i)=-1.126e-02 std|·|=3.132e-01 rms=8.926e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.356e-03 mean(i)=-5.913e-03 std|·|=3.958e-01 rms=5.851e-01 max|·|=2.070e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.357e-06 mean(i)=-1.007e-05 std|·|=2.930e-03 rms=4.210e-03 max|·|=1.607e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.282e-03 mean(i)=-7.601e-03 std|·|=3.926e-01 rms=5.783e-01 max|·|=2.094e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.282e-03 mean(i)=-7.601e-03 std|·|=3.926e-01 rms=5.783e-01 max|·|=2.094e+00
+DBG [S_prev](64, 4, 4): mean(r)=2.824e-03 mean(i)=-1.126e-02 std|·|=3.132e-01 rms=8.926e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.342e-03 mean(i)=8.900e-03 std|·|=1.508e-01 rms=2.888e-01 max|·|=1.099e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.483e-03 mean(i)=-1.260e-02 std|·|=1.071e+00 rms=1.741e+00 max|·|=7.377e+00
+DBG step: tanh saturation frac ≈ 0.181
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-4.039e-03 mean(i)=-1.092e-02 std|·|=3.249e-01 rms=8.875e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-4.039e-03 mean(i)=-1.092e-02 std|·|=3.249e-01 rms=8.875e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-4.039e-03 mean(i)=-1.092e-02 std|·|=3.249e-01 rms=8.875e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.282e-03 mean(i)=-7.601e-03 std|·|=3.926e-01 rms=5.783e-01 max|·|=2.094e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.557e-06 mean(i)=-1.224e-05 std|·|=2.926e-03 rms=4.190e-03 max|·|=1.689e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.004e-03 mean(i)=-1.187e-02 std|·|=3.891e-01 rms=5.725e-01 max|·|=2.118e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.004e-03 mean(i)=-1.187e-02 std|·|=3.891e-01 rms=5.725e-01 max|·|=2.118e+00
+DBG [S_prev](64, 4, 4): mean(r)=-4.039e-03 mean(i)=-1.092e-02 std|·|=3.249e-01 rms=8.875e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-9.171e-03 mean(i)=7.726e-03 std|·|=1.523e-01 rms=2.894e-01 max|·|=1.173e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=9.371e-03 mean(i)=-2.975e-03 std|·|=1.072e+00 rms=1.731e+00 max|·|=7.311e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-4.085e-03 mean(i)=-7.598e-03 std|·|=3.246e-01 rms=8.830e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-4.085e-03 mean(i)=-7.598e-03 std|·|=3.246e-01 rms=8.830e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-4.085e-03 mean(i)=-7.598e-03 std|·|=3.246e-01 rms=8.830e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.004e-03 mean(i)=-1.187e-02 std|·|=3.891e-01 rms=5.725e-01 max|·|=2.118e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.832e-06 mean(i)=-1.724e-05 std|·|=2.936e-03 rms=4.194e-03 max|·|=1.745e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.284e-03 mean(i)=-1.207e-02 std|·|=3.846e-01 rms=5.657e-01 max|·|=2.104e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.284e-03 mean(i)=-1.207e-02 std|·|=3.846e-01 rms=5.657e-01 max|·|=2.104e+00
+DBG [S_prev](64, 4, 4): mean(r)=-4.085e-03 mean(i)=-7.598e-03 std|·|=3.246e-01 rms=8.830e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.163e-02 mean(i)=8.309e-03 std|·|=1.526e-01 rms=2.912e-01 max|·|=1.181e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.243e-03 mean(i)=1.370e-03 std|·|=1.080e+00 rms=1.739e+00 max|·|=7.052e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.775e-03 mean(i)=-6.593e-03 std|·|=3.273e-01 rms=8.836e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.775e-03 mean(i)=-6.593e-03 std|·|=3.273e-01 rms=8.836e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-6.775e-03 mean(i)=-6.593e-03 std|·|=3.273e-01 rms=8.836e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.284e-03 mean(i)=-1.207e-02 std|·|=3.846e-01 rms=5.657e-01 max|·|=2.104e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.672e-06 mean(i)=-1.731e-05 std|·|=2.925e-03 rms=4.175e-03 max|·|=1.814e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.537e-03 mean(i)=-1.390e-02 std|·|=3.801e-01 rms=5.566e-01 max|·|=2.039e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.537e-03 mean(i)=-1.390e-02 std|·|=3.801e-01 rms=5.566e-01 max|·|=2.039e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.775e-03 mean(i)=-6.593e-03 std|·|=3.273e-01 rms=8.836e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.222e-02 mean(i)=7.720e-03 std|·|=1.550e-01 rms=2.949e-01 max|·|=1.149e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=-4.868e-04 mean(i)=4.628e-03 std|·|=1.091e+00 rms=1.754e+00 max|·|=7.015e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.162e-02 mean(i)=-8.586e-03 std|·|=3.281e-01 rms=8.851e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.162e-02 mean(i)=-8.586e-03 std|·|=3.281e-01 rms=8.851e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-1.162e-02 mean(i)=-8.586e-03 std|·|=3.281e-01 rms=8.851e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.537e-03 mean(i)=-1.390e-02 std|·|=3.801e-01 rms=5.566e-01 max|·|=2.039e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.378e-06 mean(i)=-2.013e-05 std|·|=2.909e-03 rms=4.139e-03 max|·|=1.837e-02
+DBG [Y_k](43, 16, 10): mean(r)=-6.014e-04 mean(i)=-7.178e-04 std|·|=4.004e-01 rms=5.904e-01 max|·|=2.040e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-6.014e-04 mean(i)=-7.178e-04 std|·|=4.004e-01 rms=5.904e-01 max|·|=2.040e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.017e-02 mean(i)=-2.417e-02 std|·|=1.078e+00 rms=1.758e+00 max|·|=6.962e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=4.675e-03 mean(i)=-2.325e-02 std|·|=3.173e-01 rms=8.802e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=4.675e-03 mean(i)=-2.325e-02 std|·|=3.173e-01 rms=8.802e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=4.675e-03 mean(i)=-2.325e-02 std|·|=3.173e-01 rms=8.802e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-6.014e-04 mean(i)=-7.178e-04 std|·|=4.004e-01 rms=5.904e-01 max|·|=2.040e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.253e-07 mean(i)=-5.544e-06 std|·|=2.928e-03 rms=4.216e-03 max|·|=1.675e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.173e-03 mean(i)=-2.194e-03 std|·|=3.981e-01 rms=5.871e-01 max|·|=2.011e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.173e-03 mean(i)=-2.194e-03 std|·|=3.981e-01 rms=5.871e-01 max|·|=2.011e+00
+DBG [S_prev](64, 4, 4): mean(r)=4.675e-03 mean(i)=-2.325e-02 std|·|=3.173e-01 rms=8.802e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=1.727e-03 mean(i)=1.077e-02 std|·|=1.466e-01 rms=2.796e-01 max|·|=9.451e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.250e-02 mean(i)=-2.311e-02 std|·|=1.068e+00 rms=1.745e+00 max|·|=7.297e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=6.710e-03 mean(i)=-1.209e-02 std|·|=3.142e-01 rms=8.872e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=6.710e-03 mean(i)=-1.209e-02 std|·|=3.142e-01 rms=8.872e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=6.710e-03 mean(i)=-1.209e-02 std|·|=3.142e-01 rms=8.872e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.173e-03 mean(i)=-2.194e-03 std|·|=3.981e-01 rms=5.871e-01 max|·|=2.011e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.882e-06 mean(i)=-5.299e-06 std|·|=2.929e-03 rms=4.210e-03 max|·|=1.686e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.438e-03 mean(i)=-6.149e-03 std|·|=3.956e-01 rms=5.844e-01 max|·|=2.075e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.438e-03 mean(i)=-6.149e-03 std|·|=3.956e-01 rms=5.844e-01 max|·|=2.075e+00
+DBG [S_prev](64, 4, 4): mean(r)=6.710e-03 mean(i)=-1.209e-02 std|·|=3.142e-01 rms=8.872e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-4.401e-03 mean(i)=9.113e-03 std|·|=1.481e-01 rms=2.857e-01 max|·|=1.030e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.440e-02 mean(i)=-1.864e-02 std|·|=1.064e+00 rms=1.747e+00 max|·|=7.429e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=2.287e-03 mean(i)=-1.133e-02 std|·|=3.138e-01 rms=8.918e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=2.287e-03 mean(i)=-1.133e-02 std|·|=3.138e-01 rms=8.918e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=2.287e-03 mean(i)=-1.133e-02 std|·|=3.138e-01 rms=8.918e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.438e-03 mean(i)=-6.149e-03 std|·|=3.956e-01 rms=5.844e-01 max|·|=2.075e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.360e-06 mean(i)=-1.040e-05 std|·|=2.929e-03 rms=4.207e-03 max|·|=1.612e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.294e-03 mean(i)=-7.892e-03 std|·|=3.922e-01 rms=5.776e-01 max|·|=2.093e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.294e-03 mean(i)=-7.892e-03 std|·|=3.922e-01 rms=5.776e-01 max|·|=2.093e+00
+DBG [S_prev](64, 4, 4): mean(r)=2.287e-03 mean(i)=-1.133e-02 std|·|=3.138e-01 rms=8.918e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.522e-03 mean(i)=8.915e-03 std|·|=1.508e-01 rms=2.888e-01 max|·|=1.110e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.268e-03 mean(i)=-1.254e-02 std|·|=1.070e+00 rms=1.738e+00 max|·|=7.361e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-4.377e-03 mean(i)=-1.092e-02 std|·|=3.257e-01 rms=8.866e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-4.377e-03 mean(i)=-1.092e-02 std|·|=3.257e-01 rms=8.866e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-4.377e-03 mean(i)=-1.092e-02 std|·|=3.257e-01 rms=8.866e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.294e-03 mean(i)=-7.892e-03 std|·|=3.922e-01 rms=5.776e-01 max|·|=2.093e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.505e-06 mean(i)=-1.263e-05 std|·|=2.925e-03 rms=4.187e-03 max|·|=1.696e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.937e-03 mean(i)=-1.178e-02 std|·|=3.886e-01 rms=5.716e-01 max|·|=2.115e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.937e-03 mean(i)=-1.178e-02 std|·|=3.886e-01 rms=5.716e-01 max|·|=2.115e+00
+DBG [S_prev](64, 4, 4): mean(r)=-4.377e-03 mean(i)=-1.092e-02 std|·|=3.257e-01 rms=8.866e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-9.375e-03 mean(i)=7.664e-03 std|·|=1.519e-01 rms=2.890e-01 max|·|=1.164e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=9.042e-03 mean(i)=-3.242e-03 std|·|=1.072e+00 rms=1.730e+00 max|·|=7.300e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-4.416e-03 mean(i)=-7.943e-03 std|·|=3.248e-01 rms=8.825e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-4.416e-03 mean(i)=-7.943e-03 std|·|=3.248e-01 rms=8.825e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-4.416e-03 mean(i)=-7.943e-03 std|·|=3.248e-01 rms=8.825e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.937e-03 mean(i)=-1.178e-02 std|·|=3.886e-01 rms=5.716e-01 max|·|=2.115e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.677e-06 mean(i)=-1.720e-05 std|·|=2.934e-03 rms=4.190e-03 max|·|=1.748e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.503e-03 mean(i)=-1.205e-02 std|·|=3.838e-01 rms=5.645e-01 max|·|=2.095e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.503e-03 mean(i)=-1.205e-02 std|·|=3.838e-01 rms=5.645e-01 max|·|=2.095e+00
+DBG [S_prev](64, 4, 4): mean(r)=-4.416e-03 mean(i)=-7.943e-03 std|·|=3.248e-01 rms=8.825e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.160e-02 mean(i)=8.270e-03 std|·|=1.527e-01 rms=2.911e-01 max|·|=1.183e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.764e-03 mean(i)=1.898e-03 std|·|=1.080e+00 rms=1.738e+00 max|·|=7.031e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.067e-03 mean(i)=-6.614e-03 std|·|=3.273e-01 rms=8.833e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.067e-03 mean(i)=-6.614e-03 std|·|=3.273e-01 rms=8.833e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.067e-03 mean(i)=-6.614e-03 std|·|=3.273e-01 rms=8.833e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.503e-03 mean(i)=-1.205e-02 std|·|=3.838e-01 rms=5.645e-01 max|·|=2.095e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.905e-06 mean(i)=-1.729e-05 std|·|=2.922e-03 rms=4.169e-03 max|·|=1.808e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.454e-03 mean(i)=-1.388e-02 std|·|=3.795e-01 rms=5.557e-01 max|·|=2.038e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.454e-03 mean(i)=-1.388e-02 std|·|=3.795e-01 rms=5.557e-01 max|·|=2.038e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.067e-03 mean(i)=-6.614e-03 std|·|=3.273e-01 rms=8.833e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.216e-02 mean(i)=7.688e-03 std|·|=1.549e-01 rms=2.947e-01 max|·|=1.146e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=-3.586e-04 mean(i)=4.939e-03 std|·|=1.091e+00 rms=1.753e+00 max|·|=7.022e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.121e-02 mean(i)=-8.369e-03 std|·|=3.279e-01 rms=8.849e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.121e-02 mean(i)=-8.369e-03 std|·|=3.279e-01 rms=8.849e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-1.121e-02 mean(i)=-8.369e-03 std|·|=3.279e-01 rms=8.849e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.454e-03 mean(i)=-1.388e-02 std|·|=3.795e-01 rms=5.557e-01 max|·|=2.038e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.349e-06 mean(i)=-2.006e-05 std|·|=2.905e-03 rms=4.135e-03 max|·|=1.831e-02
+DBG [Y_k](43, 16, 10): mean(r)=-5.592e-04 mean(i)=-1.068e-03 std|·|=4.000e-01 rms=5.897e-01 max|·|=2.036e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-5.592e-04 mean(i)=-1.068e-03 std|·|=4.000e-01 rms=5.897e-01 max|·|=2.036e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.944e-02 mean(i)=-2.392e-02 std|·|=1.076e+00 rms=1.756e+00 max|·|=6.974e+00
+DBG step: tanh saturation frac ≈ 0.170
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=4.377e-03 mean(i)=-2.291e-02 std|·|=3.178e-01 rms=8.799e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=4.377e-03 mean(i)=-2.291e-02 std|·|=3.178e-01 rms=8.799e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=4.377e-03 mean(i)=-2.291e-02 std|·|=3.178e-01 rms=8.799e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-5.592e-04 mean(i)=-1.068e-03 std|·|=4.000e-01 rms=5.897e-01 max|·|=2.036e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.224e-07 mean(i)=-5.942e-06 std|·|=2.926e-03 rms=4.214e-03 max|·|=1.680e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.103e-03 mean(i)=-2.478e-03 std|·|=3.978e-01 rms=5.867e-01 max|·|=2.020e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.103e-03 mean(i)=-2.478e-03 std|·|=3.978e-01 rms=5.867e-01 max|·|=2.020e+00
+DBG [S_prev](64, 4, 4): mean(r)=4.377e-03 mean(i)=-2.291e-02 std|·|=3.178e-01 rms=8.799e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=1.550e-03 mean(i)=1.078e-02 std|·|=1.463e-01 rms=2.792e-01 max|·|=9.534e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.161e-02 mean(i)=-2.257e-02 std|·|=1.067e+00 rms=1.743e+00 max|·|=7.296e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=6.519e-03 mean(i)=-1.206e-02 std|·|=3.145e-01 rms=8.866e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=6.519e-03 mean(i)=-1.206e-02 std|·|=3.145e-01 rms=8.866e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=6.519e-03 mean(i)=-1.206e-02 std|·|=3.145e-01 rms=8.866e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.103e-03 mean(i)=-2.478e-03 std|·|=3.978e-01 rms=5.867e-01 max|·|=2.020e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.750e-06 mean(i)=-5.668e-06 std|·|=2.927e-03 rms=4.208e-03 max|·|=1.685e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.520e-03 mean(i)=-6.384e-03 std|·|=3.954e-01 rms=5.837e-01 max|·|=2.080e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.520e-03 mean(i)=-6.384e-03 std|·|=3.954e-01 rms=5.837e-01 max|·|=2.080e+00
+DBG [S_prev](64, 4, 4): mean(r)=6.519e-03 mean(i)=-1.206e-02 std|·|=3.145e-01 rms=8.866e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-4.646e-03 mean(i)=9.069e-03 std|·|=1.482e-01 rms=2.855e-01 max|·|=1.046e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.343e-02 mean(i)=-1.833e-02 std|·|=1.064e+00 rms=1.745e+00 max|·|=7.437e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=1.727e-03 mean(i)=-1.141e-02 std|·|=3.144e-01 rms=8.911e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=1.727e-03 mean(i)=-1.141e-02 std|·|=3.144e-01 rms=8.911e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=1.727e-03 mean(i)=-1.141e-02 std|·|=3.144e-01 rms=8.911e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.520e-03 mean(i)=-6.384e-03 std|·|=3.954e-01 rms=5.837e-01 max|·|=2.080e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.358e-06 mean(i)=-1.072e-05 std|·|=2.929e-03 rms=4.205e-03 max|·|=1.619e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.305e-03 mean(i)=-8.183e-03 std|·|=3.918e-01 rms=5.770e-01 max|·|=2.093e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.305e-03 mean(i)=-8.183e-03 std|·|=3.918e-01 rms=5.770e-01 max|·|=2.093e+00
+DBG [S_prev](64, 4, 4): mean(r)=1.727e-03 mean(i)=-1.141e-02 std|·|=3.144e-01 rms=8.911e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.700e-03 mean(i)=8.931e-03 std|·|=1.508e-01 rms=2.888e-01 max|·|=1.119e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.053e-03 mean(i)=-1.247e-02 std|·|=1.069e+00 rms=1.735e+00 max|·|=7.346e+00
+DBG step: tanh saturation frac ≈ 0.181
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-4.718e-03 mean(i)=-1.092e-02 std|·|=3.265e-01 rms=8.858e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-4.718e-03 mean(i)=-1.092e-02 std|·|=3.265e-01 rms=8.858e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-4.718e-03 mean(i)=-1.092e-02 std|·|=3.265e-01 rms=8.858e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.305e-03 mean(i)=-8.183e-03 std|·|=3.918e-01 rms=5.770e-01 max|·|=2.093e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.453e-06 mean(i)=-1.301e-05 std|·|=2.925e-03 rms=4.186e-03 max|·|=1.703e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.870e-03 mean(i)=-1.170e-02 std|·|=3.881e-01 rms=5.708e-01 max|·|=2.112e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.870e-03 mean(i)=-1.170e-02 std|·|=3.881e-01 rms=5.708e-01 max|·|=2.112e+00
+DBG [S_prev](64, 4, 4): mean(r)=-4.718e-03 mean(i)=-1.092e-02 std|·|=3.265e-01 rms=8.858e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-9.578e-03 mean(i)=7.600e-03 std|·|=1.515e-01 rms=2.887e-01 max|·|=1.154e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=8.713e-03 mean(i)=-3.509e-03 std|·|=1.071e+00 rms=1.729e+00 max|·|=7.289e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-4.748e-03 mean(i)=-8.294e-03 std|·|=3.251e-01 rms=8.820e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-4.748e-03 mean(i)=-8.294e-03 std|·|=3.251e-01 rms=8.820e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-4.748e-03 mean(i)=-8.294e-03 std|·|=3.251e-01 rms=8.820e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.870e-03 mean(i)=-1.170e-02 std|·|=3.881e-01 rms=5.708e-01 max|·|=2.112e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.523e-06 mean(i)=-1.716e-05 std|·|=2.933e-03 rms=4.187e-03 max|·|=1.751e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.722e-03 mean(i)=-1.203e-02 std|·|=3.832e-01 rms=5.634e-01 max|·|=2.087e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.722e-03 mean(i)=-1.203e-02 std|·|=3.832e-01 rms=5.634e-01 max|·|=2.087e+00
+DBG [S_prev](64, 4, 4): mean(r)=-4.748e-03 mean(i)=-8.294e-03 std|·|=3.251e-01 rms=8.820e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.157e-02 mean(i)=8.229e-03 std|·|=1.528e-01 rms=2.912e-01 max|·|=1.185e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.286e-03 mean(i)=2.425e-03 std|·|=1.079e+00 rms=1.738e+00 max|·|=7.017e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.357e-03 mean(i)=-6.626e-03 std|·|=3.273e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.357e-03 mean(i)=-6.626e-03 std|·|=3.273e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.357e-03 mean(i)=-6.626e-03 std|·|=3.273e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.722e-03 mean(i)=-1.203e-02 std|·|=3.832e-01 rms=5.634e-01 max|·|=2.087e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.138e-06 mean(i)=-1.727e-05 std|·|=2.918e-03 rms=4.163e-03 max|·|=1.802e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.371e-03 mean(i)=-1.386e-02 std|·|=3.789e-01 rms=5.549e-01 max|·|=2.038e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.371e-03 mean(i)=-1.386e-02 std|·|=3.789e-01 rms=5.549e-01 max|·|=2.038e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.357e-03 mean(i)=-6.626e-03 std|·|=3.273e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.210e-02 mean(i)=7.654e-03 std|·|=1.549e-01 rms=2.945e-01 max|·|=1.143e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=-2.304e-04 mean(i)=5.249e-03 std|·|=1.091e+00 rms=1.753e+00 max|·|=7.030e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.078e-02 mean(i)=-8.135e-03 std|·|=3.279e-01 rms=8.848e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.078e-02 mean(i)=-8.135e-03 std|·|=3.279e-01 rms=8.848e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-1.078e-02 mean(i)=-8.135e-03 std|·|=3.279e-01 rms=8.848e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.371e-03 mean(i)=-1.386e-02 std|·|=3.789e-01 rms=5.549e-01 max|·|=2.038e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.323e-06 mean(i)=-1.999e-05 std|·|=2.902e-03 rms=4.131e-03 max|·|=1.825e-02
+DBG [Y_k](43, 16, 10): mean(r)=-5.170e-04 mean(i)=-1.419e-03 std|·|=3.997e-01 rms=5.891e-01 max|·|=2.033e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-5.170e-04 mean(i)=-1.419e-03 std|·|=3.997e-01 rms=5.891e-01 max|·|=2.033e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.870e-02 mean(i)=-2.367e-02 std|·|=1.075e+00 rms=1.754e+00 max|·|=6.987e+00
+DBG step: tanh saturation frac ≈ 0.169
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=4.085e-03 mean(i)=-2.258e-02 std|·|=3.183e-01 rms=8.797e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=4.085e-03 mean(i)=-2.258e-02 std|·|=3.183e-01 rms=8.797e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=4.085e-03 mean(i)=-2.258e-02 std|·|=3.183e-01 rms=8.797e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-5.170e-04 mean(i)=-1.419e-03 std|·|=3.997e-01 rms=5.891e-01 max|·|=2.033e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.206e-07 mean(i)=-6.341e-06 std|·|=2.926e-03 rms=4.212e-03 max|·|=1.686e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.032e-03 mean(i)=-2.761e-03 std|·|=3.975e-01 rms=5.864e-01 max|·|=2.029e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.032e-03 mean(i)=-2.761e-03 std|·|=3.975e-01 rms=5.864e-01 max|·|=2.029e+00
+DBG [S_prev](64, 4, 4): mean(r)=4.085e-03 mean(i)=-2.258e-02 std|·|=3.183e-01 rms=8.797e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=1.374e-03 mean(i)=1.078e-02 std|·|=1.461e-01 rms=2.789e-01 max|·|=9.617e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.073e-02 mean(i)=-2.202e-02 std|·|=1.066e+00 rms=1.741e+00 max|·|=7.294e+00
+DBG step: tanh saturation frac ≈ 0.181
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=6.320e-03 mean(i)=-1.203e-02 std|·|=3.150e-01 rms=8.861e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=6.320e-03 mean(i)=-1.203e-02 std|·|=3.150e-01 rms=8.861e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=6.320e-03 mean(i)=-1.203e-02 std|·|=3.150e-01 rms=8.861e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.032e-03 mean(i)=-2.761e-03 std|·|=3.975e-01 rms=5.864e-01 max|·|=2.029e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.618e-06 mean(i)=-6.038e-06 std|·|=2.927e-03 rms=4.206e-03 max|·|=1.685e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.602e-03 mean(i)=-6.620e-03 std|·|=3.953e-01 rms=5.832e-01 max|·|=2.085e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.602e-03 mean(i)=-6.620e-03 std|·|=3.953e-01 rms=5.832e-01 max|·|=2.085e+00
+DBG [S_prev](64, 4, 4): mean(r)=6.320e-03 mean(i)=-1.203e-02 std|·|=3.150e-01 rms=8.861e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-4.887e-03 mean(i)=9.025e-03 std|·|=1.482e-01 rms=2.853e-01 max|·|=1.062e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.246e-02 mean(i)=-1.801e-02 std|·|=1.064e+00 rms=1.744e+00 max|·|=7.446e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=1.147e-03 mean(i)=-1.149e-02 std|·|=3.148e-01 rms=8.905e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=1.147e-03 mean(i)=-1.149e-02 std|·|=3.148e-01 rms=8.905e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=1.147e-03 mean(i)=-1.149e-02 std|·|=3.148e-01 rms=8.905e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.602e-03 mean(i)=-6.620e-03 std|·|=3.953e-01 rms=5.832e-01 max|·|=2.085e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.352e-06 mean(i)=-1.105e-05 std|·|=2.929e-03 rms=4.204e-03 max|·|=1.626e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.316e-03 mean(i)=-8.475e-03 std|·|=3.915e-01 rms=5.765e-01 max|·|=2.093e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.316e-03 mean(i)=-8.475e-03 std|·|=3.915e-01 rms=5.765e-01 max|·|=2.093e+00
+DBG [S_prev](64, 4, 4): mean(r)=1.147e-03 mean(i)=-1.149e-02 std|·|=3.148e-01 rms=8.905e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.875e-03 mean(i)=8.948e-03 std|·|=1.508e-01 rms=2.889e-01 max|·|=1.129e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=4.839e-03 mean(i)=-1.241e-02 std|·|=1.069e+00 rms=1.733e+00 max|·|=7.330e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-5.059e-03 mean(i)=-1.091e-02 std|·|=3.272e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-5.059e-03 mean(i)=-1.091e-02 std|·|=3.272e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-5.059e-03 mean(i)=-1.091e-02 std|·|=3.272e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.316e-03 mean(i)=-8.475e-03 std|·|=3.915e-01 rms=5.765e-01 max|·|=2.093e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.400e-06 mean(i)=-1.340e-05 std|·|=2.925e-03 rms=4.185e-03 max|·|=1.710e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.802e-03 mean(i)=-1.161e-02 std|·|=3.877e-01 rms=5.702e-01 max|·|=2.109e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.802e-03 mean(i)=-1.161e-02 std|·|=3.877e-01 rms=5.702e-01 max|·|=2.109e+00
+DBG [S_prev](64, 4, 4): mean(r)=-5.059e-03 mean(i)=-1.091e-02 std|·|=3.272e-01 rms=8.852e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-9.780e-03 mean(i)=7.535e-03 std|·|=1.512e-01 rms=2.884e-01 max|·|=1.144e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=8.384e-03 mean(i)=-3.776e-03 std|·|=1.071e+00 rms=1.728e+00 max|·|=7.278e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-5.079e-03 mean(i)=-8.653e-03 std|·|=3.253e-01 rms=8.817e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-5.079e-03 mean(i)=-8.653e-03 std|·|=3.253e-01 rms=8.817e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-5.079e-03 mean(i)=-8.653e-03 std|·|=3.253e-01 rms=8.817e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.802e-03 mean(i)=-1.161e-02 std|·|=3.877e-01 rms=5.702e-01 max|·|=2.109e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.369e-06 mean(i)=-1.712e-05 std|·|=2.932e-03 rms=4.185e-03 max|·|=1.755e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.941e-03 mean(i)=-1.201e-02 std|·|=3.826e-01 rms=5.624e-01 max|·|=2.078e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.941e-03 mean(i)=-1.201e-02 std|·|=3.826e-01 rms=5.624e-01 max|·|=2.078e+00
+DBG [S_prev](64, 4, 4): mean(r)=-5.079e-03 mean(i)=-8.653e-03 std|·|=3.253e-01 rms=8.817e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.153e-02 mean(i)=8.186e-03 std|·|=1.529e-01 rms=2.913e-01 max|·|=1.187e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=4.808e-03 mean(i)=2.952e-03 std|·|=1.079e+00 rms=1.738e+00 max|·|=7.003e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.641e-03 mean(i)=-6.628e-03 std|·|=3.273e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.641e-03 mean(i)=-6.628e-03 std|·|=3.273e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.641e-03 mean(i)=-6.628e-03 std|·|=3.273e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.941e-03 mean(i)=-1.201e-02 std|·|=3.826e-01 rms=5.624e-01 max|·|=2.078e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.373e-06 mean(i)=-1.724e-05 std|·|=2.915e-03 rms=4.159e-03 max|·|=1.797e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.287e-03 mean(i)=-1.384e-02 std|·|=3.785e-01 rms=5.542e-01 max|·|=2.037e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.287e-03 mean(i)=-1.384e-02 std|·|=3.785e-01 rms=5.542e-01 max|·|=2.037e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.641e-03 mean(i)=-6.628e-03 std|·|=3.273e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.204e-02 mean(i)=7.616e-03 std|·|=1.548e-01 rms=2.944e-01 max|·|=1.140e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=-1.022e-04 mean(i)=5.559e-03 std|·|=1.091e+00 rms=1.753e+00 max|·|=7.037e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.034e-02 mean(i)=-7.884e-03 std|·|=3.278e-01 rms=8.849e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.034e-02 mean(i)=-7.884e-03 std|·|=3.278e-01 rms=8.849e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-1.034e-02 mean(i)=-7.884e-03 std|·|=3.278e-01 rms=8.849e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.287e-03 mean(i)=-1.384e-02 std|·|=3.785e-01 rms=5.542e-01 max|·|=2.037e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.300e-06 mean(i)=-1.992e-05 std|·|=2.900e-03 rms=4.129e-03 max|·|=1.819e-02
+DBG [Y_k](43, 16, 10): mean(r)=-4.749e-04 mean(i)=-1.769e-03 std|·|=3.995e-01 rms=5.887e-01 max|·|=2.029e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-4.749e-04 mean(i)=-1.769e-03 std|·|=3.995e-01 rms=5.887e-01 max|·|=2.029e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.796e-02 mean(i)=-2.342e-02 std|·|=1.074e+00 rms=1.752e+00 max|·|=6.999e+00
+DBG step: tanh saturation frac ≈ 0.170
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=3.797e-03 mean(i)=-2.225e-02 std|·|=3.188e-01 rms=8.795e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=3.797e-03 mean(i)=-2.225e-02 std|·|=3.188e-01 rms=8.795e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=3.797e-03 mean(i)=-2.225e-02 std|·|=3.188e-01 rms=8.795e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-4.749e-04 mean(i)=-1.769e-03 std|·|=3.995e-01 rms=5.887e-01 max|·|=2.029e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.198e-07 mean(i)=-6.741e-06 std|·|=2.925e-03 rms=4.211e-03 max|·|=1.692e-02
+DBG [Y_k](43, 16, 10): mean(r)=9.619e-04 mean(i)=-3.044e-03 std|·|=3.973e-01 rms=5.862e-01 max|·|=2.038e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=9.619e-04 mean(i)=-3.044e-03 std|·|=3.973e-01 rms=5.862e-01 max|·|=2.038e+00
+DBG [S_prev](64, 4, 4): mean(r)=3.797e-03 mean(i)=-2.225e-02 std|·|=3.188e-01 rms=8.795e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=1.201e-03 mean(i)=1.078e-02 std|·|=1.459e-01 rms=2.786e-01 max|·|=9.698e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.984e-02 mean(i)=-2.147e-02 std|·|=1.065e+00 rms=1.739e+00 max|·|=7.293e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=6.111e-03 mean(i)=-1.201e-02 std|·|=3.155e-01 rms=8.857e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=6.111e-03 mean(i)=-1.201e-02 std|·|=3.155e-01 rms=8.857e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=6.111e-03 mean(i)=-1.201e-02 std|·|=3.155e-01 rms=8.857e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=9.619e-04 mean(i)=-3.044e-03 std|·|=3.973e-01 rms=5.862e-01 max|·|=2.038e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.483e-06 mean(i)=-6.411e-06 std|·|=2.927e-03 rms=4.206e-03 max|·|=1.684e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.684e-03 mean(i)=-6.856e-03 std|·|=3.953e-01 rms=5.828e-01 max|·|=2.090e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.684e-03 mean(i)=-6.856e-03 std|·|=3.953e-01 rms=5.828e-01 max|·|=2.090e+00
+DBG [S_prev](64, 4, 4): mean(r)=6.111e-03 mean(i)=-1.201e-02 std|·|=3.155e-01 rms=8.857e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-5.125e-03 mean(i)=8.980e-03 std|·|=1.483e-01 rms=2.852e-01 max|·|=1.077e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.149e-02 mean(i)=-1.770e-02 std|·|=1.064e+00 rms=1.742e+00 max|·|=7.455e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.453e-04 mean(i)=-1.157e-02 std|·|=3.153e-01 rms=8.900e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.453e-04 mean(i)=-1.157e-02 std|·|=3.153e-01 rms=8.900e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.453e-04 mean(i)=-1.157e-02 std|·|=3.153e-01 rms=8.900e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.684e-03 mean(i)=-6.856e-03 std|·|=3.953e-01 rms=5.828e-01 max|·|=2.090e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.341e-06 mean(i)=-1.138e-05 std|·|=2.930e-03 rms=4.204e-03 max|·|=1.633e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.327e-03 mean(i)=-8.766e-03 std|·|=3.913e-01 rms=5.762e-01 max|·|=2.093e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.327e-03 mean(i)=-8.766e-03 std|·|=3.913e-01 rms=5.762e-01 max|·|=2.093e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.453e-04 mean(i)=-1.157e-02 std|·|=3.153e-01 rms=8.900e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-7.047e-03 mean(i)=8.967e-03 std|·|=1.508e-01 rms=2.891e-01 max|·|=1.138e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=4.624e-03 mean(i)=-1.234e-02 std|·|=1.068e+00 rms=1.731e+00 max|·|=7.314e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-5.403e-03 mean(i)=-1.090e-02 std|·|=3.278e-01 rms=8.845e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-5.403e-03 mean(i)=-1.090e-02 std|·|=3.278e-01 rms=8.845e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-5.403e-03 mean(i)=-1.090e-02 std|·|=3.278e-01 rms=8.845e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.327e-03 mean(i)=-8.766e-03 std|·|=3.913e-01 rms=5.762e-01 max|·|=2.093e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.348e-06 mean(i)=-1.378e-05 std|·|=2.926e-03 rms=4.186e-03 max|·|=1.717e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.735e-03 mean(i)=-1.153e-02 std|·|=3.874e-01 rms=5.696e-01 max|·|=2.106e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.735e-03 mean(i)=-1.153e-02 std|·|=3.874e-01 rms=5.696e-01 max|·|=2.106e+00
+DBG [S_prev](64, 4, 4): mean(r)=-5.403e-03 mean(i)=-1.090e-02 std|·|=3.278e-01 rms=8.845e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-9.981e-03 mean(i)=7.467e-03 std|·|=1.508e-01 rms=2.882e-01 max|·|=1.134e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=8.055e-03 mean(i)=-4.043e-03 std|·|=1.071e+00 rms=1.728e+00 max|·|=7.268e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-5.407e-03 mean(i)=-9.018e-03 std|·|=3.253e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-5.407e-03 mean(i)=-9.018e-03 std|·|=3.253e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-5.407e-03 mean(i)=-9.018e-03 std|·|=3.253e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.735e-03 mean(i)=-1.153e-02 std|·|=3.874e-01 rms=5.696e-01 max|·|=2.106e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.215e-06 mean(i)=-1.708e-05 std|·|=2.932e-03 rms=4.184e-03 max|·|=1.759e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.160e-03 mean(i)=-1.199e-02 std|·|=3.821e-01 rms=5.615e-01 max|·|=2.070e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.160e-03 mean(i)=-1.199e-02 std|·|=3.821e-01 rms=5.615e-01 max|·|=2.070e+00
+DBG [S_prev](64, 4, 4): mean(r)=-5.407e-03 mean(i)=-9.018e-03 std|·|=3.253e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.149e-02 mean(i)=8.141e-03 std|·|=1.530e-01 rms=2.914e-01 max|·|=1.188e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=4.329e-03 mean(i)=3.480e-03 std|·|=1.079e+00 rms=1.738e+00 max|·|=6.989e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.920e-03 mean(i)=-6.622e-03 std|·|=3.272e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.920e-03 mean(i)=-6.622e-03 std|·|=3.272e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.920e-03 mean(i)=-6.622e-03 std|·|=3.272e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.160e-03 mean(i)=-1.199e-02 std|·|=3.821e-01 rms=5.615e-01 max|·|=2.070e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.608e-06 mean(i)=-1.722e-05 std|·|=2.913e-03 rms=4.155e-03 max|·|=1.791e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.204e-03 mean(i)=-1.382e-02 std|·|=3.780e-01 rms=5.537e-01 max|·|=2.036e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.204e-03 mean(i)=-1.382e-02 std|·|=3.780e-01 rms=5.537e-01 max|·|=2.036e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.920e-03 mean(i)=-6.622e-03 std|·|=3.272e-01 rms=8.831e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.197e-02 mean(i)=7.575e-03 std|·|=1.547e-01 rms=2.942e-01 max|·|=1.137e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.602e-05 mean(i)=5.870e-03 std|·|=1.091e+00 rms=1.753e+00 max|·|=7.044e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-9.893e-03 mean(i)=-7.615e-03 std|·|=3.278e-01 rms=8.850e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-9.893e-03 mean(i)=-7.615e-03 std|·|=3.278e-01 rms=8.850e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-9.893e-03 mean(i)=-7.615e-03 std|·|=3.278e-01 rms=8.850e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.204e-03 mean(i)=-1.382e-02 std|·|=3.780e-01 rms=5.537e-01 max|·|=2.036e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.278e-06 mean(i)=-1.984e-05 std|·|=2.898e-03 rms=4.127e-03 max|·|=1.813e-02
+DBG [Y_k](43, 16, 10): mean(r)=-4.327e-04 mean(i)=-2.120e-03 std|·|=3.993e-01 rms=5.884e-01 max|·|=2.029e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-4.327e-04 mean(i)=-2.120e-03 std|·|=3.993e-01 rms=5.884e-01 max|·|=2.029e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.723e-02 mean(i)=-2.317e-02 std|·|=1.073e+00 rms=1.751e+00 max|·|=7.011e+00
+DBG step: tanh saturation frac ≈ 0.172
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=3.516e-03 mean(i)=-2.193e-02 std|·|=3.194e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=3.516e-03 mean(i)=-2.193e-02 std|·|=3.194e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=3.516e-03 mean(i)=-2.193e-02 std|·|=3.194e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-4.327e-04 mean(i)=-2.120e-03 std|·|=3.993e-01 rms=5.884e-01 max|·|=2.029e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.202e-07 mean(i)=-7.144e-06 std|·|=2.926e-03 rms=4.210e-03 max|·|=1.698e-02
+DBG [Y_k](43, 16, 10): mean(r)=8.914e-04 mean(i)=-3.328e-03 std|·|=3.972e-01 rms=5.861e-01 max|·|=2.047e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=8.914e-04 mean(i)=-3.328e-03 std|·|=3.972e-01 rms=5.861e-01 max|·|=2.047e+00
+DBG [S_prev](64, 4, 4): mean(r)=3.516e-03 mean(i)=-2.193e-02 std|·|=3.194e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=1.029e-03 mean(i)=1.077e-02 std|·|=1.457e-01 rms=2.784e-01 max|·|=9.780e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.896e-02 mean(i)=-2.093e-02 std|·|=1.065e+00 rms=1.738e+00 max|·|=7.292e+00
+DBG step: tanh saturation frac ≈ 0.182
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.891e-03 mean(i)=-1.201e-02 std|·|=3.161e-01 rms=8.854e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.891e-03 mean(i)=-1.201e-02 std|·|=3.161e-01 rms=8.854e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.891e-03 mean(i)=-1.201e-02 std|·|=3.161e-01 rms=8.854e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=8.914e-04 mean(i)=-3.328e-03 std|·|=3.972e-01 rms=5.861e-01 max|·|=2.047e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.346e-06 mean(i)=-6.785e-06 std|·|=2.927e-03 rms=4.206e-03 max|·|=1.684e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.765e-03 mean(i)=-7.091e-03 std|·|=3.953e-01 rms=5.826e-01 max|·|=2.095e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.765e-03 mean(i)=-7.091e-03 std|·|=3.953e-01 rms=5.826e-01 max|·|=2.095e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.891e-03 mean(i)=-1.201e-02 std|·|=3.161e-01 rms=8.854e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-5.359e-03 mean(i)=8.935e-03 std|·|=1.484e-01 rms=2.852e-01 max|·|=1.092e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.052e-02 mean(i)=-1.739e-02 std|·|=1.065e+00 rms=1.742e+00 max|·|=7.463e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.596e-05 mean(i)=-1.166e-02 std|·|=3.157e-01 rms=8.895e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.596e-05 mean(i)=-1.166e-02 std|·|=3.157e-01 rms=8.895e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=-7.596e-05 mean(i)=-1.166e-02 std|·|=3.157e-01 rms=8.895e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.765e-03 mean(i)=-7.091e-03 std|·|=3.953e-01 rms=5.826e-01 max|·|=2.095e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.327e-06 mean(i)=-1.171e-05 std|·|=2.931e-03 rms=4.205e-03 max|·|=1.640e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.339e-03 mean(i)=-9.057e-03 std|·|=3.911e-01 rms=5.760e-01 max|·|=2.093e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.339e-03 mean(i)=-9.057e-03 std|·|=3.911e-01 rms=5.760e-01 max|·|=2.093e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.596e-05 mean(i)=-1.166e-02 std|·|=3.157e-01 rms=8.895e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-7.216e-03 mean(i)=8.989e-03 std|·|=1.509e-01 rms=2.893e-01 max|·|=1.147e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=4.409e-03 mean(i)=-1.228e-02 std|·|=1.068e+00 rms=1.729e+00 max|·|=7.299e+00
+DBG step: tanh saturation frac ≈ 0.182
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-5.748e-03 mean(i)=-1.089e-02 std|·|=3.282e-01 rms=8.840e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-5.748e-03 mean(i)=-1.089e-02 std|·|=3.282e-01 rms=8.840e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-5.748e-03 mean(i)=-1.089e-02 std|·|=3.282e-01 rms=8.840e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.339e-03 mean(i)=-9.057e-03 std|·|=3.911e-01 rms=5.760e-01 max|·|=2.093e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.294e-06 mean(i)=-1.417e-05 std|·|=2.928e-03 rms=4.187e-03 max|·|=1.725e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.668e-03 mean(i)=-1.145e-02 std|·|=3.871e-01 rms=5.692e-01 max|·|=2.103e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.668e-03 mean(i)=-1.145e-02 std|·|=3.871e-01 rms=5.692e-01 max|·|=2.103e+00
+DBG [S_prev](64, 4, 4): mean(r)=-5.748e-03 mean(i)=-1.089e-02 std|·|=3.282e-01 rms=8.840e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.018e-02 mean(i)=7.396e-03 std|·|=1.504e-01 rms=2.879e-01 max|·|=1.124e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=7.726e-03 mean(i)=-4.310e-03 std|·|=1.071e+00 rms=1.727e+00 max|·|=7.257e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-5.730e-03 mean(i)=-9.391e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-5.730e-03 mean(i)=-9.391e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-5.730e-03 mean(i)=-9.391e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.668e-03 mean(i)=-1.145e-02 std|·|=3.871e-01 rms=5.692e-01 max|·|=2.103e+00
+DBG [G(feature)](107, 20, 14): mean(r)=5.062e-06 mean(i)=-1.704e-05 std|·|=2.932e-03 rms=4.183e-03 max|·|=1.763e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.379e-03 mean(i)=-1.197e-02 std|·|=3.816e-01 rms=5.608e-01 max|·|=2.061e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.379e-03 mean(i)=-1.197e-02 std|·|=3.816e-01 rms=5.608e-01 max|·|=2.061e+00
+DBG [S_prev](64, 4, 4): mean(r)=-5.730e-03 mean(i)=-9.391e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.145e-02 mean(i)=8.093e-03 std|·|=1.532e-01 rms=2.915e-01 max|·|=1.190e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.851e-03 mean(i)=4.007e-03 std|·|=1.079e+00 rms=1.739e+00 max|·|=6.975e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-8.190e-03 mean(i)=-6.608e-03 std|·|=3.271e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-8.190e-03 mean(i)=-6.608e-03 std|·|=3.271e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-8.190e-03 mean(i)=-6.608e-03 std|·|=3.271e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.379e-03 mean(i)=-1.197e-02 std|·|=3.816e-01 rms=5.608e-01 max|·|=2.061e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.845e-06 mean(i)=-1.719e-05 std|·|=2.911e-03 rms=4.153e-03 max|·|=1.786e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.121e-03 mean(i)=-1.380e-02 std|·|=3.777e-01 rms=5.533e-01 max|·|=2.036e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.121e-03 mean(i)=-1.380e-02 std|·|=3.777e-01 rms=5.533e-01 max|·|=2.036e+00
+DBG [S_prev](64, 4, 4): mean(r)=-8.190e-03 mean(i)=-6.608e-03 std|·|=3.271e-01 rms=8.832e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.191e-02 mean(i)=7.530e-03 std|·|=1.546e-01 rms=2.941e-01 max|·|=1.134e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.542e-04 mean(i)=6.180e-03 std|·|=1.091e+00 rms=1.754e+00 max|·|=7.052e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-9.438e-03 mean(i)=-7.328e-03 std|·|=3.277e-01 rms=8.853e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-9.438e-03 mean(i)=-7.328e-03 std|·|=3.277e-01 rms=8.853e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-9.438e-03 mean(i)=-7.328e-03 std|·|=3.277e-01 rms=8.853e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.121e-03 mean(i)=-1.380e-02 std|·|=3.777e-01 rms=5.533e-01 max|·|=2.036e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.257e-06 mean(i)=-1.976e-05 std|·|=2.897e-03 rms=4.126e-03 max|·|=1.808e-02
+DBG [Y_k](43, 16, 10): mean(r)=-3.906e-04 mean(i)=-2.471e-03 std|·|=3.992e-01 rms=5.882e-01 max|·|=2.030e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-3.906e-04 mean(i)=-2.471e-03 std|·|=3.992e-01 rms=5.882e-01 max|·|=2.030e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.649e-02 mean(i)=-2.292e-02 std|·|=1.072e+00 rms=1.750e+00 max|·|=7.024e+00
+DBG step: tanh saturation frac ≈ 0.170
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=3.241e-03 mean(i)=-2.163e-02 std|·|=3.200e-01 rms=8.793e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=3.241e-03 mean(i)=-2.163e-02 std|·|=3.200e-01 rms=8.793e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=3.241e-03 mean(i)=-2.163e-02 std|·|=3.200e-01 rms=8.793e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-3.906e-04 mean(i)=-2.471e-03 std|·|=3.992e-01 rms=5.882e-01 max|·|=2.030e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.218e-07 mean(i)=-7.548e-06 std|·|=2.926e-03 rms=4.211e-03 max|·|=1.704e-02
+DBG [Y_k](43, 16, 10): mean(r)=8.209e-04 mean(i)=-3.611e-03 std|·|=3.971e-01 rms=5.862e-01 max|·|=2.056e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=8.209e-04 mean(i)=-3.611e-03 std|·|=3.971e-01 rms=5.862e-01 max|·|=2.056e+00
+DBG [S_prev](64, 4, 4): mean(r)=3.241e-03 mean(i)=-2.163e-02 std|·|=3.200e-01 rms=8.793e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=8.599e-04 mean(i)=1.075e-02 std|·|=1.455e-01 rms=2.782e-01 max|·|=9.860e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.807e-02 mean(i)=-2.038e-02 std|·|=1.064e+00 rms=1.737e+00 max|·|=7.290e+00
+DBG step: tanh saturation frac ≈ 0.183
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.659e-03 mean(i)=-1.200e-02 std|·|=3.168e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.659e-03 mean(i)=-1.200e-02 std|·|=3.168e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.659e-03 mean(i)=-1.200e-02 std|·|=3.168e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=8.209e-04 mean(i)=-3.611e-03 std|·|=3.971e-01 rms=5.862e-01 max|·|=2.056e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.207e-06 mean(i)=-7.161e-06 std|·|=2.928e-03 rms=4.207e-03 max|·|=1.685e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.847e-03 mean(i)=-7.327e-03 std|·|=3.954e-01 rms=5.825e-01 max|·|=2.100e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.847e-03 mean(i)=-7.327e-03 std|·|=3.954e-01 rms=5.825e-01 max|·|=2.100e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.659e-03 mean(i)=-1.200e-02 std|·|=3.168e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-5.589e-03 mean(i)=8.889e-03 std|·|=1.485e-01 rms=2.852e-01 max|·|=1.107e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=9.548e-03 mean(i)=-1.708e-02 std|·|=1.065e+00 rms=1.741e+00 max|·|=7.472e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.163e-04 mean(i)=-1.175e-02 std|·|=3.163e-01 rms=8.891e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.163e-04 mean(i)=-1.175e-02 std|·|=3.163e-01 rms=8.891e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=-7.163e-04 mean(i)=-1.175e-02 std|·|=3.163e-01 rms=8.891e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.847e-03 mean(i)=-7.327e-03 std|·|=3.954e-01 rms=5.825e-01 max|·|=2.100e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.309e-06 mean(i)=-1.204e-05 std|·|=2.933e-03 rms=4.206e-03 max|·|=1.648e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.350e-03 mean(i)=-9.348e-03 std|·|=3.910e-01 rms=5.759e-01 max|·|=2.093e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.350e-03 mean(i)=-9.348e-03 std|·|=3.910e-01 rms=5.759e-01 max|·|=2.093e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.163e-04 mean(i)=-1.175e-02 std|·|=3.163e-01 rms=8.891e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-7.380e-03 mean(i)=9.014e-03 std|·|=1.510e-01 rms=2.895e-01 max|·|=1.156e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=4.195e-03 mean(i)=-1.221e-02 std|·|=1.068e+00 rms=1.728e+00 max|·|=7.283e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.096e-03 mean(i)=-1.087e-02 std|·|=3.286e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.096e-03 mean(i)=-1.087e-02 std|·|=3.286e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-6.096e-03 mean(i)=-1.087e-02 std|·|=3.286e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.350e-03 mean(i)=-9.348e-03 std|·|=3.910e-01 rms=5.759e-01 max|·|=2.093e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.241e-06 mean(i)=-1.455e-05 std|·|=2.930e-03 rms=4.189e-03 max|·|=1.733e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.601e-03 mean(i)=-1.136e-02 std|·|=3.869e-01 rms=5.689e-01 max|·|=2.100e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.601e-03 mean(i)=-1.136e-02 std|·|=3.869e-01 rms=5.689e-01 max|·|=2.100e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.096e-03 mean(i)=-1.087e-02 std|·|=3.286e-01 rms=8.836e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.038e-02 mean(i)=7.324e-03 std|·|=1.501e-01 rms=2.878e-01 max|·|=1.113e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=7.397e-03 mean(i)=-4.577e-03 std|·|=1.072e+00 rms=1.728e+00 max|·|=7.246e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.048e-03 mean(i)=-9.771e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.048e-03 mean(i)=-9.771e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-6.048e-03 mean(i)=-9.771e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.601e-03 mean(i)=-1.136e-02 std|·|=3.869e-01 rms=5.689e-01 max|·|=2.100e+00
+DBG [G(feature)](107, 20, 14): mean(r)=4.910e-06 mean(i)=-1.700e-05 std|·|=2.932e-03 rms=4.184e-03 max|·|=1.767e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.598e-03 mean(i)=-1.195e-02 std|·|=3.811e-01 rms=5.603e-01 max|·|=2.053e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.598e-03 mean(i)=-1.195e-02 std|·|=3.811e-01 rms=5.603e-01 max|·|=2.053e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.048e-03 mean(i)=-9.771e-03 std|·|=3.254e-01 rms=8.815e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.140e-02 mean(i)=8.043e-03 std|·|=1.534e-01 rms=2.917e-01 max|·|=1.191e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.373e-03 mean(i)=4.534e-03 std|·|=1.080e+00 rms=1.740e+00 max|·|=6.961e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-8.453e-03 mean(i)=-6.585e-03 std|·|=3.271e-01 rms=8.834e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-8.453e-03 mean(i)=-6.585e-03 std|·|=3.271e-01 rms=8.834e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-8.453e-03 mean(i)=-6.585e-03 std|·|=3.271e-01 rms=8.834e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.598e-03 mean(i)=-1.195e-02 std|·|=3.811e-01 rms=5.603e-01 max|·|=2.053e+00
+DBG [G(feature)](107, 20, 14): mean(r)=7.084e-06 mean(i)=-1.716e-05 std|·|=2.910e-03 rms=4.151e-03 max|·|=1.780e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.038e-03 mean(i)=-1.378e-02 std|·|=3.774e-01 rms=5.531e-01 max|·|=2.035e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.038e-03 mean(i)=-1.378e-02 std|·|=3.774e-01 rms=5.531e-01 max|·|=2.035e+00
+DBG [S_prev](64, 4, 4): mean(r)=-8.453e-03 mean(i)=-6.585e-03 std|·|=3.271e-01 rms=8.834e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.184e-02 mean(i)=7.481e-03 std|·|=1.545e-01 rms=2.941e-01 max|·|=1.130e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.825e-04 mean(i)=6.490e-03 std|·|=1.091e+00 rms=1.755e+00 max|·|=7.059e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-8.979e-03 mean(i)=-7.023e-03 std|·|=3.277e-01 rms=8.858e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-8.979e-03 mean(i)=-7.023e-03 std|·|=3.277e-01 rms=8.858e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-8.979e-03 mean(i)=-7.023e-03 std|·|=3.277e-01 rms=8.858e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.038e-03 mean(i)=-1.378e-02 std|·|=3.774e-01 rms=5.531e-01 max|·|=2.035e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.237e-06 mean(i)=-1.968e-05 std|·|=2.896e-03 rms=4.127e-03 max|·|=1.803e-02
+DBG [Y_k](43, 16, 10): mean(r)=-3.484e-04 mean(i)=-2.821e-03 std|·|=3.991e-01 rms=5.882e-01 max|·|=2.031e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-3.484e-04 mean(i)=-2.821e-03 std|·|=3.991e-01 rms=5.882e-01 max|·|=2.031e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.575e-02 mean(i)=-2.266e-02 std|·|=1.072e+00 rms=1.749e+00 max|·|=7.036e+00
+DBG step: tanh saturation frac ≈ 0.169
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=2.972e-03 mean(i)=-2.133e-02 std|·|=3.206e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=2.972e-03 mean(i)=-2.133e-02 std|·|=3.206e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=2.972e-03 mean(i)=-2.133e-02 std|·|=3.206e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-3.484e-04 mean(i)=-2.821e-03 std|·|=3.991e-01 rms=5.882e-01 max|·|=2.031e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.247e-07 mean(i)=-7.955e-06 std|·|=2.928e-03 rms=4.212e-03 max|·|=1.710e-02
+DBG [Y_k](43, 16, 10): mean(r)=7.505e-04 mean(i)=-3.894e-03 std|·|=3.970e-01 rms=5.864e-01 max|·|=2.065e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.505e-04 mean(i)=-3.894e-03 std|·|=3.970e-01 rms=5.864e-01 max|·|=2.065e+00
+DBG [S_prev](64, 4, 4): mean(r)=2.972e-03 mean(i)=-2.133e-02 std|·|=3.206e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=6.927e-04 mean(i)=1.072e-02 std|·|=1.454e-01 rms=2.781e-01 max|·|=9.940e-01
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.719e-02 mean(i)=-1.984e-02 std|·|=1.064e+00 rms=1.737e+00 max|·|=7.289e+00
+DBG step: tanh saturation frac ≈ 0.184
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.412e-03 mean(i)=-1.201e-02 std|·|=3.174e-01 rms=8.851e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.412e-03 mean(i)=-1.201e-02 std|·|=3.174e-01 rms=8.851e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.412e-03 mean(i)=-1.201e-02 std|·|=3.174e-01 rms=8.851e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.505e-04 mean(i)=-3.894e-03 std|·|=3.970e-01 rms=5.864e-01 max|·|=2.065e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.064e-06 mean(i)=-7.538e-06 std|·|=2.930e-03 rms=4.209e-03 max|·|=1.685e-02
+DBG [Y_k](43, 16, 10): mean(r)=1.929e-03 mean(i)=-7.563e-03 std|·|=3.955e-01 rms=5.825e-01 max|·|=2.105e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.929e-03 mean(i)=-7.563e-03 std|·|=3.955e-01 rms=5.825e-01 max|·|=2.105e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.412e-03 mean(i)=-1.201e-02 std|·|=3.174e-01 rms=8.851e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-5.815e-03 mean(i)=8.843e-03 std|·|=1.486e-01 rms=2.852e-01 max|·|=1.121e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=8.578e-03 mean(i)=-1.677e-02 std|·|=1.066e+00 rms=1.741e+00 max|·|=7.480e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-1.375e-03 mean(i)=-1.184e-02 std|·|=3.168e-01 rms=8.888e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=-1.375e-03 mean(i)=-1.184e-02 std|·|=3.168e-01 rms=8.888e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=-1.375e-03 mean(i)=-1.184e-02 std|·|=3.168e-01 rms=8.888e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=1.929e-03 mean(i)=-7.563e-03 std|·|=3.955e-01 rms=5.825e-01 max|·|=2.105e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.288e-06 mean(i)=-1.237e-05 std|·|=2.935e-03 rms=4.209e-03 max|·|=1.656e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.361e-03 mean(i)=-9.640e-03 std|·|=3.909e-01 rms=5.759e-01 max|·|=2.094e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.361e-03 mean(i)=-9.640e-03 std|·|=3.909e-01 rms=5.759e-01 max|·|=2.094e+00
+DBG [S_prev](64, 4, 4): mean(r)=-1.375e-03 mean(i)=-1.184e-02 std|·|=3.168e-01 rms=8.888e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-7.541e-03 mean(i)=9.043e-03 std|·|=1.511e-01 rms=2.899e-01 max|·|=1.164e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.980e-03 mean(i)=-1.215e-02 std|·|=1.068e+00 rms=1.727e+00 max|·|=7.267e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.447e-03 mean(i)=-1.086e-02 std|·|=3.290e-01 rms=8.833e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.447e-03 mean(i)=-1.086e-02 std|·|=3.290e-01 rms=8.833e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-6.447e-03 mean(i)=-1.086e-02 std|·|=3.290e-01 rms=8.833e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.361e-03 mean(i)=-9.640e-03 std|·|=3.909e-01 rms=5.759e-01 max|·|=2.094e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.186e-06 mean(i)=-1.493e-05 std|·|=2.932e-03 rms=4.192e-03 max|·|=1.741e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.534e-03 mean(i)=-1.128e-02 std|·|=3.867e-01 rms=5.687e-01 max|·|=2.097e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.534e-03 mean(i)=-1.128e-02 std|·|=3.867e-01 rms=5.687e-01 max|·|=2.097e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.447e-03 mean(i)=-1.086e-02 std|·|=3.290e-01 rms=8.833e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.057e-02 mean(i)=7.249e-03 std|·|=1.498e-01 rms=2.876e-01 max|·|=1.101e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=7.068e-03 mean(i)=-4.844e-03 std|·|=1.072e+00 rms=1.728e+00 max|·|=7.235e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.360e-03 mean(i)=-1.016e-02 std|·|=3.254e-01 rms=8.816e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.360e-03 mean(i)=-1.016e-02 std|·|=3.254e-01 rms=8.816e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-6.360e-03 mean(i)=-1.016e-02 std|·|=3.254e-01 rms=8.816e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.534e-03 mean(i)=-1.128e-02 std|·|=3.867e-01 rms=5.687e-01 max|·|=2.097e+00
+DBG [G(feature)](107, 20, 14): mean(r)=4.760e-06 mean(i)=-1.697e-05 std|·|=2.933e-03 rms=4.185e-03 max|·|=1.771e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.817e-03 mean(i)=-1.194e-02 std|·|=3.808e-01 rms=5.598e-01 max|·|=2.044e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.817e-03 mean(i)=-1.194e-02 std|·|=3.808e-01 rms=5.598e-01 max|·|=2.044e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.360e-03 mean(i)=-1.016e-02 std|·|=3.254e-01 rms=8.816e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.135e-02 mean(i)=7.991e-03 std|·|=1.535e-01 rms=2.919e-01 max|·|=1.193e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.894e-03 mean(i)=5.062e-03 std|·|=1.080e+00 rms=1.741e+00 max|·|=6.947e+00
+DBG step: tanh saturation frac ≈ 0.175
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-8.705e-03 mean(i)=-6.554e-03 std|·|=3.270e-01 rms=8.838e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-8.705e-03 mean(i)=-6.554e-03 std|·|=3.270e-01 rms=8.838e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-8.705e-03 mean(i)=-6.554e-03 std|·|=3.270e-01 rms=8.838e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.817e-03 mean(i)=-1.194e-02 std|·|=3.808e-01 rms=5.598e-01 max|·|=2.044e+00
+DBG [G(feature)](107, 20, 14): mean(r)=7.325e-06 mean(i)=-1.713e-05 std|·|=2.909e-03 rms=4.150e-03 max|·|=1.775e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.955e-03 mean(i)=-1.377e-02 std|·|=3.771e-01 rms=5.530e-01 max|·|=2.034e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.955e-03 mean(i)=-1.377e-02 std|·|=3.771e-01 rms=5.530e-01 max|·|=2.034e+00
+DBG [S_prev](64, 4, 4): mean(r)=-8.705e-03 mean(i)=-6.554e-03 std|·|=3.270e-01 rms=8.838e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.177e-02 mean(i)=7.428e-03 std|·|=1.545e-01 rms=2.941e-01 max|·|=1.127e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=4.107e-04 mean(i)=6.801e-03 std|·|=1.092e+00 rms=1.757e+00 max|·|=7.067e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-8.518e-03 mean(i)=-6.699e-03 std|·|=3.277e-01 rms=8.863e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-8.518e-03 mean(i)=-6.699e-03 std|·|=3.277e-01 rms=8.863e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-8.518e-03 mean(i)=-6.699e-03 std|·|=3.277e-01 rms=8.863e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.955e-03 mean(i)=-1.377e-02 std|·|=3.771e-01 rms=5.530e-01 max|·|=2.034e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.218e-06 mean(i)=-1.959e-05 std|·|=2.896e-03 rms=4.128e-03 max|·|=1.798e-02
+DBG [Y_k](43, 16, 10): mean(r)=-3.062e-04 mean(i)=-3.172e-03 std|·|=3.990e-01 rms=5.883e-01 max|·|=2.034e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-3.062e-04 mean(i)=-3.172e-03 std|·|=3.990e-01 rms=5.883e-01 max|·|=2.034e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.502e-02 mean(i)=-2.241e-02 std|·|=1.072e+00 rms=1.749e+00 max|·|=7.049e+00
+DBG step: tanh saturation frac ≈ 0.167
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=2.711e-03 mean(i)=-2.104e-02 std|·|=3.212e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=2.711e-03 mean(i)=-2.104e-02 std|·|=3.212e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=2.711e-03 mean(i)=-2.104e-02 std|·|=3.212e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-3.062e-04 mean(i)=-3.172e-03 std|·|=3.990e-01 rms=5.883e-01 max|·|=2.034e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.290e-07 mean(i)=-8.363e-06 std|·|=2.929e-03 rms=4.215e-03 max|·|=1.717e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.800e-04 mean(i)=-4.178e-03 std|·|=3.970e-01 rms=5.866e-01 max|·|=2.074e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.800e-04 mean(i)=-4.178e-03 std|·|=3.970e-01 rms=5.866e-01 max|·|=2.074e+00
+DBG [S_prev](64, 4, 4): mean(r)=2.711e-03 mean(i)=-2.104e-02 std|·|=3.212e-01 rms=8.794e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=5.279e-04 mean(i)=1.069e-02 std|·|=1.452e-01 rms=2.780e-01 max|·|=1.002e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.630e-02 mean(i)=-1.929e-02 std|·|=1.064e+00 rms=1.737e+00 max|·|=7.288e+00
+DBG step: tanh saturation frac ≈ 0.182
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=5.150e-03 mean(i)=-1.202e-02 std|·|=3.179e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=5.150e-03 mean(i)=-1.202e-02 std|·|=3.179e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=5.150e-03 mean(i)=-1.202e-02 std|·|=3.179e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.800e-04 mean(i)=-4.178e-03 std|·|=3.970e-01 rms=5.866e-01 max|·|=2.074e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.919e-06 mean(i)=-7.916e-06 std|·|=2.932e-03 rms=4.212e-03 max|·|=1.687e-02
+DBG [Y_k](43, 16, 10): mean(r)=2.011e-03 mean(i)=-7.798e-03 std|·|=3.957e-01 rms=5.826e-01 max|·|=2.110e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=2.011e-03 mean(i)=-7.798e-03 std|·|=3.957e-01 rms=5.826e-01 max|·|=2.110e+00
+DBG [S_prev](64, 4, 4): mean(r)=5.150e-03 mean(i)=-1.202e-02 std|·|=3.179e-01 rms=8.852e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.038e-03 mean(i)=8.798e-03 std|·|=1.488e-01 rms=2.853e-01 max|·|=1.136e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=7.607e-03 mean(i)=-1.645e-02 std|·|=1.066e+00 rms=1.741e+00 max|·|=7.489e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-2.050e-03 mean(i)=-1.192e-02 std|·|=3.175e-01 rms=8.886e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-2.050e-03 mean(i)=-1.192e-02 std|·|=3.175e-01 rms=8.886e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-2.050e-03 mean(i)=-1.192e-02 std|·|=3.175e-01 rms=8.886e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=2.011e-03 mean(i)=-7.798e-03 std|·|=3.957e-01 rms=5.826e-01 max|·|=2.110e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.263e-06 mean(i)=-1.270e-05 std|·|=2.938e-03 rms=4.212e-03 max|·|=1.664e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.372e-03 mean(i)=-9.931e-03 std|·|=3.910e-01 rms=5.761e-01 max|·|=2.094e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.372e-03 mean(i)=-9.931e-03 std|·|=3.910e-01 rms=5.761e-01 max|·|=2.094e+00
+DBG [S_prev](64, 4, 4): mean(r)=-2.050e-03 mean(i)=-1.192e-02 std|·|=3.175e-01 rms=8.886e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-7.696e-03 mean(i)=9.076e-03 std|·|=1.513e-01 rms=2.902e-01 max|·|=1.171e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.765e-03 mean(i)=-1.208e-02 std|·|=1.068e+00 rms=1.727e+00 max|·|=7.252e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.800e-03 mean(i)=-1.083e-02 std|·|=3.293e-01 rms=8.831e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.800e-03 mean(i)=-1.083e-02 std|·|=3.293e-01 rms=8.831e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-6.800e-03 mean(i)=-1.083e-02 std|·|=3.293e-01 rms=8.831e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.372e-03 mean(i)=-9.931e-03 std|·|=3.910e-01 rms=5.761e-01 max|·|=2.094e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.131e-06 mean(i)=-1.531e-05 std|·|=2.935e-03 rms=4.196e-03 max|·|=1.750e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.467e-03 mean(i)=-1.119e-02 std|·|=3.866e-01 rms=5.687e-01 max|·|=2.094e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.467e-03 mean(i)=-1.119e-02 std|·|=3.866e-01 rms=5.687e-01 max|·|=2.094e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.800e-03 mean(i)=-1.083e-02 std|·|=3.293e-01 rms=8.831e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.077e-02 mean(i)=7.171e-03 std|·|=1.495e-01 rms=2.876e-01 max|·|=1.089e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.739e-03 mean(i)=-5.111e-03 std|·|=1.073e+00 rms=1.729e+00 max|·|=7.225e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.662e-03 mean(i)=-1.055e-02 std|·|=3.253e-01 rms=8.818e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.662e-03 mean(i)=-1.055e-02 std|·|=3.253e-01 rms=8.818e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-6.662e-03 mean(i)=-1.055e-02 std|·|=3.253e-01 rms=8.818e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.467e-03 mean(i)=-1.119e-02 std|·|=3.866e-01 rms=5.687e-01 max|·|=2.094e+00
+DBG [G(feature)](107, 20, 14): mean(r)=4.611e-06 mean(i)=-1.693e-05 std|·|=2.935e-03 rms=4.187e-03 max|·|=1.775e-02
+DBG [Y_k](43, 16, 10): mean(r)=7.036e-03 mean(i)=-1.192e-02 std|·|=3.805e-01 rms=5.595e-01 max|·|=2.036e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.036e-03 mean(i)=-1.192e-02 std|·|=3.805e-01 rms=5.595e-01 max|·|=2.036e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.662e-03 mean(i)=-1.055e-02 std|·|=3.253e-01 rms=8.818e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.130e-02 mean(i)=7.936e-03 std|·|=1.537e-01 rms=2.922e-01 max|·|=1.194e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.416e-03 mean(i)=5.589e-03 std|·|=1.081e+00 rms=1.743e+00 max|·|=6.933e+00
+DBG step: tanh saturation frac ≈ 0.172
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-8.947e-03 mean(i)=-6.515e-03 std|·|=3.268e-01 rms=8.842e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-8.947e-03 mean(i)=-6.515e-03 std|·|=3.268e-01 rms=8.842e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-8.947e-03 mean(i)=-6.515e-03 std|·|=3.268e-01 rms=8.842e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.036e-03 mean(i)=-1.192e-02 std|·|=3.805e-01 rms=5.595e-01 max|·|=2.036e+00
+DBG [G(feature)](107, 20, 14): mean(r)=7.568e-06 mean(i)=-1.710e-05 std|·|=2.909e-03 rms=4.150e-03 max|·|=1.770e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.871e-03 mean(i)=-1.375e-02 std|·|=3.769e-01 rms=5.530e-01 max|·|=2.034e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.871e-03 mean(i)=-1.375e-02 std|·|=3.769e-01 rms=5.530e-01 max|·|=2.034e+00
+DBG [S_prev](64, 4, 4): mean(r)=-8.947e-03 mean(i)=-6.515e-03 std|·|=3.268e-01 rms=8.842e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.169e-02 mean(i)=7.370e-03 std|·|=1.545e-01 rms=2.941e-01 max|·|=1.123e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.389e-04 mean(i)=7.111e-03 std|·|=1.092e+00 rms=1.759e+00 max|·|=7.074e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-8.056e-03 mean(i)=-6.357e-03 std|·|=3.277e-01 rms=8.870e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-8.056e-03 mean(i)=-6.357e-03 std|·|=3.277e-01 rms=8.870e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-8.056e-03 mean(i)=-6.357e-03 std|·|=3.277e-01 rms=8.870e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.871e-03 mean(i)=-1.375e-02 std|·|=3.769e-01 rms=5.530e-01 max|·|=2.034e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.199e-06 mean(i)=-1.949e-05 std|·|=2.897e-03 rms=4.130e-03 max|·|=1.793e-02
+DBG [Y_k](43, 16, 10): mean(r)=-2.641e-04 mean(i)=-3.522e-03 std|·|=3.990e-01 rms=5.884e-01 max|·|=2.040e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-2.641e-04 mean(i)=-3.522e-03 std|·|=3.990e-01 rms=5.884e-01 max|·|=2.040e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.428e-02 mean(i)=-2.216e-02 std|·|=1.072e+00 rms=1.749e+00 max|·|=7.061e+00
+DBG step: tanh saturation frac ≈ 0.168
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=2.456e-03 mean(i)=-2.077e-02 std|·|=3.219e-01 rms=8.796e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=2.456e-03 mean(i)=-2.077e-02 std|·|=3.219e-01 rms=8.796e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=2.456e-03 mean(i)=-2.077e-02 std|·|=3.219e-01 rms=8.796e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-2.641e-04 mean(i)=-3.522e-03 std|·|=3.990e-01 rms=5.884e-01 max|·|=2.040e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.347e-07 mean(i)=-8.774e-06 std|·|=2.932e-03 rms=4.218e-03 max|·|=1.723e-02
+DBG [Y_k](43, 16, 10): mean(r)=6.095e-04 mean(i)=-4.461e-03 std|·|=3.971e-01 rms=5.871e-01 max|·|=2.083e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.095e-04 mean(i)=-4.461e-03 std|·|=3.971e-01 rms=5.871e-01 max|·|=2.083e+00
+DBG [S_prev](64, 4, 4): mean(r)=2.456e-03 mean(i)=-2.077e-02 std|·|=3.219e-01 rms=8.796e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=3.655e-04 mean(i)=1.065e-02 std|·|=1.451e-01 rms=2.780e-01 max|·|=1.010e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.542e-02 mean(i)=-1.874e-02 std|·|=1.065e+00 rms=1.738e+00 max|·|=7.286e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=4.873e-03 mean(i)=-1.203e-02 std|·|=3.184e-01 rms=8.853e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=4.873e-03 mean(i)=-1.203e-02 std|·|=3.184e-01 rms=8.853e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=4.873e-03 mean(i)=-1.203e-02 std|·|=3.184e-01 rms=8.853e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=6.095e-04 mean(i)=-4.461e-03 std|·|=3.971e-01 rms=5.871e-01 max|·|=2.083e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.771e-06 mean(i)=-8.295e-06 std|·|=2.934e-03 rms=4.216e-03 max|·|=1.688e-02
+DBG [Y_k](43, 16, 10): mean(r)=2.093e-03 mean(i)=-8.034e-03 std|·|=3.959e-01 rms=5.828e-01 max|·|=2.115e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=2.093e-03 mean(i)=-8.034e-03 std|·|=3.959e-01 rms=5.828e-01 max|·|=2.115e+00
+DBG [S_prev](64, 4, 4): mean(r)=4.873e-03 mean(i)=-1.203e-02 std|·|=3.184e-01 rms=8.853e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.257e-03 mean(i)=8.753e-03 std|·|=1.490e-01 rms=2.855e-01 max|·|=1.150e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.636e-03 mean(i)=-1.614e-02 std|·|=1.067e+00 rms=1.741e+00 max|·|=7.498e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-2.741e-03 mean(i)=-1.201e-02 std|·|=3.181e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-2.741e-03 mean(i)=-1.201e-02 std|·|=3.181e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-2.741e-03 mean(i)=-1.201e-02 std|·|=3.181e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=2.093e-03 mean(i)=-8.034e-03 std|·|=3.959e-01 rms=5.828e-01 max|·|=2.115e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.235e-06 mean(i)=-1.303e-05 std|·|=2.941e-03 rms=4.216e-03 max|·|=1.672e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.384e-03 mean(i)=-1.022e-02 std|·|=3.910e-01 rms=5.763e-01 max|·|=2.094e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.384e-03 mean(i)=-1.022e-02 std|·|=3.910e-01 rms=5.763e-01 max|·|=2.094e+00
+DBG [S_prev](64, 4, 4): mean(r)=-2.741e-03 mean(i)=-1.201e-02 std|·|=3.181e-01 rms=8.885e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-7.847e-03 mean(i)=9.115e-03 std|·|=1.514e-01 rms=2.907e-01 max|·|=1.179e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.551e-03 mean(i)=-1.202e-02 std|·|=1.068e+00 rms=1.726e+00 max|·|=7.236e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.158e-03 mean(i)=-1.081e-02 std|·|=3.296e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.158e-03 mean(i)=-1.081e-02 std|·|=3.296e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.158e-03 mean(i)=-1.081e-02 std|·|=3.296e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.384e-03 mean(i)=-1.022e-02 std|·|=3.910e-01 rms=5.763e-01 max|·|=2.094e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.076e-06 mean(i)=-1.570e-05 std|·|=2.939e-03 rms=4.201e-03 max|·|=1.759e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.400e-03 mean(i)=-1.111e-02 std|·|=3.866e-01 rms=5.688e-01 max|·|=2.091e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.400e-03 mean(i)=-1.111e-02 std|·|=3.866e-01 rms=5.688e-01 max|·|=2.091e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.158e-03 mean(i)=-1.081e-02 std|·|=3.296e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.096e-02 mean(i)=7.091e-03 std|·|=1.492e-01 rms=2.875e-01 max|·|=1.077e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.410e-03 mean(i)=-5.379e-03 std|·|=1.074e+00 rms=1.730e+00 max|·|=7.214e+00
+DBG step: tanh saturation frac ≈ 0.176
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-6.955e-03 mean(i)=-1.095e-02 std|·|=3.252e-01 rms=8.821e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-6.955e-03 mean(i)=-1.095e-02 std|·|=3.252e-01 rms=8.821e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-6.955e-03 mean(i)=-1.095e-02 std|·|=3.252e-01 rms=8.821e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.400e-03 mean(i)=-1.111e-02 std|·|=3.866e-01 rms=5.688e-01 max|·|=2.091e+00
+DBG [G(feature)](107, 20, 14): mean(r)=4.464e-06 mean(i)=-1.690e-05 std|·|=2.937e-03 rms=4.190e-03 max|·|=1.780e-02
+DBG [Y_k](43, 16, 10): mean(r)=7.255e-03 mean(i)=-1.190e-02 std|·|=3.802e-01 rms=5.593e-01 max|·|=2.028e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.255e-03 mean(i)=-1.190e-02 std|·|=3.802e-01 rms=5.593e-01 max|·|=2.028e+00
+DBG [S_prev](64, 4, 4): mean(r)=-6.955e-03 mean(i)=-1.095e-02 std|·|=3.252e-01 rms=8.821e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.125e-02 mean(i)=7.879e-03 std|·|=1.539e-01 rms=2.924e-01 max|·|=1.195e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.938e-03 mean(i)=6.117e-03 std|·|=1.081e+00 rms=1.745e+00 max|·|=6.919e+00
+DBG step: tanh saturation frac ≈ 0.173
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-9.177e-03 mean(i)=-6.469e-03 std|·|=3.267e-01 rms=8.848e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-9.177e-03 mean(i)=-6.469e-03 std|·|=3.267e-01 rms=8.848e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-9.177e-03 mean(i)=-6.469e-03 std|·|=3.267e-01 rms=8.848e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.255e-03 mean(i)=-1.190e-02 std|·|=3.802e-01 rms=5.593e-01 max|·|=2.028e+00
+DBG [G(feature)](107, 20, 14): mean(r)=7.813e-06 mean(i)=-1.706e-05 std|·|=2.910e-03 rms=4.151e-03 max|·|=1.766e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.788e-03 mean(i)=-1.373e-02 std|·|=3.768e-01 rms=5.532e-01 max|·|=2.033e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.788e-03 mean(i)=-1.373e-02 std|·|=3.768e-01 rms=5.532e-01 max|·|=2.033e+00
+DBG [S_prev](64, 4, 4): mean(r)=-9.177e-03 mean(i)=-6.469e-03 std|·|=3.267e-01 rms=8.848e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.162e-02 mean(i)=7.307e-03 std|·|=1.545e-01 rms=2.942e-01 max|·|=1.120e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.671e-04 mean(i)=7.422e-03 std|·|=1.093e+00 rms=1.761e+00 max|·|=7.082e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.597e-03 mean(i)=-5.998e-03 std|·|=3.277e-01 rms=8.878e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.597e-03 mean(i)=-5.998e-03 std|·|=3.277e-01 rms=8.878e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.597e-03 mean(i)=-5.998e-03 std|·|=3.277e-01 rms=8.878e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.788e-03 mean(i)=-1.373e-02 std|·|=3.768e-01 rms=5.532e-01 max|·|=2.033e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.179e-06 mean(i)=-1.940e-05 std|·|=2.898e-03 rms=4.133e-03 max|·|=1.788e-02
+DBG [Y_k](43, 16, 10): mean(r)=-2.219e-04 mean(i)=-3.873e-03 std|·|=3.990e-01 rms=5.888e-01 max|·|=2.045e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-2.219e-04 mean(i)=-3.873e-03 std|·|=3.990e-01 rms=5.888e-01 max|·|=2.045e+00
+DBG [S_prev](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=0.000e+00 mean(i)=0.000e+00 std|·|=0.000e+00 rms=0.000e+00 max|·|=0.000e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=2.354e-02 mean(i)=-2.191e-02 std|·|=1.072e+00 rms=1.750e+00 max|·|=7.074e+00
+DBG step: tanh saturation frac ≈ 0.167
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=2.210e-03 mean(i)=-2.051e-02 std|·|=3.226e-01 rms=8.798e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=2.210e-03 mean(i)=-2.051e-02 std|·|=3.226e-01 rms=8.798e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=2.210e-03 mean(i)=-2.051e-02 std|·|=3.226e-01 rms=8.798e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=-2.219e-04 mean(i)=-3.873e-03 std|·|=3.990e-01 rms=5.888e-01 max|·|=2.045e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.419e-07 mean(i)=-9.188e-06 std|·|=2.934e-03 rms=4.222e-03 max|·|=1.730e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.391e-04 mean(i)=-4.744e-03 std|·|=3.972e-01 rms=5.876e-01 max|·|=2.092e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.391e-04 mean(i)=-4.744e-03 std|·|=3.972e-01 rms=5.876e-01 max|·|=2.092e+00
+DBG [S_prev](64, 4, 4): mean(r)=2.210e-03 mean(i)=-2.051e-02 std|·|=3.226e-01 rms=8.798e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=2.057e-04 mean(i)=1.060e-02 std|·|=1.450e-01 rms=2.780e-01 max|·|=1.017e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.453e-02 mean(i)=-1.820e-02 std|·|=1.065e+00 rms=1.739e+00 max|·|=7.285e+00
+DBG step: tanh saturation frac ≈ 0.180
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=4.580e-03 mean(i)=-1.205e-02 std|·|=3.190e-01 rms=8.856e-01 max|·|=1.412e+00
+DBG [S_next](64, 4, 4): mean(r)=4.580e-03 mean(i)=-1.205e-02 std|·|=3.190e-01 rms=8.856e-01 max|·|=1.412e+00
+DBG [S](64, 4, 4): mean(r)=4.580e-03 mean(i)=-1.205e-02 std|·|=3.190e-01 rms=8.856e-01 max|·|=1.412e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.391e-04 mean(i)=-4.744e-03 std|·|=3.972e-01 rms=5.876e-01 max|·|=2.092e+00
+DBG [G(feature)](107, 20, 14): mean(r)=1.620e-06 mean(i)=-8.674e-06 std|·|=2.937e-03 rms=4.220e-03 max|·|=1.698e-02
+/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/channel/multimode_esn_pred.py:44: ComplexWarning: Casting complex values to real discards the imaginary part
+  return float(diff.numpy()) < tol
+/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/channel/multimode_esn_pred.py:411: ComplexWarning: Casting complex values to real discards the imaginary part
+  print(f"DBG C_f sweep={sweep}: ‖C_f‖_F={float(tf.linalg.norm(self.C_f).numpy()):.3e}")
+DBG [Y_k](43, 16, 10): mean(r)=2.174e-03 mean(i)=-8.270e-03 std|·|=3.962e-01 rms=5.832e-01 max|·|=2.120e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=2.174e-03 mean(i)=-8.270e-03 std|·|=3.962e-01 rms=5.832e-01 max|·|=2.120e+00
+DBG [S_prev](64, 4, 4): mean(r)=4.580e-03 mean(i)=-1.205e-02 std|·|=3.190e-01 rms=8.856e-01 max|·|=1.412e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-6.472e-03 mean(i)=8.709e-03 std|·|=1.492e-01 rms=2.857e-01 max|·|=1.164e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=5.666e-03 mean(i)=-1.583e-02 std|·|=1.067e+00 rms=1.742e+00 max|·|=7.506e+00
+DBG step: tanh saturation frac ≈ 0.178
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-3.446e-03 mean(i)=-1.209e-02 std|·|=3.188e-01 rms=8.884e-01 max|·|=1.413e+00
+DBG [S_next](64, 4, 4): mean(r)=-3.446e-03 mean(i)=-1.209e-02 std|·|=3.188e-01 rms=8.884e-01 max|·|=1.413e+00
+DBG [S](64, 4, 4): mean(r)=-3.446e-03 mean(i)=-1.209e-02 std|·|=3.188e-01 rms=8.884e-01 max|·|=1.413e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=2.174e-03 mean(i)=-8.270e-03 std|·|=3.962e-01 rms=5.832e-01 max|·|=2.120e+00
+DBG [G(feature)](107, 20, 14): mean(r)=2.204e-06 mean(i)=-1.336e-05 std|·|=2.945e-03 rms=4.221e-03 max|·|=1.681e-02
+DBG [Y_k](43, 16, 10): mean(r)=3.395e-03 mean(i)=-1.051e-02 std|·|=3.912e-01 rms=5.768e-01 max|·|=2.095e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.395e-03 mean(i)=-1.051e-02 std|·|=3.912e-01 rms=5.768e-01 max|·|=2.095e+00
+DBG [S_prev](64, 4, 4): mean(r)=-3.446e-03 mean(i)=-1.209e-02 std|·|=3.188e-01 rms=8.884e-01 max|·|=1.413e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-7.994e-03 mean(i)=9.158e-03 std|·|=1.515e-01 rms=2.911e-01 max|·|=1.186e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=3.336e-03 mean(i)=-1.195e-02 std|·|=1.069e+00 rms=1.727e+00 max|·|=7.221e+00
+DBG step: tanh saturation frac ≈ 0.177
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.520e-03 mean(i)=-1.078e-02 std|·|=3.299e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.520e-03 mean(i)=-1.078e-02 std|·|=3.299e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.520e-03 mean(i)=-1.078e-02 std|·|=3.299e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=3.395e-03 mean(i)=-1.051e-02 std|·|=3.912e-01 rms=5.768e-01 max|·|=2.095e+00
+DBG [G(feature)](107, 20, 14): mean(r)=3.019e-06 mean(i)=-1.608e-05 std|·|=2.943e-03 rms=4.207e-03 max|·|=1.768e-02
+DBG [Y_k](43, 16, 10): mean(r)=4.333e-03 mean(i)=-1.103e-02 std|·|=3.866e-01 rms=5.690e-01 max|·|=2.089e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.333e-03 mean(i)=-1.103e-02 std|·|=3.866e-01 rms=5.690e-01 max|·|=2.089e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.520e-03 mean(i)=-1.078e-02 std|·|=3.299e-01 rms=8.829e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.115e-02 mean(i)=7.008e-03 std|·|=1.489e-01 rms=2.875e-01 max|·|=1.065e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=6.081e-03 mean(i)=-5.646e-03 std|·|=1.075e+00 rms=1.732e+00 max|·|=7.203e+00
+DBG step: tanh saturation frac ≈ 0.179
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.238e-03 mean(i)=-1.136e-02 std|·|=3.252e-01 rms=8.825e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.238e-03 mean(i)=-1.136e-02 std|·|=3.252e-01 rms=8.825e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.238e-03 mean(i)=-1.136e-02 std|·|=3.252e-01 rms=8.825e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=4.333e-03 mean(i)=-1.103e-02 std|·|=3.866e-01 rms=5.690e-01 max|·|=2.089e+00
+DBG [G(feature)](107, 20, 14): mean(r)=4.319e-06 mean(i)=-1.687e-05 std|·|=2.940e-03 rms=4.194e-03 max|·|=1.785e-02
+DBG [Y_k](43, 16, 10): mean(r)=7.474e-03 mean(i)=-1.188e-02 std|·|=3.800e-01 rms=5.592e-01 max|·|=2.028e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.474e-03 mean(i)=-1.188e-02 std|·|=3.800e-01 rms=5.592e-01 max|·|=2.028e+00
+DBG [S_prev](64, 4, 4): mean(r)=-7.238e-03 mean(i)=-1.136e-02 std|·|=3.252e-01 rms=8.825e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.119e-02 mean(i)=7.819e-03 std|·|=1.541e-01 rms=2.927e-01 max|·|=1.197e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=1.460e-03 mean(i)=6.644e-03 std|·|=1.082e+00 rms=1.748e+00 max|·|=6.905e+00
+DBG step: tanh saturation frac ≈ 0.175
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-9.397e-03 mean(i)=-6.414e-03 std|·|=3.265e-01 rms=8.854e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-9.397e-03 mean(i)=-6.414e-03 std|·|=3.265e-01 rms=8.854e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-9.397e-03 mean(i)=-6.414e-03 std|·|=3.265e-01 rms=8.854e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=7.474e-03 mean(i)=-1.188e-02 std|·|=3.800e-01 rms=5.592e-01 max|·|=2.028e+00
+DBG [G(feature)](107, 20, 14): mean(r)=8.060e-06 mean(i)=-1.703e-05 std|·|=2.911e-03 rms=4.153e-03 max|·|=1.761e-02
+DBG [Y_k](43, 16, 10): mean(r)=5.705e-03 mean(i)=-1.371e-02 std|·|=3.767e-01 rms=5.535e-01 max|·|=2.033e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.705e-03 mean(i)=-1.371e-02 std|·|=3.767e-01 rms=5.535e-01 max|·|=2.033e+00
+DBG [S_prev](64, 4, 4): mean(r)=-9.397e-03 mean(i)=-6.414e-03 std|·|=3.265e-01 rms=8.854e-01 max|·|=1.414e+00
+DBG [pre(A*S)](64, 4, 4): mean(r)=-1.154e-02 mean(i)=7.240e-03 std|·|=1.546e-01 rms=2.944e-01 max|·|=1.116e+00
+DBG [inp(U*Y)](64, 4, 4): mean(r)=7.953e-04 mean(i)=7.732e-03 std|·|=1.094e+00 rms=1.763e+00 max|·|=7.089e+00
+DBG step: tanh saturation frac ≈ 0.181
+DBG [new_state=tanh(pre+inp)](64, 4, 4): mean(r)=-7.142e-03 mean(i)=-5.621e-03 std|·|=3.277e-01 rms=8.887e-01 max|·|=1.414e+00
+DBG [S_next](64, 4, 4): mean(r)=-7.142e-03 mean(i)=-5.621e-03 std|·|=3.277e-01 rms=8.887e-01 max|·|=1.414e+00
+DBG [S](64, 4, 4): mean(r)=-7.142e-03 mean(i)=-5.621e-03 std|·|=3.277e-01 rms=8.887e-01 max|·|=1.414e+00
+DBG [Y_tilde](43, 16, 10): mean(r)=5.705e-03 mean(i)=-1.371e-02 std|·|=3.767e-01 rms=5.535e-01 max|·|=2.033e+00
+DBG [G(feature)](107, 20, 14): mean(r)=6.159e-06 mean(i)=-1.930e-05 std|·|=2.899e-03 rms=4.137e-03 max|·|=1.783e-02
+DBG fit_readout_features: K=98, lambdas=(1.0, 1.0, 1.0), iters=2
+DBG [G[0]](107, 20, 14): mean(r)=3.472e-05 mean(i)=-9.451e-04 std|·|=7.012e-01 rms=1.011e+00 max|·|=3.957e+00
+DBG [Y[0]](43, 16, 10): mean(r)=2.554e-03 mean(i)=-1.863e-03 std|·|=7.019e-01 rms=1.036e+00 max|·|=3.512e+00
+DBG [Z1(sweep=0)](107, 15680): mean(r)=8.571e-02 mean(i)=-3.404e-01 std|·|=2.584e+01 rms=4.168e+01 max|·|=1.943e+02
+DBG cond(): hermitian?=True, min(ev)=1.000e-30, max(ev)=2.558e+09, cond≈inf, jitter=2.7e+00
+DBG C_f sweep=0: cond(A1)≈inf, λ_f=1.0e+00
+DBG C_f sweep=0: ‖C_f‖_F=nan
+DBG [F2_b](98, 20, 1498): mean(r)=9.018e-04 mean(i)=-3.129e-03 std|·|=6.984e-01 rms=1.000e+00 max|·|=4.438e+00
+DBG [Y2_b](98, 16, 430): mean(r)=7.580e-03 mean(i)=-1.718e-02 std|·|=6.799e-01 rms=1.000e+00 max|·|=3.739e+00
+DBG [Z2_b](98, 20, 430): mean(r)=nan mean(i)=nan std|·|=nan rms=nan max|·|=nan
+DBG [Z2(flat)](20, 42140): mean(r)=nan mean(i)=nan std|·|=nan rms=nan max|·|=nan
+DBG [Y2(flat)](16, 42140): mean(r)=7.580e-03 mean(i)=-1.718e-02 std|·|=6.799e-01 rms=1.000e+00 max|·|=3.739e+00
+DBG [Z2(sweep=0)](20, 42140): mean(r)=nan mean(i)=nan std|·|=nan rms=nan max|·|=nan
+Traceback (most recent call last):
+  File "/home/wireless/dMIMO/dmimosim_gesn_branch/sims/sim_dmimo_chanpred.py", line 136, in <module>
+    uncoded_ber_kalman) = sim_mu_mimo_all(cfg, rc_config)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/dmimo_chanpred.py", line 646, in sim_mu_mimo_all
+    [curr_pred_nmse_outdated, curr_pred_nmse_wesn, curr_pred_nmse_wgesn_per_antenna_pair, curr_pred_nmse_kalman], curr_uncoded_bers = sim_mu_mimo(cfg, rc_config)
+                                                                                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/dmimo_chanpred.py", line 616, in sim_mu_mimo
+    [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman], uncoded_bers, x_hat = mu_mimo(dmimo_chans, info_bits)
+                                                                                                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wireless/anaconda3/envs/sionna/lib/python3.11/site-packages/tensorflow/python/keras/engine/base_layer.py", line 1043, in __call__
+    outputs = call_fn(inputs, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/dmimo_chanpred.py", line 236, in call
+    h_freq_csi_multimode_wesn = multimode_predictor.predict(
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/channel/multimode_esn_pred.py", line 609, in predict
+    self.fit_readout_features(all_feats, all_targets, lambdas=lambdas, iters=iters)
+  File "/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/channel/multimode_esn_pred.py", line 427, in fit_readout_features
+    _assert_finite(tf.math.real(A2), "A2 real non-finite before cond()")
+  File "/home/wireless/dMIMO/dmimosim_gesn_branch/dmimo/channel/multimode_esn_pred.py", line 37, in _assert_finite
+    tf.debugging.assert_all_finite(tf.math.real(x), f"{tag}: real part non-finite")
+  File "/home/wireless/anaconda3/envs/sionna/lib/python3.11/site-packages/tensorflow/python/util/traceback_utils.py", line 153, in error_handler
+    raise e.with_traceback(filtered_tb) from None
+  File "/home/wireless/anaconda3/envs/sionna/lib/python3.11/site-packages/tensorflow/python/framework/ops.py", line 5883, in raise_from_not_ok_status
+    raise core._status_to_exception(e) from None  # pylint: disable=protected-access
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tensorflow.python.framework.errors_impl.InvalidArgumentError: {{function_node __wrapped__CheckNumerics_device_/job:localhost/replica:0/task:0/device:GPU:0}} A2 real non-finite before cond(): real part non-finite : Tensor had NaN values [Op:CheckNumerics] name: 

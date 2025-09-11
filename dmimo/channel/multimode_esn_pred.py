@@ -1,6 +1,106 @@
 """Utilities and multi-mode ESN reservoir for RB×Tx×Rx channel tensors."""
 
 import tensorflow as tf
+import math
+
+def _stat_dict(x: tf.Tensor, name: str):
+    x = tf.cast(x, tf.complex64) if x.dtype.is_complex else tf.cast(x, tf.float32)
+    r = tf.math.real(x)
+    i = tf.math.imag(x) if x.dtype.is_complex else tf.zeros_like(r)
+    absx = tf.abs(x)
+    return {
+        "name": name,
+        "shape": tuple(x.shape),
+        "mean_r": float(tf.reduce_mean(r).numpy()),
+        "mean_i": float(tf.reduce_mean(i).numpy()),
+        "std_abs": float(tf.math.reduce_std(absx).numpy()),
+        "rms": float(tf.sqrt(tf.reduce_mean(absx**2)).numpy()),
+        "max_abs": float(tf.reduce_max(absx).numpy())
+    }
+
+def _print_stats(*pairs, prefix="DBG"):
+    # pairs: (tensor, "label")
+    rows = []
+    for t, label in pairs:
+        try:
+            s = _stat_dict(t, label)
+            rows.append(
+                f"{prefix} [{s['name']}]{s['shape']}: mean(r)={s['mean_r']:.3e} "
+                f"mean(i)={s['mean_i']:.3e} std|·|={s['std_abs']:.3e} "
+                f"rms={s['rms']:.3e} max|·|={s['max_abs']:.3e}"
+            )
+        except Exception as e:
+            rows.append(f"{prefix} [{label}]: <stat error: {e}>")
+    print("\n".join(rows))
+
+def _assert_finite(x, tag):
+    tf.debugging.assert_all_finite(tf.math.real(x), f"{tag}: real part non-finite")
+    if x.dtype.is_complex:
+        tf.debugging.assert_all_finite(tf.math.imag(x), f"{tag}: imag part non-finite")
+
+def _is_hermitian(M, tol=1e-5):
+    Mh = tf.transpose(M, conjugate=True)
+    diff = tf.linalg.norm(M - Mh) / (tf.linalg.norm(M) + 1e-30)
+    return float(diff.numpy()) < tol
+
+def _safe_symmetrize(M):
+    return 0.5 * (M + tf.transpose(M, conjugate=True))
+
+def _cond_number_gram(M):
+    """
+    Robust condition number for a Gram matrix (Hermitian PSD).
+    - Symmetrize to kill tiny asymmetry
+    - Add tiny jitter based on average diagonal to avoid zero/neg eigenvalues
+    - Compute on CPU to dodge GPU heevd quirks
+    - Fallback to SVD if eigvalsh still fails
+    """
+    M = tf.cast(M, tf.complex64)
+
+    # Ensure finiteness before anything else
+    _assert_finite(tf.math.real(M), "cond(A): real part non-finite")
+    _assert_finite(tf.math.imag(M), "cond(A): imag part non-finite")
+
+    # Force Hermitian numerically
+    M = _safe_symmetrize(M)
+
+    # Jitter scaled to average diagonal magnitude
+    diag = tf.math.real(tf.linalg.diag_part(M))
+    mean_diag = tf.reduce_mean(diag)
+    # ensure at least O(1e-7) even if mean_diag is tiny
+    jitter = tf.cast(tf.maximum(1e-7, 1e-7 * tf.maximum(mean_diag, 1.0)), tf.float32)
+    I = tf.eye(tf.shape(M)[0], dtype=tf.complex64)
+    M = M + tf.cast(jitter, tf.complex64) * I
+
+    # Try CPU eig first (GPU sometimes fails to converge for complex64)
+    try:
+        with tf.device("/CPU:0"):
+            ev = tf.linalg.eigvalsh(M)
+            ev = tf.math.real(ev)
+    except Exception as e:
+        print(f"DBG cond(): eigvalsh CPU path failed ({e}); falling back to SVD")
+        # SVD fallback: for PSD, singular values = eigenvalues
+        # SVD works for non-Hermitian too, so it’s a safe fallback.
+        with tf.device("/CPU:0"):
+            s = tf.linalg.svd(M, compute_uv=False)
+            ev = tf.cast(s, tf.float32)
+
+    # Guard against non-positive tiny values
+    ev = tf.where(ev <= 0.0, tf.constant(1e-30, ev.dtype), ev)
+    c = float((tf.reduce_max(ev) / tf.reduce_min(ev)).numpy())
+
+    # Optional debug prints (uncomment if needed)
+    print(f"DBG cond(): hermitian?={_is_hermitian(M)}, min(ev)={float(tf.reduce_min(ev).numpy()):.3e}, max(ev)={float(tf.reduce_max(ev).numpy()):.3e}, cond≈{c:.3e}, jitter={float(jitter.numpy()):.1e}")
+
+    return c
+
+
+def _tanh_saturation_fraction(z):
+    # crude: fraction of elements with |real|>2 or |imag|>2 before tanh
+    r = tf.math.real(z)
+    i = tf.math.imag(z) if z.dtype.is_complex else tf.zeros_like(r)
+    n = tf.cast(tf.size(r), tf.float32)
+    sat = tf.reduce_mean(tf.cast((tf.abs(r) > 2.0) | (tf.abs(i) > 2.0), tf.float32))
+    return float((sat).numpy())
 
 
 def _rank(tensor: tf.Tensor) -> int:
@@ -95,7 +195,8 @@ class multimode_esn_pred:
                  sigma=None,  # elementwise non-linearity
                  alpha=1.0,  # leaky integration factor
                  dtype=tf.complex64,
-                 target_rho=0.8):
+                 target_rho=0.8,
+                 debug=False, safe_solve=False):
         """Initialize random reservoir and input coupling matrices.
 
         Parameters correspond to the tensor sizes described above.  Weight
@@ -143,6 +244,29 @@ class multimode_esn_pred:
         self.U_f = self._rand_matrix(d_f, N_f * window_len)
         self.U_t = self._rand_matrix(d_t, N_t)
         self.U_r = self._rand_matrix(d_r, N_r)
+
+        # Optional: normalize input gains to keep injection energy modest
+        # Comment this block out if you don't want any change in behavior.
+        uf_scale = 1.0 / math.sqrt(max(1, N_f * window_len))
+        ut_scale = 1.0 / math.sqrt(max(1, N_t))
+        ur_scale = 1.0 / math.sqrt(max(1, N_r))
+        self.U_f = tf.cast(self.U_f, self.dtype) * tf.cast(uf_scale, self.dtype)
+        self.U_t = tf.cast(self.U_t, self.dtype) * tf.cast(ut_scale, self.dtype)
+        self.U_r = tf.cast(self.U_r, self.dtype) * tf.cast(ur_scale, self.dtype)
+
+        self.debug = debug
+        self.safe_solve = safe_solve  # switch to Cholesky+jitter path if True
+
+        if self.debug:
+            # Report "spectral radius" actually achieved for A_* and norms of U_*
+            for name, A in [("A_f", self.A_f), ("A_t", self.A_t), ("A_r", self.A_r)]:
+                vals = tf.linalg.eigvals(A)
+                rho = float(tf.reduce_max(tf.abs(vals)).numpy())
+                print(f"DBG init {name}: spectral radius ~ {rho:.4f}")
+            for name, U in [("U_f", self.U_f), ("U_t", self.U_t), ("U_r", self.U_r)]:
+                fro = float(tf.linalg.norm(U).numpy())
+                print(f"DBG init {name}: ‖·‖_F = {fro:.3e} shape={U.shape}")
+
 
         self.reset_state()
 
@@ -198,6 +322,13 @@ class multimode_esn_pred:
 
         G = G + Y_f + Y_t + Y_r - Y_ft - Y_fr - Y_tr + Y_ftr
 
+        scale = tf.cast(1.0 / tf.sqrt(tf.cast(self.df_feat * self.dt_feat * self.dr_feat, tf.float32)), self.dtype)
+        G = G * scale
+
+        if self.debug:
+            _print_stats((S, "S"), (Y_tilde, "Y_tilde"), (G, "G(feature)"))
+            _assert_finite(G, "G(feature)")
+
         return G  # [df_feat, dt_feat, dr_feat]
     
     def collect_features(self, Y_seq, washout=0):
@@ -249,7 +380,12 @@ class multimode_esn_pred:
         F3_b = self.stack_unfoldings_batch(features, 2)  # [K, dr_feat, dt_feat*df_feat]
         Y3_b = self.stack_unfoldings_batch(targets,  2)  # [K, N_r,    N_f*N_t]
 
-        for _ in range(iters):
+        if self.debug:
+            print(f"DBG fit_readout_features: K={len(features)}, lambdas={lambdas}, iters={iters}")
+            # quick global stats
+            _print_stats((features[0], "G[0]"), (targets[0], "Y[0]"))
+
+        for sweep in range(iters):
             # === Update C_f ===
             kron_tr = kron(self.C_t, self.C_r)          # [N_t*N_r, dt_feat*dr_feat]
             kron_tr_T = tf.transpose(kron_tr)           # [dt_feat*dr_feat, N_t*N_r]
@@ -258,7 +394,21 @@ class multimode_esn_pred:
             Y1 = tf.reshape(tf.transpose(Y1_b, [1,0,2]), [self.N_f,   -1])
             A1 = tf.matmul(Z1, Z1, adjoint_b=True) + lam_f * eye_f
             B1 = tf.matmul(Y1, Z1, adjoint_b=True)
-            self.C_f = tf.transpose(tf.linalg.solve(A1, tf.transpose(B1)))
+            if self.debug:
+                _print_stats((Z1, f"Z1(sweep={sweep})"))
+                _assert_finite(tf.math.real(A1), "A1 real non-finite before cond()")
+                _assert_finite(tf.math.imag(A1), "A1 imag non-finite before cond()")
+                condA1 = _cond_number_gram(A1)
+                print(f"DBG C_f sweep={sweep}: cond(A1)≈{condA1:.3e}, λ_f={lam_f:.1e}")
+            self.C_f = (tf.transpose(
+                tf.linalg.cholesky_solve(tf.linalg.cholesky(tf.cast(A1, tf.complex64)), 
+                                         tf.transpose(tf.cast(B1, tf.complex64)))
+            ) if self.safe_solve else
+                # tf.transpose(tf.linalg.solve(A1, tf.transpose(B1)))
+                tf.transpose(tf.linalg.lstsq(A1, tf.transpose(B1), l2_regularizer=0.0))
+            )
+            if self.debug:
+                print(f"DBG C_f sweep={sweep}: ‖C_f‖_F={float(tf.linalg.norm(self.C_f).numpy()):.3e}")
 
             # === Update C_t ===
             kron_fr = kron(self.C_f, self.C_r)          # [N_f*N_r, df_feat*dr_feat]
@@ -266,9 +416,28 @@ class multimode_esn_pred:
             Z2_b = tf.matmul(F2_b, kron_fr_T)           # [K, dt_feat, N_f*N_r]
             Z2 = tf.reshape(tf.transpose(Z2_b, [1,0,2]), [self.dt_feat, -1])
             Y2 = tf.reshape(tf.transpose(Y2_b, [1,0,2]), [self.N_t,     -1])
+            if self.debug:
+                _print_stats((F2_b, "F2_b"), (Y2_b, "Y2_b"),
+                            (Z2_b, "Z2_b"), (Z2, "Z2(flat)"),
+                            (Y2, "Y2(flat)"))
             A2 = tf.matmul(Z2, Z2, adjoint_b=True) + lam_t * eye_t
             B2 = tf.matmul(Y2, Z2, adjoint_b=True)
-            self.C_t = tf.transpose(tf.linalg.solve(A2, tf.transpose(B2)))
+            if self.debug:
+                _print_stats((Z2, f"Z2(sweep={sweep})"))
+                _assert_finite(tf.math.real(A2), "A2 real non-finite before cond()")
+                _assert_finite(tf.math.imag(A2), "A2 imag non-finite before cond()")
+                condA2 = _cond_number_gram(A2)
+                print(f"DBG C_t sweep={sweep}: cond(A2)≈{condA2:.3e}, λ_t={lam_t:.1e}")
+
+            self.C_t = (tf.transpose(
+                tf.linalg.cholesky_solve(tf.linalg.cholesky(tf.cast(A2, tf.complex64)), 
+                                         tf.transpose(tf.cast(B2, tf.complex64)))
+            ) if self.safe_solve else
+                # tf.transpose(tf.linalg.solve(A2, tf.transpose(B2)))
+                tf.transpose(tf.linalg.lstsq(A2, tf.transpose(B2), l2_regularizer=0.0))
+            )
+            if self.debug:
+                print(f"DBG C_t sweep={sweep}: ‖C_t‖_F={float(tf.linalg.norm(self.C_t).numpy()):.3e}")
 
             # === Update C_r ===
             kron_ft = kron(self.C_f, self.C_t)          # [N_f*N_t, df_feat*dt_feat]
@@ -278,7 +447,22 @@ class multimode_esn_pred:
             Y3 = tf.reshape(tf.transpose(Y3_b, [1,0,2]), [self.N_r,     -1])
             A3 = tf.matmul(Z3, Z3, adjoint_b=True) + lam_r * eye_r
             B3 = tf.matmul(Y3, Z3, adjoint_b=True)
-            self.C_r = tf.transpose(tf.linalg.solve(A3, tf.transpose(B3)))
+            if self.debug:
+                _print_stats((Z3, f"Z3(sweep={sweep})"))
+                _assert_finite(tf.math.real(A3), "A3 real non-finite before cond()")
+                _assert_finite(tf.math.imag(A3), "A3 imag non-finite before cond()")
+                condA3 = _cond_number_gram(A3)
+                print(f"DBG C_r sweep={sweep}: cond(A3)≈{condA3:.3e}, λ_r={lam_r:.1e}")
+
+            self.C_r = (tf.transpose(
+                tf.linalg.cholesky_solve(tf.linalg.cholesky(tf.cast(A3, tf.complex64)), 
+                                         tf.transpose(tf.cast(B3, tf.complex64)))
+            ) if self.safe_solve else
+                # tf.transpose(tf.linalg.solve(A3, tf.transpose(B3)))
+                tf.transpose(tf.linalg.lstsq(A3, tf.transpose(B3), l2_regularizer=0.0))
+            )
+            if self.debug:
+                print(f"DBG C_r sweep={sweep}: ‖C_r‖_F={float(tf.linalg.norm(self.C_r).numpy()):.3e}")
 
 
     def _rand_matrix(self, rows, cols):
@@ -330,9 +514,22 @@ class multimode_esn_pred:
         inp = mode_n_product(inp, self.U_t, 1)
         inp = mode_n_product(inp, self.U_r, 2)
 
+        if self.debug:
+            _print_stats((Y_k, "Y_k"), (Y_tilde, "Y_tilde"),
+                         (self.S, "S_prev"), (pre, "pre(A*S)"), (inp, "inp(U*Y)"))
+            sat = _tanh_saturation_fraction(pre + inp)
+            print(f"DBG step: tanh saturation frac ≈ {sat:.3f}")
+            _assert_finite(pre, "pre(A*S)")
+            _assert_finite(inp, "inp(U*Y)")
+
         # Leaky state update
         new_state = self.sigma(pre + inp)
-        self.S = (1 - self.alpha) * self.S + self.alpha * new_state
+        S_next = (1 - self.alpha) * self.S + self.alpha * new_state
+        if self.debug:
+            _print_stats((new_state, "new_state=tanh(pre+inp)"),
+                         (S_next, "S_next"))
+            _assert_finite(S_next, "S_next")
+        self.S = S_next
 
         return self.S
 
@@ -357,6 +554,9 @@ class multimode_esn_pred:
         out = mode_n_product(G, self.C_f, 0)
         out = mode_n_product(out, self.C_t, 1)
         out = mode_n_product(out, self.C_r, 2)
+        if self.debug:
+            _print_stats((G, "G@readout"), (out, "readout_out"))
+            _assert_finite(out, "readout_out")
 
         return out
 
@@ -366,6 +566,9 @@ class multimode_esn_pred:
         Train readout from `history` and return the next-step prediction.
         Returns a tensor shaped like one predicted subframe in your 8-D layout.
         """
+        if self.debug:
+            print(f"DBG predict(): history dtype={history.dtype} shape={history.shape} washout={washout}")
+
         # --- reshape to [M, S, N_f, N_t, N_r] (M = N_syms, S = N_subframes) ---
         x = tf.convert_to_tensor(history, dtype=self.dtype)
         x = tf.squeeze(x)                                # [S, N_r, N_t, M, N_f]
@@ -391,12 +594,24 @@ class multimode_esn_pred:
                     G_k = self.build_feature_queue(self.S, self._last_Y_tilde)
                     all_feats.append(G_k)
                     all_targets.append(seq_out_list[k])
+        
+        all_feats_stack = tf.stack(all_feats)
+        g_rms = tf.cast(tf.sqrt(tf.reduce_mean(tf.abs(all_feats_stack)**2)), dtype=self.dtype)
+        all_feats = [g / (g_rms + 1e-8) for g in all_feats]
+
+        y_rms = tf.cast(tf.sqrt(tf.reduce_mean(tf.abs(tf.stack(all_targets))**2)), dtype=self.dtype)
+        all_targets = [y / (y_rms + 1e-8) for y in all_targets]
 
         if not all_feats:
             raise ValueError("After washout, no training pairs remain. Lower `washout`.")
 
         # --- Fit readout on feature queue ---
         self.fit_readout_features(all_feats, all_targets, lambdas=lambdas, iters=iters)
+
+        if self.debug:
+            _print_stats((tf.stack(all_targets,0), "train_targets"),
+                         (tf.stack(train_preds,0), "train_preds"))
+            print(f"DBG train recon NMSE: {train_nmse:.6f}")
 
         # --- DEBUG: training reconstruction NMSE ---
         def nmse(a, b, eps=1e-12):
@@ -420,9 +635,14 @@ class multimode_esn_pred:
             next_subframe_syms.append(self._readout(G=G_last))  # [N_f, N_t, N_r]
 
         Y_next = tf.stack(next_subframe_syms, axis=0)             # [M, N_f, N_t, N_r]
+        if self.debug:
+            _print_stats((Y_next, "Y_next_stack"))
+
         # pack to [1, 1, 1, N_r, 1, N_t, M, N_f]
         pred = Y_next[tf.newaxis, tf.newaxis, ...]
         pred = tf.transpose(pred, perm=[0, 5, 1, 4, 2, 3])
+        if self.debug:
+            _print_stats((pred, "pred(final)"))
 
         return pred
 
@@ -514,7 +734,8 @@ class multimode_esn_pred:
             Y1 = tf.reshape(tf.transpose(Y1_b, [1, 0, 2]), [self.N_f, -1])
             A1 = tf.matmul(Z1, Z1, adjoint_b=True) + lam_f * eye_f
             B1 = tf.matmul(Y1, Z1, adjoint_b=True)
-            self.C_f = tf.transpose(tf.linalg.solve(A1, tf.transpose(B1)))
+            # self.C_f = tf.transpose(tf.linalg.solve(A1, tf.transpose(B1)))
+            self.C_f = tf.transpose(tf.linalg.lstsq(A1, tf.transpose(B1), l2_regularizer=0.0))
 
             # === Update C_t ===
             # Mode-1 unfolding orders columns as (f, r); use kron(C_f, C_r).
@@ -525,7 +746,8 @@ class multimode_esn_pred:
             Y2 = tf.reshape(tf.transpose(Y2_b, [1, 0, 2]), [self.N_t, -1])
             A2 = tf.matmul(Z2, Z2, adjoint_b=True) + lam_t * eye_t
             B2 = tf.matmul(Y2, Z2, adjoint_b=True)
-            self.C_t = tf.transpose(tf.linalg.solve(A2, tf.transpose(B2)))
+            # self.C_t = tf.transpose(tf.linalg.solve(A2, tf.transpose(B2)))
+            self.C_t = tf.transpose(tf.linalg.lstsq(A2, tf.transpose(B2), l2_regularizer=0.0))
 
             # === Update C_r ===
             # Mode-2 unfolding orders columns as (f, t); use kron(C_f, C_t).
@@ -536,7 +758,8 @@ class multimode_esn_pred:
             Y3 = tf.reshape(tf.transpose(Y3_b, [1, 0, 2]), [self.N_r, -1])
             A3 = tf.matmul(Z3, Z3, adjoint_b=True) + lam_r * eye_r
             B3 = tf.matmul(Y3, Z3, adjoint_b=True)
-            self.C_r = tf.transpose(tf.linalg.solve(A3, tf.transpose(B3)))
+            # self.C_r = tf.transpose(tf.linalg.solve(A3, tf.transpose(B3)))
+            self.C_r = tf.transpose(tf.linalg.lstsq(A3, tf.transpose(B3), l2_regularizer=0.0))
 
     def forecast(self, Y_init, steps):
         """Autoregressively predict ``steps`` future channel tensors.
