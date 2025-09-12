@@ -2,6 +2,21 @@
 
 import tensorflow as tf
 import math
+import numpy as np
+
+def p_inv(X):
+    X = np.asarray(X)
+    dtype = X.dtype
+    N = X.shape[0]
+    p_inv = np.conj(X.T)@np.linalg.pinv(X@np.conj(X.T)+np.eye(N))
+    p_inv = tf.convert_to_tensor(p_inv)
+    p_inv = tf.cast(p_inv, dtype=dtype)
+    
+    return p_inv
+
+def is_finite_complex(x):
+    return tf.reduce_all(tf.math.is_finite(tf.math.real(x))) and \
+           tf.reduce_all(tf.math.is_finite(tf.math.imag(x)))
 
 def _stat_dict(x: tf.Tensor, name: str):
     x = tf.cast(x, tf.complex64) if x.dtype.is_complex else tf.cast(x, tf.float32)
@@ -400,13 +415,23 @@ class multimode_esn_pred:
                 _assert_finite(tf.math.imag(A1), "A1 imag non-finite before cond()")
                 condA1 = _cond_number_gram(A1)
                 print(f"DBG C_f sweep={sweep}: cond(A1)≈{condA1:.3e}, λ_f={lam_f:.1e}")
-            self.C_f = (tf.transpose(
-                tf.linalg.cholesky_solve(tf.linalg.cholesky(tf.cast(A1, tf.complex64)), 
-                                         tf.transpose(tf.cast(B1, tf.complex64)))
-            ) if self.safe_solve else
-                # tf.transpose(tf.linalg.solve(A1, tf.transpose(B1)))
-                tf.transpose(tf.linalg.lstsq(A1, tf.transpose(B1), l2_regularizer=0.0))
-            )
+            if self.safe_solve:
+                self.C_f = tf.transpose(
+                    tf.linalg.cholesky_solve(
+                        tf.linalg.cholesky(tf.cast(A1, tf.complex64)),
+                        tf.transpose(tf.cast(B1, tf.complex64))
+                    )
+                )
+            else:
+                C_f = tf.transpose(
+                    tf.linalg.lstsq(A1, tf.transpose(B1), l2_regularizer=0.0)
+                )
+                if not is_finite_complex(C_f):
+                    if self.debug:
+                        print("DBG C_f: lstsq produced non-finite values; using pinv fallback")
+                    C_f = tf.matmul(B1, p_inv(A1))
+                self.C_f = C_f
+
             if self.debug:
                 print(f"DBG C_f sweep={sweep}: ‖C_f‖_F={float(tf.linalg.norm(self.C_f).numpy()):.3e}")
 
@@ -429,13 +454,23 @@ class multimode_esn_pred:
                 condA2 = _cond_number_gram(A2)
                 print(f"DBG C_t sweep={sweep}: cond(A2)≈{condA2:.3e}, λ_t={lam_t:.1e}")
 
-            self.C_t = (tf.transpose(
-                tf.linalg.cholesky_solve(tf.linalg.cholesky(tf.cast(A2, tf.complex64)), 
-                                         tf.transpose(tf.cast(B2, tf.complex64)))
-            ) if self.safe_solve else
-                # tf.transpose(tf.linalg.solve(A2, tf.transpose(B2)))
-                tf.transpose(tf.linalg.lstsq(A2, tf.transpose(B2), l2_regularizer=0.0))
-            )
+            if self.safe_solve:
+                self.C_t = tf.transpose(
+                    tf.linalg.cholesky_solve(
+                        tf.linalg.cholesky(tf.cast(A2, tf.complex64)),
+                        tf.transpose(tf.cast(B2, tf.complex64))
+                    )
+                )
+            else:
+                C_t = tf.transpose(
+                    tf.linalg.lstsq(A2, tf.transpose(B2), l2_regularizer=0.0)
+                )
+                if not is_finite_complex(C_t):
+                    if self.debug:
+                        print("DBG C_t: lstsq produced non-finite values; using pinv fallback")
+                    C_t = tf.matmul(B2, p_inv(A2))
+                self.C_t = C_t
+
             if self.debug:
                 print(f"DBG C_t sweep={sweep}: ‖C_t‖_F={float(tf.linalg.norm(self.C_t).numpy()):.3e}")
 
@@ -454,13 +489,23 @@ class multimode_esn_pred:
                 condA3 = _cond_number_gram(A3)
                 print(f"DBG C_r sweep={sweep}: cond(A3)≈{condA3:.3e}, λ_r={lam_r:.1e}")
 
-            self.C_r = (tf.transpose(
-                tf.linalg.cholesky_solve(tf.linalg.cholesky(tf.cast(A3, tf.complex64)), 
-                                         tf.transpose(tf.cast(B3, tf.complex64)))
-            ) if self.safe_solve else
-                # tf.transpose(tf.linalg.solve(A3, tf.transpose(B3)))
-                tf.transpose(tf.linalg.lstsq(A3, tf.transpose(B3), l2_regularizer=0.0))
-            )
+            if self.safe_solve:
+                self.C_r = tf.transpose(
+                    tf.linalg.cholesky_solve(
+                        tf.linalg.cholesky(tf.cast(A3, tf.complex64)),
+                        tf.transpose(tf.cast(B3, tf.complex64))
+                    )
+                )
+            else:
+                C_r = tf.transpose(
+                    tf.linalg.lstsq(A3, tf.transpose(B3), l2_regularizer=0.0)
+                )
+                if not is_finite_complex(C_r):
+                    if self.debug:
+                        print("DBG C_r: lstsq produced non-finite values; using pinv fallback")
+                    C_r = tf.matmul(B3, p_inv(A3))
+                self.C_r = C_r
+
             if self.debug:
                 print(f"DBG C_r sweep={sweep}: ‖C_r‖_F={float(tf.linalg.norm(self.C_r).numpy()):.3e}")
 

@@ -79,13 +79,13 @@ if __name__ == "__main__":
     rc_config.lr = 0.01
     rc_config.num_epochs = 50
     rc_config.enable_window = True
-    rc_config.window_length = 1
+    rc_config.window_length = 3
     rc_config.num_neurons = 16
     rc_config.vector_inputs = vector_inputs
     rc_config.weight_initialization = 'model_based_freq_corr' # "model_based_aoa_aod", "model_based_freq_corr", "model_based_delays" #TODO: find a better edge update method than grad descent. maybe attention based mechanism
     rc_config.mobility = mobility
     rc_config.drop_idx = drop_idx
-    rc_config.history_len = 8
+    rc_config.history_len = 16
     cfg.graph_formulation = 'per_antenna_pair' # "per_node_pair", "per_antenna_pair", "supergraph"
     cfg.num_tx_streams = 1
     cfg.modulation_order = 2
