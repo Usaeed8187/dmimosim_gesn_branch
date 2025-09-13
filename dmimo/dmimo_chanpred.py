@@ -254,20 +254,20 @@ class MU_MIMO(Model):
 
             # Use 3-mode ESN to do WESN based prediction
             # h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
-            T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
-            multimode_predictor = multimode_esn_pred(
-                N_f=RB, N_t=TxAnt, N_r=RxAnt,
-                d_f=64, d_t=4, d_r=4,
-                window_len=self.rc_config.window_length,
-                debug=False,          # <— turn on
-                safe_solve=False      # <— try safer linear algebra first
-            )
-            h_freq_csi_multimode_wesn = multimode_predictor.predict(
-                h_freq_csi_history,
-                washout=0,
-                lambdas=(1.0, 1.0, 1.0),   # start a bit stronger if you see big cond(A)
-                iters=2
-            )
+            # T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
+            # multimode_predictor = multimode_esn_pred(
+            #     N_f=RB, N_t=TxAnt, N_r=RxAnt,
+            #     d_f=64, d_t=4, d_r=4,
+            #     window_len=self.rc_config.window_length,
+            #     debug=False,          # <— turn on
+            #     safe_solve=False      # <— try safer linear algebra first
+            # )
+            # h_freq_csi_multimode_wesn = multimode_predictor.predict(
+            #     h_freq_csi_history,
+            #     washout=0,
+            #     lambdas=(1.0, 1.0, 1.0),   # start a bit stronger if you see big cond(A)
+            #     iters=2
+            # )
 
             # multimode_predictor = multimode_esn_pred(   N_f=RB,
             #                                             N_t=TxAnt,
@@ -277,19 +277,19 @@ class MU_MIMO(Model):
             #                                             d_r=4,
             #                                             window_len=self.rc_config.window_length)
             # h_freq_csi_multimode_wesn = multimode_predictor.predict(h_freq_csi_history)
-            pred_nmse_multimode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_multimode_wesn)
-            print("Multimode ESN NMSE: ", pred_nmse_multimode_wesn)
+            # pred_nmse_multimode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_multimode_wesn)
+            # print("Multimode ESN NMSE: ", pred_nmse_multimode_wesn)
 
 
-            norm = np.mean(np.real(h_freq_csi_true[0,0,0,0,0,0,:])) / np.mean(np.real(h_freq_csi_multimode_wesn[0,0,0,0,0,:]))
-            plt.figure()
-            plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
-            plt.plot(np.real(h_freq_csi_history[-1,0,0,0,0,0,0,:]), label='outdated channel')
-            plt.plot(norm * np.real(h_freq_csi_multimode_wesn[0,0,0,0,0,:]), label='predicted channel')
-            plt.legend()
-            plt.savefig('a')
+            # norm = np.mean(np.real(h_freq_csi_true[0,0,0,0,0,0,:])) / np.mean(np.real(h_freq_csi_multimode_wesn[0,0,0,0,0,:]))
+            # plt.figure()
+            # plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
+            # plt.plot(np.real(h_freq_csi_history[-1,0,0,0,0,0,0,:]), label='outdated channel')
+            # plt.plot(norm * np.real(h_freq_csi_multimode_wesn[0,0,0,0,0,:]), label='predicted channel')
+            # plt.legend()
+            # plt.savefig('a')
 
-            hold = 1
+            # hold = 1
 
 
 
@@ -384,12 +384,12 @@ class MU_MIMO(Model):
 
             # h_freq_csi_standardized_wesn = tf.transpose(Y_pred_c, perm=[1,2,0,3])
             # h_freq_csi_standardized_wesn = h_freq_csi_standardized_wesn[tf.newaxis, :, tf.newaxis, :, :, :]
-            h_freq_csi_standardized_wesn = tf.convert_to_tensor(h_freq_csi_standardized_wesn)
+            # h_freq_csi_standardized_wesn = tf.convert_to_tensor(h_freq_csi_standardized_wesn)
 
-            pred_nmse_standardized_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_standardized_wesn)
+            # pred_nmse_standardized_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_standardized_wesn)
 
 
-            hold = 1
+            # hold = 1
 
 
 
@@ -413,31 +413,30 @@ class MU_MIMO(Model):
             # pred_nmse_kalman = self.nmse(h_freq_csi_true[0,...], h_freq_csi_kalman[0,...])
             
             # Compare with gradient descent GESN
-            self.rc_config.enable_window = True
-            rc_predictor = gesn_pred_freq_dmimo('MU_MIMO', self.rc_config, num_rx_ant = self.num_rx_ue, 
-                                                    num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method=self.cfg.graph_formulation, 
-                                                    num_neurons=16, edge_weighting_method='grad_descent') # edge_weighting_method: 'model_based', 'grad_descent'
-            h_freq_csi_grad_descent = rc_predictor.predict(h_freq_csi_history, h_freq_csi_true[0,...])
-            h_freq_csi_grad_descent = tf.transpose(h_freq_csi_grad_descent, perm=[0,1,3,2])
-            pred_nmse_wgesn_per_antenna_pair = self.nmse(np.squeeze(h_freq_csi_true[0,...]), h_freq_csi_grad_descent)
-            h_freq_csi_grad_descent = tf.transpose(h_freq_csi_grad_descent, perm=[0,1,3,2])
+            # self.rc_config.enable_window = True
+            # rc_predictor = gesn_pred_freq_dmimo('MU_MIMO', self.rc_config, num_rx_ant = self.num_rx_ue, 
+            #                                         num_tx_ant=self.cfg.num_tx_ue_sel*2 + 4, max_adjacency='all', method=self.cfg.graph_formulation, 
+            #                                         num_neurons=16, edge_weighting_method='grad_descent') # edge_weighting_method: 'model_based', 'grad_descent'
+            # h_freq_csi_grad_descent = rc_predictor.predict(h_freq_csi_history, h_freq_csi_true[0,...])
+            # h_freq_csi_grad_descent = tf.transpose(h_freq_csi_grad_descent, perm=[0,1,3,2])
+            # pred_nmse_wgesn_per_antenna_pair = self.nmse(np.squeeze(h_freq_csi_true[0,...]), h_freq_csi_grad_descent)
+            # h_freq_csi_grad_descent = tf.transpose(h_freq_csi_grad_descent, perm=[0,1,3,2])
 
             h_freq_csi_outdated = np.squeeze(h_freq_csi_history).transpose([0,1,2,4,3])
-            h_freq_csi_outdated = rc_predictor.rb_mapper(h_freq_csi_outdated)
             h_freq_csi_outdated = h_freq_csi_outdated[-1, ...]
             h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0,1,3,2])
             pred_nmse_outdated = self.nmse(np.squeeze(h_freq_csi_true[0,...]), h_freq_csi_outdated)
             h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0,1,3,2])
             
-            # Print out all results
-            print("Outdated : ", pred_nmse_outdated)
-            print("WESN : ", pred_nmse_wesn)
-            print("Kalman : ", pred_nmse_kalman)
-            print("WGESN (per_antenna_pair): ", pred_nmse_wgesn_per_antenna_pair)
-            print("Window size:", rc_predictor_vanilla.window_length)
+            # # Print out all results
+            # print("Outdated : ", pred_nmse_outdated)
+            # print("WESN : ", pred_nmse_wesn)
+            # print("Kalman : ", pred_nmse_kalman)
+            # print("WGESN (per_antenna_pair): ", pred_nmse_wgesn_per_antenna_pair)
+            # print("Window size:", rc_predictor_vanilla.window_length)
 
             # Test plots
-            plot = True
+            plot = False
             if plot:
                 h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                                              batch_size=self.batch_size)
@@ -472,16 +471,22 @@ class MU_MIMO(Model):
             _, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx - self.cfg.csi_delay, batch_size=self.batch_size)
         
         # [batch_size, num_rx, num_rxs_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-        h_freq_csi_grad_descent = tf.transpose(h_freq_csi_grad_descent, perm=[0,1,3,2])
-        h_freq_csi_grad_descent = h_freq_csi_grad_descent[tf.newaxis, tf.newaxis, :, tf.newaxis, :, :, :]
+        # h_freq_csi_grad_descent = tf.transpose(h_freq_csi_grad_descent, perm=[0,1,3,2])
+        # h_freq_csi_grad_descent = h_freq_csi_grad_descent[tf.newaxis, tf.newaxis, :, tf.newaxis, :, :, :]
         h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0,1,3,2])
         h_freq_csi_outdated = h_freq_csi_outdated[tf.newaxis, tf.newaxis, :, tf.newaxis, :, :, :]
-        h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0, 2, 1, 3, 4, 5, 6])
+        h_freq_csi_outdated = tf.reshape(h_freq_csi_outdated, (1, self.num_rx_ue, -1, *h_freq_csi_outdated.shape[3:]))
+        # h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0, 2, 1, 3, 4, 5, 6])
 
         # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-        h_freq_csi_grad_descent =tf.reshape(h_freq_csi_grad_descent, (-1, self.num_rx_ue, 1, *h_freq_csi_grad_descent.shape[3:]))
-        h_freq_csi_vanilla =tf.reshape(h_freq_csi_vanilla, (-1, self.num_rx_ue, 1, *h_freq_csi_vanilla.shape[3:]))
-        h_freq_csi_kalman = tf.reshape(h_freq_csi_kalman, (-1, self.num_rx_ue, 1, *h_freq_csi_kalman.shape[3:]))
+        # h_freq_csi_grad_descent =tf.reshape(h_freq_csi_grad_descent, (-1, self.num_rx_ue, 1, *h_freq_csi_grad_descent.shape[3:]))
+        h_freq_csi_vanilla = tf.reshape(h_freq_csi_vanilla, (1, self.num_rx_ue, -1, *h_freq_csi_vanilla.shape[3:]))
+        # h_freq_csi_kalman = tf.reshape(h_freq_csi_kalman, (-1, self.num_rx_ue, 1, *h_freq_csi_kalman.shape[3:]))
+        h_freq_csi_twomode = tf.reshape(h_freq_csi_twomode, (1, self.num_rx_ue, -1, *h_freq_csi_twomode.shape[3:]))
+
+        # h_freq_csi_vanilla = tf.transpose(h_freq_csi_vanilla, perm=[1,2,0,3,4,5,6])
+        # h_freq_csi_twomode = tf.transpose(h_freq_csi_twomode, perm=[1,2,0,3,4,5,6])
+
         
         SNR_range = np.arange(0, 20, 2)
         uncoded_bers = np.zeros((4, np.arange(0, 20, 2).shape[0]))
@@ -490,14 +495,14 @@ class MU_MIMO(Model):
             
             rx_snr_db = snr
 
-            for curr_method in range(4):
+            for curr_method in range(3):
 
                 if curr_method == 0:
                     h_freq_csi = h_freq_csi_outdated
                 elif curr_method == 1:
                     h_freq_csi = h_freq_csi_vanilla
                 elif curr_method == 2:
-                    h_freq_csi = h_freq_csi_grad_descent
+                    h_freq_csi = h_freq_csi_twomode
                 else:
                     h_freq_csi = h_freq_csi_kalman
                 
@@ -506,10 +511,10 @@ class MU_MIMO(Model):
 
                 # apply precoding to OFDM grids
                 if self.cfg.precoding_method == "ZF":
-                    ue_indices = [[i] for i in range(self.num_rx_ue)]
+                    # ue_indices = [[i] for i in range(self.num_rx_ue)]
                     ue_ranks = self.num_streams_per_tx / self.num_rx_ue
                     # x_precoded, h_eff = self.zf_precoder([x_rg, tf.transpose(h_freq, perm=[0, 2, 1, 3, 4, 5, 6]), ue_indices, ue_ranks])
-                    x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, ue_indices, ue_ranks])
+                    x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, ue_ranks])
                 else:
                     ValueError("unsupported precoding method for MASS")
 
@@ -572,6 +577,14 @@ class MU_MIMO(Model):
                 # Hard-decision bit error rate
                 d_hard = tf.cast(llr > 0, tf.float32) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols * QAM order]
                 uncoded_bers[curr_method, snr_idx] = compute_ber(d, d_hard).numpy()
+
+        plt.figure()
+        plt.semilogy(SNR_range, uncoded_bers[0, :], label="Outdated Channel")
+        plt.semilogy(SNR_range, uncoded_bers[1, :], label="WESN Channel")
+        plt.semilogy(SNR_range, uncoded_bers[2, :], label="Twomode WESN Channel")
+        plt.grid()
+        plt.legend()
+        plt.savefig('bers_tmp')
 
         return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman], uncoded_bers, x_hat
     

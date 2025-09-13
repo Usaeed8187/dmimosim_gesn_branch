@@ -110,7 +110,7 @@ class ZFPrecoder(Layer):
         h_pc_desired = flatten_dims(h_pc_desired, 2, axis=1)
 
         # Transpose:
-        # [batch_size, num_tx, num_ofdm_symbols, fft_size, num_streams_per_tx, num_tx_ant]
+        # [batch_size, num_tx, num_ofdm_symbols, fft_size, total_rx_ant, num_tx_ant]
         h_pc_desired = tf.transpose(h_pc_desired, [5, 0, 3, 4, 1, 2])
         h_pc_desired = tf.cast(h_pc_desired, self._dtype)
 

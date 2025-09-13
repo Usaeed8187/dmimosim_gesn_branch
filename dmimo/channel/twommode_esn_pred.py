@@ -63,7 +63,7 @@ class twomode_esn_pred:
     
     def predict(self, h_freq_csi_history):
 
-        h_freq_csi_predicted = self.pred_v1(h_freq_csi_history)
+        h_freq_csi_predicted = self.pred_v2(h_freq_csi_history)
 
         return h_freq_csi_predicted
     
@@ -124,6 +124,98 @@ class twomode_esn_pred:
         chan_pred = tf.convert_to_tensor(chan_pred)
 
         return chan_pred
+
+    def pred_v2(self, h_freq_csi_history):
+        
+        
+        if tf.rank(h_freq_csi_history).numpy() == 8:
+            h_freq_csi_history = np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6])
+            num_batches = h_freq_csi_history.shape[1]
+            num_rx_nodes = h_freq_csi_history.shape[2]
+            num_rx_antennas = h_freq_csi_history.shape[3]
+            num_tx_nodes = h_freq_csi_history.shape[4]
+            num_tx_antennas = h_freq_csi_history.shape[5]
+            num_freq_res = h_freq_csi_history.shape[6]
+            num_ofdm_syms = h_freq_csi_history.shape[7]
+        else:
+            raise ValueError("\n The dimensions of h_freq_csi_history are not correct")
+
+        channel_train_input = h_freq_csi_history[:-1, ...]
+        channel_train_gt    = h_freq_csi_history[1:,  ...]
+        
+        if not self.enable_window:
+            window_weights = None
+
+        chan_pred = np.zeros(h_freq_csi_history[0,...].shape, dtype=self.dtype)
+
+        # === ONE reservoir per (rx_node, tx_node) pair; shared across all RBs ===
+        for rx_node in range(num_rx_nodes):
+            for tx_node in range(num_tx_nodes):
+
+                # Initialize weights ONCE for all RBs of this (rx_node, tx_node)
+                self.init_weights()
+
+                # --------- (A) FEATURE BUILD PHASE: stack all RBs (and OFDM syms) ----------
+                S_list, Y_list = [], []
+                for freq_re in range(num_freq_res):
+                    for ofdm_sym in range(num_ofdm_syms):
+                        # Train sequences for this RB/symbol → [T, N_r, N_t]
+                        Y_in  = channel_train_input[:, 0, tx_node, :, rx_node, :, freq_re, ofdm_sym]
+                        Y_out = channel_train_gt[:,    0, tx_node, :, rx_node, :, freq_re, ofdm_sym]
+
+                        # Optional: do NOT reset S_0 here if you want cross-RB continuity
+                        self.S_0 = np.zeros([self.d_left, self.d_right], dtype=self.dtype)
+
+                        S_f, Y_f = self.build_S_Y(Y_in, Y_out, curr_window_weights=None)
+                        S_list.append(S_f); Y_list.append(Y_f)
+
+                S_all = np.concatenate(S_list, axis=1)  # (F, sum_T)
+                Y_all = np.concatenate(Y_list, axis=1)  # (N_r*N_t, sum_T)
+
+                # --------- (B) SINGLE READOUT SOLVE (shared across RBs) ----------
+                # Prefer ridge for stability:
+                G = self.reg_p_inv(S_all)               # (sum_T, F)  :=  S_all^H (S_all S_all^H + λI)^{-1}
+                self.W_out = Y_all @ G                  # (N_r*N_t, F)
+
+                # --------- (C) PREDICTION PHASE with the shared W_out ----------
+                for freq_re in range(num_freq_res):
+                    for ofdm_sym in range(num_ofdm_syms):
+                        # Use last known channel as test input; predict next step
+                        channel_test_input = channel_train_gt[:, 0, tx_node, :, rx_node, :, freq_re, ofdm_sym]
+
+                        # Optional: either carry S_0 across RBs for smoothness,
+                        # or reset it per RB. Start with reset; then try carry-over.
+                        self.S_0 = np.zeros([self.d_left, self.d_right], dtype=self.dtype)
+
+                        channel_pred_temp = self.test_train_predict(channel_test_input, curr_window_weights=None)
+                        channel_pred_temp = channel_pred_temp[:, :, -1:]       # keep last step
+                        channel_pred_temp = np.squeeze(channel_pred_temp)      # [N_r, N_t]
+                        chan_pred[:, tx_node, :, rx_node, :, freq_re, ofdm_sym] = channel_pred_temp
+
+        chan_pred = chan_pred.transpose([0,1,2,3,4,6,5])
+        chan_pred = tf.convert_to_tensor(chan_pred)
+        return chan_pred
+
+    def build_S_Y(self, channel_input, channel_output, curr_window_weights):
+        # channel_input, channel_output: [T, N_r, N_t]
+        Y_3D = channel_input
+        Y_target_3D = channel_output
+
+        if self.enable_window:
+            Y_3D_win = self.form_window_input_signal(Y_3D, curr_window_weights)
+        else:
+            # Safe fallback if forget_length not set:
+            forget = getattr(self, "forget_length", 0)
+            Y_3D_win = np.concatenate([Y_3D, np.zeros([Y_3D.shape[0], forget, Y_3D.shape[2]], dtype=self.dtype)], axis=1)
+
+        S_3D_transit = self.state_transit(Y_3D_win * self.input_scale)
+        S_3D = np.concatenate([S_3D_transit, Y_3D_win], axis=-1)
+
+        T = S_3D.shape[0]
+        S = np.column_stack([S_3D[t].reshape(-1, order='C') for t in range(T)])  # (feature_dim, T)
+        Y = np.column_stack([Y_target_3D[t].reshape(-1, order='C') for t in range(T)])  # (N_r*N_t, T)
+        return S, Y
+
 
     def calculate_window_weights(self, h_freq_csi_history):
 
