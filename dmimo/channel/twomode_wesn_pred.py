@@ -5,9 +5,9 @@ import tensorflow as tf
 from dmimo.config import Ns3Config, RCConfig
 from dmimo.channel import lmmse_channel_estimation
 
-class twomode_esn_pred:
+class twomode_wesn_pred:
 
-    def __init__(self, rc_config, num_freq_re, num_rx_ant, num_tx_ant, d_left=None, d_right=None, type=np.complex64):
+    def __init__(self, rc_config, num_freq_re, num_rx_ant, num_tx_ant, type=np.complex64):
         
         self.rc_config = rc_config
         self.dtype = type

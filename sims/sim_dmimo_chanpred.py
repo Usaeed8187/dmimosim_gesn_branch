@@ -64,14 +64,14 @@ if __name__ == "__main__":
     # Simulation settings
     rc_config = RCConfig()
     cfg = SimConfig()
-    cfg.total_slots = 95        # total number of slots in ns-3 channels
-    cfg.start_slot_idx = 91     # starting slots (must be greater than csi_delay + 5)
+    cfg.total_slots = 99        # total number of slots in ns-3 channels
+    cfg.start_slot_idx = 95     # starting slots (must be greater than csi_delay + 5)
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
     cfg.num_tx_ue_sel = 6
     if arguments == []:
         mobility = 'high_mobility'
-        drop_idx = '3'
+        drop_idx = '2'
         rx_ues_arr = [3]
         vector_inputs = 'tx_ants' # tx_ants, rx_ants, none, all
         csi_delays = [4, 5, 6, 7, 8]

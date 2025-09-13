@@ -20,7 +20,7 @@ from sionna.utils import expand_to_rank, complex_normal, flatten_last_dims
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig, RCConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_dmimo
 from dmimo.channel import multimode_esn_pred
-from dmimo.channel import twomode_esn_pred
+from dmimo.channel import twomode_wesn_pred
 from dmimo.channel.wesn_pred import WESN
 from dmimo.channel.kalman_pred_freq_dmimo import kalman_pred_freq_dmimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
@@ -210,7 +210,7 @@ class MU_MIMO(Model):
             # Use 2-mode ESN to do WESN based prediction
             h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
             T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
-            twomode_predictor = twomode_esn_pred(rc_config=self.rc_config, 
+            twomode_predictor = twomode_wesn_pred(rc_config=self.rc_config, 
                                                  num_freq_re=RB, 
                                                  num_rx_ant=RxAnt, 
                                                  num_tx_ant=TxAnt, 
