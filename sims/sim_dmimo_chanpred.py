@@ -74,7 +74,7 @@ if __name__ == "__main__":
         drop_idx = '2'
         rx_ues_arr = [3]
         vector_inputs = 'tx_ants' # tx_ants, rx_ants, none, all
-        csi_delays = [1, 2, 3, 4, 5, 6, 7, 8]
+        csi_delays = [4, 5, 6, 7, 8]
     cfg.ns3_folder = "ns3/channels_" + mobility + '_' + drop_idx + '/'
     rc_config.lr = 0.01
     rc_config.num_epochs = 50

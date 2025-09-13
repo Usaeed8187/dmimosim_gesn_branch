@@ -33,12 +33,12 @@ class twomode_esn_pred:
         else:
             self.N_in_right = self.N_t
 
-        self.d_left = d_left
-        self.d_right = d_right
+        self.d_left = self.N_in_left # TODO: currently just basing on the size of the input. try other configurations
+        self.d_right = self.N_in_right
 
-        if d_left is None:
+        if self.d_left is None:
             self.d_left = self.N_r
-        if d_right is None:
+        if self.d_right is None:
             self.d_right = self.N_t        
 
         self.init_weights()
