@@ -51,7 +51,7 @@ class dMIMOChannels(Layer):
         h_freq, snrdb = self._load_channel(self._channel_type, slot_idx=slot_idx, batch_size=batch_size)
         return h_freq, snrdb
 
-    def call(self, inputs):
+    def call(self, inputs, fix_snr=None):
 
         # x: channel input samples, sidx: current slot index
         if len(inputs) == 2:
@@ -70,6 +70,9 @@ class dMIMOChannels(Layer):
         # h_freq shape: [batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_sym, fft_size]
         # snrdb shape: [batch_size, 1, num_rx/num_tx, num_ofdm_sym]
         h_freq, snrdb = self._load_channel(self._channel_type, slot_idx=sidx, batch_size=batch_size)
+
+        if fix_snr is not None:
+            snrdb[:] = fix_snr
 
         # Prune data and channel subcarriers according to the resource grid
         if self._rg and x.shape[-1] != h_freq.shape[-1]:

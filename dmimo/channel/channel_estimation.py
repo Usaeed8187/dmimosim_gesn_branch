@@ -87,7 +87,7 @@ def estimate_freq_time_cov(dmimo_chans: dMIMOChannels, rg: ResourceGrid, start_s
 
 
 def lmmse_channel_estimation(dmimo_chans: dMIMOChannels, rg: ResourceGrid, slot_idx, cache_slots=5, ebno_db=10.0,
-                             cfo_sigma=0.0, sto_sigma=0.0):
+                             cfo_sigma=0.0, sto_sigma=0.0, fix_snr = None):
 
     # Only allow channel estimation from slot 1 onward
     assert slot_idx > 0, "Current slot index must be a positive integer"
@@ -123,7 +123,7 @@ def lmmse_channel_estimation(dmimo_chans: dMIMOChannels, rg: ResourceGrid, slot_
 
     # Pass through ns3 channels
     # output has shape: [1, num_rx, num_rx_ant, num_ofdm_sym, fft_size]
-    ry = dmimo_chans([dx_rg, slot_idx])
+    ry = dmimo_chans([dx_rg, slot_idx], fix_snr=fix_snr)
 
     #
     # LMMSE channel estimation

@@ -21,6 +21,7 @@ from dmimo.config import Ns3Config, SimConfig, NetworkConfig, RCConfig
 from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_dmimo
 from dmimo.channel import multimode_esn_pred
 from dmimo.channel import twomode_wesn_pred
+from dmimo.channel import twomode_graph_wesn_pred
 from dmimo.channel.wesn_pred import WESN
 from dmimo.channel.kalman_pred_freq_dmimo import kalman_pred_freq_dmimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
@@ -204,30 +205,30 @@ class MU_MIMO(Model):
 
 
 
+            # Put channel feedback history into RB granularity
+            h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
+            T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
+
+
+
+
+
+
+
+
+
 
 
 
             # Use 2-mode ESN to do WESN based prediction
-            h_freq_csi_history = rc_predictor_vanilla.rb_mapper(h_freq_csi_history)
-            T, _, _, RxAnt, _, TxAnt, num_syms, RB = h_freq_csi_history.shape
             twomode_predictor = twomode_wesn_pred(rc_config=self.rc_config, 
                                                  num_freq_re=RB, 
                                                  num_rx_ant=RxAnt, 
-                                                 num_tx_ant=TxAnt, 
-                                                 #d_left=4, 
-                                                 #d_right=4
+                                                 num_tx_ant=TxAnt
                                                  )
             h_freq_csi_twomode = twomode_predictor.predict(h_freq_csi_history)
             pred_nmse_twomode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_twomode[0,...])
             print("Two-Mode WESN NMSE: ", pred_nmse_twomode_wesn)
-
-            plt.figure()
-            plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
-            # plt.plot(np.real(h_freq_csi_history[-1,0,0,0,0,0,0,:]), label='outdated channel')
-            plt.plot(np.real(h_freq_csi_vanilla[0,0,0,0,0,0,:]), label='predicted channel vanilla')
-            plt.plot(np.real(h_freq_csi_twomode[0,0,0,0,0,0,:]), label='predicted channel Twomode')
-            plt.legend()
-            plt.savefig('a')
 
 
             hold = 1
@@ -237,6 +238,26 @@ class MU_MIMO(Model):
 
 
 
+
+            # Use 2-mode Graph ESN to do WESN based prediction
+            graph_twomode_predictor = twomode_graph_wesn_pred(rc_config=self.rc_config, 
+                                                 num_freq_re=RB, 
+                                                 num_rx_ant=RxAnt, 
+                                                 num_tx_ant=TxAnt
+                                                )
+            h_freq_csi_graph_twomode = graph_twomode_predictor.predict(h_freq_csi_history)
+            pred_nmse_graph_twomode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_graph_twomode[0,...])
+            print("Two-Mode Graph WESN NMSE: ", pred_nmse_graph_twomode_wesn)
+
+            plt.figure()
+            plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
+            plt.plot(np.real(h_freq_csi_vanilla[0,0,0,0,0,0,:]), label='Vanilla')
+            plt.plot(np.real(h_freq_csi_twomode[0,0,0,0,0,0,:]), label='Twomode')
+            plt.plot(np.real(h_freq_csi_graph_twomode[0,0,0,0,0,0,:]), label='Graph Twomode')
+            plt.legend()
+            plt.savefig('a')
+
+            hold = 1
 
 
 
@@ -488,8 +509,8 @@ class MU_MIMO(Model):
         # h_freq_csi_twomode = tf.transpose(h_freq_csi_twomode, perm=[1,2,0,3,4,5,6])
 
         
-        SNR_range = np.arange(0, 20, 2)
-        uncoded_bers = np.zeros((4, np.arange(0, 20, 2).shape[0]))
+        SNR_range = np.arange(0, 22, 2)
+        uncoded_bers = np.zeros((4, SNR_range.shape[0]))
         
         for snr_idx, snr in enumerate(SNR_range):
             
