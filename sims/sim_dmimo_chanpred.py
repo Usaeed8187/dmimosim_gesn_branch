@@ -85,7 +85,7 @@ if __name__ == "__main__":
     rc_config.weight_initialization = 'model_based_freq_corr' # "model_based_aoa_aod", "model_based_freq_corr", "model_based_delays" #TODO: find a better edge update method than grad descent. maybe attention based mechanism
     rc_config.mobility = mobility
     rc_config.drop_idx = drop_idx
-    rc_config.history_len = 3
+    rc_config.history_len = 8
     cfg.graph_formulation = 'per_antenna_pair' # "per_node_pair", "per_antenna_pair", "supergraph"
     cfg.num_tx_streams = 1
     cfg.modulation_order = 2
