@@ -230,8 +230,15 @@ class MU_MIMO(Model):
             pred_nmse_twomode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_twomode[0,...])
             print("Two-Mode WESN NMSE: ", pred_nmse_twomode_wesn)
 
+            # plt.figure()
+            # plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
+            # plt.plot(np.real(h_freq_csi_vanilla[0,0,0,0,0,0,:]), label='Vanilla')
+            # plt.plot(np.real(h_freq_csi_twomode[0,0,0,0,0,0,:]), label='Twomode')
+            # plt.legend()
+            # plt.savefig('b')
 
-            hold = 1
+
+
 
 
 

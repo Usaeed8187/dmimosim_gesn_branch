@@ -164,7 +164,7 @@ class twomode_wesn_pred:
                         Y_out = channel_train_gt[:,    0, tx_node, :, rx_node, :, freq_re, ofdm_sym]
 
                         # Optional: do NOT reset S_0 here if you want cross-RB continuity
-                        self.S_0 = np.zeros([self.d_left, self.d_right], dtype=self.dtype)
+                        # self.S_0 = np.zeros([self.d_left, self.d_right], dtype=self.dtype)
 
                         S_f, Y_f = self.build_S_Y(Y_in, Y_out, curr_window_weights=None)
                         S_list.append(S_f); Y_list.append(Y_f)
@@ -370,6 +370,8 @@ class twomode_wesn_pred:
             S_3D.append(S_2D)
 
         S_3D = np.stack(S_3D, axis=0)
+
+        self.S_0 = S_2D
 
         return S_3D
 

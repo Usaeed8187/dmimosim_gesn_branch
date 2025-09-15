@@ -10,7 +10,7 @@ class twomode_graph_wesn_pred:
     def __init__(self, rc_config, num_freq_re, num_rx_ant, num_tx_ant, type=np.complex64):
         
         self.rc_config = rc_config
-        ns3_config = Ns3Config()
+        self.ns3_config = Ns3Config()
 
         self.dtype = type
 
@@ -30,8 +30,8 @@ class twomode_graph_wesn_pred:
         self.RS = np.random.RandomState(seed)
 
         # one tx/rx pair is one vertex
-        self.num_tx_nodes = int((self.N_t - ns3_config.num_bs_ant)  / ns3_config.num_ue_ant) + 1
-        self.num_rx_nodes = int((self.N_r - ns3_config.num_bs_ant)  / ns3_config.num_ue_ant) + 1
+        self.num_tx_nodes = int((self.N_t - self.ns3_config.num_bs_ant)  / self.ns3_config.num_ue_ant) + 1
+        self.num_rx_nodes = int((self.N_r - self.ns3_config.num_bs_ant)  / self.ns3_config.num_ue_ant) + 1
         self.N_v = self.num_rx_nodes * self.num_tx_nodes # number of vertices in the graph
         self.N_e = int((self.N_v*(self.N_v-1))/2) # number of edges in the graph (at most. some of them will be zeroed out)
 
@@ -41,13 +41,8 @@ class twomode_graph_wesn_pred:
         else:
             self.N_in_right = self.N_t
 
-        self.d_left = self.N_in_left # TODO: currently just basing on the size of the input. try other configurations
-        self.d_right = self.N_in_right
-
-        if self.d_left is None:
-            self.d_left = self.N_r
-        if self.d_right is None:
-            self.d_right = self.N_t        
+        self.d_left = self.ns3_config.num_bs_ant # TODO: currently just basing on the size of the input. try other configurations
+        self.d_right = self.ns3_config.num_bs_ant * self.window_length
 
         self.init_weights()
 
@@ -61,8 +56,8 @@ class twomode_graph_wesn_pred:
             result = self.sparse_mat(self.d_right)
             matrices_right.append(result)
         
-        self.W_N_left = tf.Variable(np.concatenate(matrices_left, axis=1), trainable=False)
-        self.W_N_right = tf.Variable(np.concatenate(matrices_right, axis=1), trainable=False)
+        self.W_N_left = np.concatenate(matrices_left, axis=1)
+        self.W_N_right = np.concatenate(matrices_right, axis=0)
         
         self.W_res_left = self.sparse_mat(self.d_left)
         self.W_res_right = self.sparse_mat(self.d_right)
@@ -76,7 +71,7 @@ class twomode_graph_wesn_pred:
         # self.W_out_right = self.RS.randn(self.d_right + self.N_in_right, self.N_t)
         # and multiplying the two W_outs on either side of the feature queue 
         self.feature_dim = int(2 * self.d_left * self.d_right * (self.window_length + 1))
-        self.W_out = self.RS.randn(self.N_r * self.N_t, self.feature_dim).astype(self.dtype)        
+        self.W_out = self.RS.randn(self.N_v, self.N_r * self.N_t, self.feature_dim).astype(self.dtype)        
 
         self.S_0_rx = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
         self.S_0_tx = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
@@ -125,38 +120,101 @@ class twomode_graph_wesn_pred:
                 num_node_pairs = len(channel_train_gt_list)
 
                 # Optional: do NOT reset S_0 here if you want cross-RB continuity
-                self.S_0_rx = np.zeros([self.d_left, self.d_right], dtype=self.dtype)
-                self.S_0_tx = np.zeros([self.d_left, self.d_right], dtype=self.dtype)
+                self.S_0_rx = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+                self.S_0_tx = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
 
-                S_f, Y_f = self.build_S_Y(channel_train_input_list, channel_train_gt_list, curr_window_weights=None)
-                S_list.append(S_f); Y_list.append(Y_f)
+                S_f_list, Y_f_list = self.build_S_Y(channel_train_input_list, channel_train_gt_list, meta_input, curr_window_weights=None)
+                S_list.append(S_f_list); Y_list.append(Y_f_list)
         
-        S_all = np.concatenate(S_list, axis=1)  # (F, sum_T)
-        Y_all = np.concatenate(Y_list, axis=1)  # (N_r*N_t, sum_T)
+        # S_list: list over RB/OFDM; each item is S_f_list (length N_v) where S_f_list[v] is (F_v, T_chunk). 
+        # Y_list: same structure; Y_f_list[v] is (n_rx_v*n_tx_v, T_chunk)
+        # Note: F_v = n_rx_v * L*n_tx_v + 2*self.d_left*self.d_right
 
-        # --------- (B) SINGLE READOUT SOLVE (shared across RBs) ----------
-        # Prefer ridge for stability:
-        G = self.reg_p_inv(S_all)               # (sum_T, F)  :=  S_all^H (S_all S_all^H + λI)^{-1}
-        self.W_out = Y_all @ G                  # (N_r*N_t, F)
+        # 1) Aggregate per-vertex across all RB/OFDM chunks
+        S_vertex = [[] for _ in range(self.N_v)]
+        Y_vertex = [[] for _ in range(self.N_v)]
 
-        # --------- (C) PREDICTION PHASE with the shared W_out ----------
+        for S_f_list, Y_f_list in zip(S_list, Y_list):
+            for v in range(self.N_v):
+                S_vertex[v].append(S_f_list[v])  # (F_v, T_chunk)
+                Y_vertex[v].append(Y_f_list[v])  # (n_rx_v*n_tx_v, T_chunk)
+
+        # 2) Concatenate along time axis for each vertex
+        S_all_per_v = [np.concatenate(S_vertex[v], axis=1) for v in range(self.N_v)]   # (F_v, sum_T_v)
+        Y_all_per_v = [np.concatenate(Y_vertex[v], axis=1) for v in range(self.N_v)]   # (n_rx_v*n_tx_v, sum_T_v)
+
+        # 3) Solve ridge per vertex
+        self.W_out_list = []
+        for v in range(self.N_v):
+            S_v = S_all_per_v[v]                     # (F_v, T_v)
+            Y_v = Y_all_per_v[v]                     # (n_rx_v*n_tx_v, T_v)
+            G_v = self.reg_p_inv(S_v)                # (T_v, F_v) := S_v^H (S_v S_v^H + λI)^(-1)
+            W_out_v = Y_v @ G_v                      # (n_rx_v*n_tx_v, F_v)
+            self.W_out_list.append(W_out_v.astype(self.dtype, copy=False))
+
+
+        # --------- (C) PREDICTION PHASE with per-vertex W_out ----------
+        chan_pred = np.squeeze(np.zeros(h_freq_csi_history[0, ...].shape, dtype=self.dtype))
+
         for freq_re in range(num_freq_res):
             for ofdm_sym in range(num_ofdm_syms):
-                # Use last known channel as test input; predict next step
-                channel_test_input = channel_train_gt[:, 0, tx_node, :, rx_node, :, freq_re, ofdm_sym]
+                # 1) Build per-vertex test inputs (use the last known sequence to predict next step)
+                channel_test_input_list, meta_test = self.extract_tx_rx_node_pairs_numpy(
+                    channel_train_gt[..., freq_re, ofdm_sym]
+                )  # list length N_v; each (T, n_rx_v, n_tx_v)
 
-                # Optional: either carry S_0 across RBs for smoothness,
-                # or reset it per RB. Start with reset; then try carry-over.
-                self.S_0 = np.zeros([self.d_left, self.d_right], dtype=self.dtype)
+                # Optional: continuity across RBs (comment these two lines to carry state)
+                self.S_0_rx = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+                self.S_0_tx = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
 
-                channel_pred_temp = self.test_train_predict(channel_test_input, curr_window_weights=None)
-                channel_pred_temp = channel_pred_temp[:, :, -1:]       # keep last step
-                channel_pred_temp = np.squeeze(channel_pred_temp)      # [N_r, N_t]
-                chan_pred[:, tx_node, :, rx_node, :, freq_re, ofdm_sym] = channel_pred_temp
+                # 2) Window & scale (same as training)
+                if self.enable_window:
+                    Y_3D_win_list = self.form_window_input_signal_list(channel_test_input_list, window_weights=None)
+                else:
+                    Y_3D_win_list = [arr.copy() for arr in channel_test_input_list]
+                Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
 
-                
+                # 3) Transit states → (T, N_v, 2*d_left*d_right)
+                S_3D_transit = self.state_transit(Y_3D_win_list, meta_test)
+                T_test = S_3D_transit.shape[0]
+                t_last = T_test - 1  # use the last column for next-step prediction
+
+                # 4) For each vertex: build feature S_v (F_v, T_test), predict, take last col
+                #    and stitch into a full [N_r, N_t] matrix
+                H_hat_full = np.zeros((self.N_r, self.N_t), dtype=self.dtype)
+
+                for v in range(self.N_v):
+                    # features
+                    S_transit_v = S_3D_transit[:, v, :]           # (T_test, 2*dL*dR)
+                    Yin_v = Y_3D_win_list[v]                      # (T_test, n_rx_v, L*n_tx_v)
+                    Yin_v_flat = Yin_v.reshape(T_test, -1)        # (T_test, n_rx_v * L*n_tx_v)
+                    S_v_time = np.concatenate([S_transit_v, Yin_v_flat], axis=-1)  # (T_test, F_v)
+                    S_v = S_v_time.T                               # (F_v, T_test)
+
+                    # predict per vertex
+                    W_out_v = self.W_out_list[v]                  # (n_rx_v*n_tx_v, F_v)
+                    Y_hat_v = W_out_v @ S_v                       # (n_rx_v*n_tx_v, T_test)
+
+                    # take next-step prediction from the last time column
+                    y_last = Y_hat_v[:, t_last]                   # (n_rx_v*n_tx_v,)
+                    entry = meta_test[v]
+                    rx_idx = entry["rx_ant_idx"]                  # list of rx antenna indices
+                    tx_idx = entry["tx_ant_idx"]                  # list of tx antenna indices
+                    n_rx_v = len(rx_idx)
+                    n_tx_v = len(tx_idx)
+                    H_v = y_last.reshape(n_rx_v, n_tx_v, order='C')
+
+                    # stitch block into full matrix
+                    H_hat_full[np.ix_(rx_idx, tx_idx)] = H_v
+
+                # 5) Write into your output tensor at the right slots
+                chan_pred[:, :, freq_re, ofdm_sym] = H_hat_full
+
+        # transpose back if you transposed earlier
+        chan_pred = chan_pred[np.newaxis, np.newaxis, :, np.newaxis, :, :, :]
         chan_pred = chan_pred.transpose([0,1,2,3,4,6,5])
         chan_pred = tf.convert_to_tensor(chan_pred)
+        
         return chan_pred
 
     def _node_slices(self, total_ant, first_node_ants=4, rest_node_ants=2):
@@ -214,10 +272,13 @@ class twomode_graph_wesn_pred:
         return pairs, meta
 
 
-    def build_S_Y(self, channel_input, channel_output, curr_window_weights):
+    def build_S_Y(self, channel_input, channel_output, meta_input, curr_window_weights):
         # channel_input, channel_output: [T, N_r, N_t]
         Y_3D_list = channel_input
         Y_target_3D_list = channel_output
+
+        # Compute adjacency matrices once per RE and per ofdm sym.
+        self.adjacency_tx, self.adjacency_rx = self.compute_eigenmode_adjacency_cov(Y_3D_list)
 
         if self.enable_window:
             Y_3D_win_list = self.form_window_input_signal_list(Y_3D_list, curr_window_weights)
@@ -228,13 +289,34 @@ class twomode_graph_wesn_pred:
             Y_3D_win = np.concatenate([Y_3D, np.zeros([Y_3D.shape[0], forget, Y_3D.shape[2]], dtype=self.dtype)], axis=1)
 
         Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
-        S_3D_transit = self.state_transit(Y_3D_win_list)
-        S_3D = np.concatenate([S_3D_transit, Y_3D_win], axis=-1)
+        S_3D_transit = self.state_transit(Y_3D_win_list, meta_input)
+        T = S_3D_transit.shape[0]
+        
+        S_list, Y_list = [], []
 
-        T = S_3D.shape[0]
-        S = np.column_stack([S_3D[t].reshape(-1, order='C') for t in range(T)])  # (feature_dim, T)
-        Y = np.column_stack([Y_target_3D[t].reshape(-1, order='C') for t in range(T)])  # (N_r*N_t, T)
-        return S, Y
+        for v in range(self.N_v):
+
+            # ---- features for vertex v ----
+            # S_3D_transit per-vertex slice: (T, 2*d_left*d_right)
+            S_transit_v = S_3D_transit[:, v, :]  # time-major
+
+            # Flatten windowed input for skip (varies with vertex dims)
+            Yin_v = Y_3D_win_list[v]                 # (T, n_rx_v, L*n_tx_v)
+            Yin_v_flat = Yin_v.reshape(T, -1)        # (T, n_rx_v * L*n_tx_v)
+
+            # Concatenate [state || skip] per time, then transpose to (F_v, T)
+            S_v_time_major = np.concatenate([S_transit_v, Yin_v_flat], axis=-1)  # (T, F_v)
+            S_v = S_v_time_major.T  # (F_v, T)
+            S_list.append(S_v.astype(self.dtype, copy=False))
+
+            # ---- targets for vertex v ----
+            # Use the GT block. Flatten per time, then transpose to (n_rx_v*n_tx_v, T)
+            Yv = Y_target_3D_list[v]                          # (T, n_rx_v, n_tx_v)
+            Yv_flat = Yv.reshape(T, -1, order='C')            # (T, n_rx_v*n_tx_v)
+            Y_v = Yv_flat.T                                   # (n_rx_v*n_tx_v, T)
+            Y_list.append(Y_v.astype(self.dtype, copy=False))
+
+        return S_list, Y_list
 
 
     def calculate_window_weights(self, h_freq_csi_history):
@@ -276,7 +358,7 @@ class twomode_graph_wesn_pred:
         return W
 
     def cal_nmse(self, H, H_hat):
-        H_hat = tf.cast(H_hat, dtype=H.dtype)
+        H_hat = tf.cast(H_hat, dtype=self.dtype)
         mse = np.sum(np.abs(H - H_hat) ** 2)
         normalization_factor = np.sum((np.abs(H) + np.abs(H_hat)) ** 2)
         nmse = mse / normalization_factor
@@ -390,25 +472,167 @@ class twomode_graph_wesn_pred:
 
         return curr_channel_pred
 
-    def state_transit(self, Y_3D_list):
+    def state_transit(self, Y_3D_list, meta):
 
         T = Y_3D_list[0].shape[0] # number of samples
 
         S_3D_rx = copy.deepcopy(self.S_0_rx)
         S_3D_tx = copy.deepcopy(self.S_0_tx)
+
+        S_3D = []
         
-        S_4D = []
         for t in range(T):
-            S_3D = []
+
+            step_features = []
+            neighbor_states_rx = [None] * self.N_v
+            neighbor_states_tx = [None] * self.N_v
+            for u in range(self.N_v):
+                W_N_left_idx = np.arange((u*self.d_left),(u+1)*self.d_left)
+                neighbor_states_rx[u] = self.W_N_left[:, W_N_left_idx] @ S_3D_rx[u, ...]   # (d_left, d_right)
+
+                W_N_right_idx = np.arange((u*self.d_right),(u+1)*self.d_right)
+                neighbor_states_tx[u] = S_3D_tx[u, ...] @ self.W_N_right[W_N_right_idx, :]   # (d_left, d_right)
+
             for v in range(self.N_v):
+                
+                entry = meta[v]
+                rx_idx = entry["rx_ant_idx"]
+                tx_idx = entry["tx_ant_idx"][-1]
+                prev_tx_idx = entry["tx_ant_idx"][0] * self.window_length
+                tx_idx = (tx_idx+1) * self.window_length
+                tx_idx = np.arange(prev_tx_idx, tx_idx)
+                prev_tx_idx = tx_idx[-1]+1
 
-                S_2D = self.complex_tanh(self.W_res_left @ S_2D @ self.W_res_right + self.W_in_left @ Y_3D[t,:,:] @ self.W_in_right)
-                S_3D.append(S_2D)
-            S_4D.append(np.stack(S_3D, axis=0))
+                input_contrib = self.W_in_left[:, rx_idx] @ Y_3D_list[v][t, ...] @ self.W_in_right[tx_idx, :]
 
-        S_4D = np.stack(S_4D, axis=0)
+                recurrent_contrib_rx = self.W_res_left @ S_3D_rx[v,...] @ self.W_res_right
+                recurrent_contrib_tx = self.W_res_left @ S_3D_tx[v,...] @ self.W_res_right
 
-        return S_4D
+                neighborhood_contrib_rx = np.zeros((self.d_left, self.d_right), dtype=self.dtype)
+                neighborhood_contrib_tx = np.zeros((self.d_left, self.d_right), dtype=self.dtype)
+                row_rx = self.adjacency_rx[v]
+                row_tx = self.adjacency_tx[v]
+                for u in range(self.N_v):
+                    w = row_rx[u]
+                    neighborhood_contrib_rx += w * neighbor_states_rx[u]
+                    w = row_tx[u]
+                    neighborhood_contrib_tx += w * neighbor_states_tx[u]
+
+                S_3D_rx[v,...] = self.complex_tanh(recurrent_contrib_rx + input_contrib + neighborhood_contrib_rx)
+                S_3D_tx[v,...] = self.complex_tanh(recurrent_contrib_tx + input_contrib + neighborhood_contrib_tx)
+
+                z_v = np.concatenate([S_3D_rx[v,...].reshape(-1), S_3D_tx[v,...].reshape(-1)], axis=0)
+                step_features.append(z_v)
+            
+            step_features = np.stack(step_features, axis=0)  # (N_v, 2*d_left*d_right)
+            S_3D.append(step_features)
+
+        S_3D = np.stack(S_3D, axis=0)  # (T, N_v, 2*d_left*d_right)
+
+        self.S_0_rx = S_3D_rx.copy()
+        self.S_0_tx = S_3D_tx.copy()
+
+        return S_3D
+    
+    # ------------------------------------------------------------------------------------
+    # Adjacency calculation
+    # ------------------------------------------------------------------------------------
+    def compute_eigenmode_adjacency_cov(
+        self,
+        channel_input,      # list of arrays, each (B, R_sel, T_sel)
+        subspace_rank_tx=2, # q_t
+        subspace_rank_rx=2, # q_r
+        shrinkage=0.0,
+        transpose_if_needed=False
+    ):
+        """
+        Covariance-based Tx/Rx subspace adjacency.
+
+        Uses top-q eigenvectors of time-averaged covariances.
+        If two subspaces have different row counts, the smaller is
+        zero-padded so both live in the same ambient dimension.
+        """
+
+        N_v = len(channel_input)
+        Tx_bases, Rx_bases = [], []
+
+        def pad_rows(Q, N_target):
+            """Zero-pad rows of Q (n x q) to (N_target x q)."""
+            n, q = Q.shape
+            if n == N_target:
+                return Q
+            Qp = np.zeros((N_target, q), dtype=Q.dtype)
+            Qp[:n, :] = Q
+            return Qp
+
+        for v in range(N_v):
+            Yv = channel_input[v]
+            if Yv.ndim != 3:
+                raise ValueError("Each list element must be 3D (B, R_sel, T_sel)")
+            if transpose_if_needed and Yv.shape[1] < Yv.shape[2]:
+                Yv = np.transpose(Yv, (0, 2, 1))
+
+            B, R_sel, T_sel = Yv.shape
+
+            # Empirical covariances
+            R_tx = np.zeros((T_sel, T_sel), dtype=np.complex64)
+            R_rx = np.zeros((R_sel, R_sel), dtype=np.complex64)
+            for b in range(B):
+                Hb = Yv[b]
+                R_tx += Hb.conj().T @ Hb
+                R_rx += Hb @ Hb.conj().T
+            R_tx /= max(B, 1)
+            R_rx /= max(B, 1)
+
+            if shrinkage > 0.0:
+                tr_tx = np.real(np.trace(R_tx)) / max(T_sel, 1)
+                tr_rx = np.real(np.trace(R_rx)) / max(R_sel, 1)
+                R_tx = (1.0 - shrinkage) * R_tx + shrinkage * tr_tx * np.eye(T_sel, dtype=R_tx.dtype)
+                R_rx = (1.0 - shrinkage) * R_rx + shrinkage * tr_rx * np.eye(R_sel, dtype=R_rx.dtype)
+
+            # Eigen-decomp, take top-q
+            eval_tx, evec_tx = np.linalg.eigh(R_tx)
+            eval_rx, evec_rx = np.linalg.eigh(R_rx)
+            idx_tx = np.argsort(eval_tx)[::-1]
+            idx_rx = np.argsort(eval_rx)[::-1]
+            q_t = min(subspace_rank_tx, T_sel)
+            q_r = min(subspace_rank_rx, R_sel)
+            Ut = evec_tx[:, idx_tx[:q_t]]
+            Ur = evec_rx[:, idx_rx[:q_r]]
+
+            # QR for safety
+            Ut, _ = np.linalg.qr(Ut)
+            Ur, _ = np.linalg.qr(Ur)
+
+            Tx_bases.append(Ut)
+            Rx_bases.append(Ur)
+
+        def subspace_affinity(Ua, Ub):
+            # Zero-pad to common row count if needed
+            n_a, q_a = Ua.shape
+            n_b, q_b = Ub.shape
+            n_max = max(n_a, n_b)
+            Ua_p = pad_rows(Ua, n_max)
+            Ub_p = pad_rows(Ub, n_max)
+            q = min(q_a, q_b)
+            if q == 0:
+                return 0.0
+            S = Ua_p.conj().T @ Ub_p
+            return float(np.minimum(1.0, np.linalg.norm(S, 'fro')**2 / q))
+
+        adj_tx = np.zeros((N_v, N_v), dtype=float)
+        adj_rx = np.zeros((N_v, N_v), dtype=float)
+        for v in range(N_v):
+            for u in range(N_v):
+                adj_tx[v, u] = subspace_affinity(Tx_bases[v], Tx_bases[u])
+                adj_rx[v, u] = subspace_affinity(Rx_bases[v], Rx_bases[u])
+
+        np.fill_diagonal(adj_tx, 1.0)
+        np.fill_diagonal(adj_rx, 1.0)
+        adj_tx = 0.5 * (adj_tx + adj_tx.T)
+        adj_rx = 0.5 * (adj_rx + adj_rx.T)
+        return adj_tx, adj_rx
+
 
     def complex_tanh(self, Y):
         return np.tanh(np.real(Y)) + 1j * np.tanh(np.imag(Y))
