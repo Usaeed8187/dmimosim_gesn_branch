@@ -16,3 +16,4 @@ from .kalman_pred_freq_dmimo import kalman_pred_freq_dmimo
 from .multimode_esn_pred import multimode_esn_pred
 from .twomode_wesn_pred import twomode_wesn_pred
 from .twomode_graph_wesn_pred import twomode_graph_wesn_pred
+from .twomode_graph_wesn_pred_v2 import twomode_graph_wesn_pred_v2
