@@ -7,7 +7,7 @@ from dmimo.channel import lmmse_channel_estimation
 
 class twomode_graph_wesn_pred_v2:
 
-    def __init__(self, rc_config, num_freq_re, num_rx_ant, num_tx_ant, type=np.complex64):
+    def __init__(self, rc_config, num_freq_re, num_rx_ant, num_tx_ant, adjacency_method=None, type=np.complex64):
         
         self.rc_config = rc_config
         self.ns3_config = Ns3Config()
@@ -25,6 +25,8 @@ class twomode_graph_wesn_pred_v2:
         self.reg = rc_config.regularization
         self.enable_window = rc_config.enable_window
         self.history_len = rc_config.history_len
+
+        self.adjacency_method = adjacency_method
 
         seed = 10
         self.RS = np.random.RandomState(seed)
@@ -48,6 +50,7 @@ class twomode_graph_wesn_pred_v2:
 
     def init_weights(self):
 
+        # TODO: try matching different vertex W_N's and W_ins to the different vertex input dimensions (Nr, Nt)
         matrices_left = []
         matrices_right = []
         for _ in range(self.N_v):
@@ -59,9 +62,6 @@ class twomode_graph_wesn_pred_v2:
         self.W_N_left = np.concatenate(matrices_left, axis=1)
         self.W_N_right = np.concatenate(matrices_right, axis=0)
         
-        self.W_res_left = self.sparse_mat(self.d_left)
-        self.W_res_right = self.sparse_mat(self.d_right)
-
         self.W_in_left = 2 * (self.RS.rand(self.d_left, self.N_in_left) - 0.5) # TODO: check if I should make this complex later
         self.W_in_right = 2 * (self.RS.rand(self.N_in_right, self.d_right) - 0.5) # TODO: check if I should make this complex later
 
@@ -111,7 +111,7 @@ class twomode_graph_wesn_pred_v2:
                 num_node_pairs = len(channel_train_gt_list)
 
                 # Optional: do NOT reset S_0 here if you want cross-RB continuity
-                self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+                # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
 
                 S_f_list, Y_f_list = self.build_S_Y(channel_train_input_list, channel_train_gt_list, meta_input, curr_window_weights=None)
                 S_list.append(S_f_list); Y_list.append(Y_f_list)
@@ -153,8 +153,10 @@ class twomode_graph_wesn_pred_v2:
                     channel_train_gt[..., freq_re, ofdm_sym]
                 )  # list length N_v; each (T, n_rx_v, n_tx_v)
 
+                self.adjacency = self.compute_eigenmode_adjacency_cov(channel_test_input_list)
+
                 # Optional: continuity across RBs (comment these two lines to carry state)
-                self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+                # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
 
                 # 2) Window & scale (same as training)
                 if self.enable_window:
@@ -267,7 +269,10 @@ class twomode_graph_wesn_pred_v2:
         Y_target_3D_list = channel_output
 
         # Compute adjacency matrices once per RE and per ofdm sym.
-        self.adjacency = self.compute_eigenmode_adjacency_cov(Y_3D_list)
+        if self.adjacency_method is None:
+            self.adjacency = self.compute_None_adjacency()
+        elif self.adjacency_method == 'eigenmode_cov':
+            self.adjacency = self.compute_eigenmode_adjacency_cov(Y_3D_list)
 
         if self.enable_window:
             Y_3D_win_list = self.form_window_input_signal_list(Y_3D_list, curr_window_weights)
@@ -491,7 +496,15 @@ class twomode_graph_wesn_pred_v2:
     # ------------------------------------------------------------------------------------
     # Adjacency calculation
     # ------------------------------------------------------------------------------------
-    def compute_eigenmode_adjacency_cov(
+    def compute_None_adjacency(self):
+
+        adj_None = np.zeros((self.N_v, self.N_v), dtype=float)
+        np.fill_diagonal(adj_None, 1.0)
+
+        return adj_None
+
+
+    def compute_eigenmode_adjacency_cov_v0(
         self,
         channel_input,      # list of arrays, each (B, R_sel, T_sel)
         subspace_rank_tx=2, # q_t
@@ -585,10 +598,169 @@ class twomode_graph_wesn_pred_v2:
         np.fill_diagonal(adj_rx, 1.0)
         adj_tx = 0.5 * (adj_tx + adj_tx.T)
         adj_rx = 0.5 * (adj_rx + adj_rx.T)
-
+        
         adj = (adj_rx + adj_tx) / 2
+
         return adj
 
+    def compute_eigenmode_adjacency_cov(
+        self,
+        channel_input,      # list of arrays, each (B, R_sel, T_sel)
+        subspace_rank_tx=2, # q_t
+        subspace_rank_rx=2, # q_r
+        shrinkage=0.0,
+        transpose_if_needed=False
+    ):
+        """
+        Covariance-based *joint* Tx/Rx subspace adjacency (Kronecker-space chordal affinity).
+
+        For each vertex v, estimate dominant Tx and Rx subspaces U_t[v] and U_r[v] from
+        time-averaged covariances R_tx, R_rx. The adjacency between vertices a,b is
+
+            A[a,b] = ( || U_r[a]^H U_r[b] ||_F^2 / q_r ) * ( || U_t[a]^H U_t[b] ||_F^2 / q_t )
+
+        which equals the normalized chordal affinity of the *joint* subspaces span(U_r ⊗ U_t)
+        without explicitly forming Kronecker products. Values are in [0,1], diagonal = 1,
+        and the result is symmetrized.
+
+        Args:
+            channel_input: list of length N_v; each item is array (B, R_sel, T_sel) of complex64
+                        mini-batches for that vertex/link.
+            subspace_rank_tx: q_t, target Tx subspace rank (capped by T_sel).
+            subspace_rank_rx: q_r, target Rx subspace rank (capped by R_sel).
+            shrinkage: scalar in [0,1]; if >0, apply diagonal shrinkage to covariances.
+            transpose_if_needed: if True and R_sel < T_sel, transpose per-batch matrices so
+                                that the "Rx" dimension is the larger one (keeps conventions).
+
+        Returns:
+            adj: (N_v, N_v) float64 numpy array with values in [0,1].
+        """
+        import numpy as np
+
+        N_v = len(channel_input)
+        Tx_bases, Rx_bases = [], []
+
+        def pad_rows(Q, N_target):
+            """Zero-pad rows of Q (n x q) to (N_target x q)."""
+            n, q = Q.shape
+            if n == N_target:
+                return Q
+            Qp = np.zeros((N_target, q), dtype=Q.dtype)
+            Qp[:n, :] = Q
+            return Qp
+
+        # --- Per-vertex subspace estimation ---
+        for v in range(N_v):
+            Yv = channel_input[v]
+            if Yv.ndim != 3:
+                raise ValueError("Each list element must be 3D (B, R_sel, T_sel)")
+            if transpose_if_needed and Yv.shape[1] < Yv.shape[2]:
+                Yv = np.transpose(Yv, (0, 2, 1))  # now (B, T_sel, R_sel); next lines adapt via shapes
+
+            B, dim1, dim2 = Yv.shape
+
+            # Interpret as (B, R_sel, T_sel) regardless of optional transpose
+            # If we transposed above, then dim1 is T_sel and dim2 is R_sel; swap back logically.
+            if transpose_if_needed and Yv.shape[1] > Yv.shape[2]:
+                R_sel, T_sel = dim2, dim1
+                # Build covariances by viewing Hb as (R_sel x T_sel) again:
+                R_tx = np.zeros((T_sel, T_sel), dtype=np.complex64)
+                R_rx = np.zeros((R_sel, R_sel), dtype=np.complex64)
+                for b in range(B):
+                    Hb = Yv[b].T  # (R_sel, T_sel)
+                    R_tx += Hb.conj().T @ Hb
+                    R_rx += Hb @ Hb.conj().T
+            else:
+                R_sel, T_sel = dim1, dim2
+                R_tx = np.zeros((T_sel, T_sel), dtype=np.complex64)
+                R_rx = np.zeros((R_sel, R_sel), dtype=np.complex64)
+                for b in range(B):
+                    Hb = Yv[b]  # (R_sel, T_sel)
+                    R_tx += Hb.conj().T @ Hb
+                    R_rx += Hb @ Hb.conj().T
+
+            R_tx /= max(B, 1)
+            R_rx /= max(B, 1)
+
+            if shrinkage > 0.0:
+                tr_tx = float(np.real(np.trace(R_tx))) / max(T_sel, 1)
+                tr_rx = float(np.real(np.trace(R_rx))) / max(R_sel, 1)
+                R_tx = (1.0 - shrinkage) * R_tx + shrinkage * tr_tx * np.eye(T_sel, dtype=R_tx.dtype)
+                R_rx = (1.0 - shrinkage) * R_rx + shrinkage * tr_rx * np.eye(R_sel, dtype=R_rx.dtype)
+
+            # Eigen-decomp (Hermitian), take top-q
+            eval_tx, evec_tx = np.linalg.eigh(R_tx)
+            eval_rx, evec_rx = np.linalg.eigh(R_rx)
+            idx_tx = np.argsort(eval_tx)[::-1]
+            idx_rx = np.argsort(eval_rx)[::-1]
+            q_t = max(0, min(subspace_rank_tx, T_sel))
+            q_r = max(0, min(subspace_rank_rx, R_sel))
+            Ut = evec_tx[:, idx_tx[:q_t]] if q_t > 0 else np.zeros((T_sel, 0), dtype=R_tx.dtype)
+            Ur = evec_rx[:, idx_rx[:q_r]] if q_r > 0 else np.zeros((R_sel, 0), dtype=R_rx.dtype)
+
+            # QR for numerical stability (keeps orthonormal columns)
+            if q_t > 0:
+                Ut, _ = np.linalg.qr(Ut)
+            if q_r > 0:
+                Ur, _ = np.linalg.qr(Ur)
+
+            Tx_bases.append(Ut)  # (T_sel x q_t)
+            Rx_bases.append(Ur)  # (R_sel x q_r)
+
+        # --- Joint subspace chordal affinity via product of Tx/Rx overlaps ---
+        def joint_affinity(Ur_a, Ut_a, Ur_b, Ut_b):
+            """
+            A_ab = (||Ur_a^H Ur_b||_F^2 / q_r) * (||Ut_a^H Ut_b||_F^2 / q_t),
+            with row-padding if needed.
+            """
+            # Handle empty subspaces
+            q_r_a = Ur_a.shape[1]
+            q_r_b = Ur_b.shape[1]
+            q_t_a = Ut_a.shape[1]
+            q_t_b = Ut_b.shape[1]
+            q_r = min(q_r_a, q_r_b)
+            q_t = min(q_t_a, q_t_b)
+            if q_r == 0 or q_t == 0:
+                return 0.0
+
+            # Pad rows if antenna counts differ
+            n_r = max(Ur_a.shape[0], Ur_b.shape[0])
+            n_t = max(Ut_a.shape[0], Ut_b.shape[0])
+            if Ur_a.shape[0] != n_r: Ur_a = pad_rows(Ur_a, n_r)
+            if Ur_b.shape[0] != n_r: Ur_b = pad_rows(Ur_b, n_r)
+            if Ut_a.shape[0] != n_t: Ut_a = pad_rows(Ut_a, n_t)
+            if Ut_b.shape[0] != n_t: Ut_b = pad_rows(Ut_b, n_t)
+
+            # Compute Frobenius norms of overlap matrices
+            Sr = Ur_a.conj().T @ Ur_b          # (q_r_a x q_r_b)
+            St = Ut_a.conj().T @ Ut_b          # (q_t_a x q_t_b)
+
+            # Use only the leading min-dim blocks to normalize by q_r, q_t fairly
+            Sr_eff = Sr[:q_r, :q_r]
+            St_eff = St[:q_t, :q_t]
+
+            num_r = np.linalg.norm(Sr_eff, 'fro')**2
+            num_t = np.linalg.norm(St_eff, 'fro')**2
+
+            # Normalize to [0,1] individually, then multiply (equivalent to Kronecker chordal)
+            ar = float(num_r / max(q_r, 1))
+            at = float(num_t / max(q_t, 1))
+            val = ar * at
+            # Numerical safety
+            if not np.isfinite(val):
+                val = 0.0
+            return float(np.clip(val, 0.0, 1.0))
+
+        adj = np.zeros((N_v, N_v), dtype=np.float64)
+        for a in range(N_v):
+            for b in range(N_v):
+                adj[a, b] = joint_affinity(Rx_bases[a], Tx_bases[a], Rx_bases[b], Tx_bases[b])
+
+        # Force symmetry and self-loops
+        adj = 0.5 * (adj + adj.T)
+        np.fill_diagonal(adj, 1.0)
+
+        return adj
 
     def complex_tanh(self, Y):
         return np.tanh(np.real(Y)) + 1j * np.tanh(np.imag(Y))
