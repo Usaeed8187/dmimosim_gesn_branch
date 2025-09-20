@@ -299,11 +299,6 @@ class twomode_graph_wesn_pred_v2:
         Y_3D_list = channel_input
         Y_target_3D_list = channel_output
 
-        # Compute adjacency matrices once per RE and per ofdm sym.
-        # if self.adjacency_method is None:
-        #     adjacency_init = self.compute_None_adjacency()
-        # elif self.adjacency_method == 'eigenmode_cov':
-        #     adjacency_init = self.compute_eigenmode_adjacency_cov(Y_3D_list)
 
         if self.enable_window:
             Y_3D_win_list = self.form_window_input_signal_list(Y_3D_list, curr_window_weights)
@@ -314,15 +309,6 @@ class twomode_graph_wesn_pred_v2:
             
         Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
 
-        # if self.edge_weight_update_method == 'grad_descent' and self.num_epochs > 0:
-        #     self.adjacency = self.optimize_adjacency_grad_descent(
-        #         Y_3D_win_list,
-        #         Y_target_3D_list,
-        #         meta_input,
-        #         adjacency_init,
-        #     )
-        # else:
-        #     self.adjacency = adjacency_init.astype(np.float32, copy=False)
 
         S_3D_transit = self.state_transit(Y_3D_win_list, meta_input)
         T = S_3D_transit.shape[0]
@@ -877,7 +863,6 @@ class twomode_graph_wesn_pred_v2:
     def _compute_training_loss_tf(self, h_freq_csi_history):
         
         if tf.rank(h_freq_csi_history).numpy() == 8:
-            h_freq_csi_history = np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6])
             T = h_freq_csi_history.shape[0]
             num_batches = h_freq_csi_history.shape[1]
             num_rx_nodes = h_freq_csi_history.shape[2]
@@ -1000,7 +985,7 @@ class twomode_graph_wesn_pred_v2:
                 # 5) Write into your output tensor at the right slots
                 chan_pred[:, :, freq_re, ofdm_sym] = H_hat_full
 
-        loss = self.cal_nmse_tf(h_freq_csi_history[-1, ...], chan_pred)
+        loss = self.cal_nmse_tf(np.squeeze(h_freq_csi_history[-1, ...]), chan_pred)
 
         return loss
 
