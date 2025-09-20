@@ -107,13 +107,13 @@ class twomode_graph_wesn_pred_v2:
         else:
             raise ValueError("\n The dimensions of h_freq_csi_history are not correct")
 
+        self.adjacency = self.cal_adjacency(h_freq_csi_history)
+
         channel_train_input = h_freq_csi_history[:-1, ...]
         channel_train_gt    = h_freq_csi_history[1:,  ...]
         
         if not self.enable_window:
             window_weights = None
-
-        chan_pred = np.zeros(h_freq_csi_history[0,...].shape, dtype=self.dtype)
 
         S_list, Y_list = [], []
 
@@ -126,7 +126,6 @@ class twomode_graph_wesn_pred_v2:
                 # The lists loop over tx nodes first and rx nodes second
                 channel_train_input_list, meta_input = self.extract_tx_rx_node_pairs_numpy(channel_train_input[..., freq_re, ofdm_sym])
                 channel_train_gt_list, meta_gt = self.extract_tx_rx_node_pairs_numpy(channel_train_gt[..., freq_re, ofdm_sym])
-                num_node_pairs = len(channel_train_gt_list)
 
                 # Optional: do NOT reset S_0 here if you want cross-RB continuity
                 # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
@@ -170,11 +169,6 @@ class twomode_graph_wesn_pred_v2:
                 channel_test_input_list, meta_test = self.extract_tx_rx_node_pairs_numpy(
                     channel_train_gt[..., freq_re, ofdm_sym]
                 )  # list length N_v; each (T, n_rx_v, n_tx_v)
-
-                if self.adjacency_method is None:
-                    self.adjacency = self.compute_None_adjacency()
-                elif self.adjacency_method == 'eigenmode_cov':
-                    adjacency_init = self.compute_eigenmode_adjacency_cov(channel_test_input_list)
 
                 # Optional: continuity across RBs (comment these two lines to carry state)
                 # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
@@ -228,6 +222,22 @@ class twomode_graph_wesn_pred_v2:
         chan_pred = tf.convert_to_tensor(chan_pred)
         
         return chan_pred
+
+    def cal_adjacency(self, h_freq_csi_history):
+
+        if self.adjacency_method is None:
+            adjacency_init = self.compute_None_adjacency()
+        elif self.adjacency_method == 'eigenmode_cov':
+            raise ValueError("not implemented here yet")
+        
+        if self.edge_weight_update_method == 'grad_descent' and self.num_epochs > 0:
+            self.adjacency = self.optimize_adjacency_grad_descent(
+                h_freq_csi_history,
+                adjacency_init,
+            )
+        else:
+            self.adjacency = adjacency_init.astype(np.float32, copy=False)
+        
 
     def _node_slices(self, total_ant, first_node_ants=4, rest_node_ants=2):
         """Return a list of index arrays, one per node, covering `total_ant` antennas."""
@@ -290,10 +300,10 @@ class twomode_graph_wesn_pred_v2:
         Y_target_3D_list = channel_output
 
         # Compute adjacency matrices once per RE and per ofdm sym.
-        if self.adjacency_method is None:
-            adjacency_init = self.compute_None_adjacency()
-        elif self.adjacency_method == 'eigenmode_cov':
-            adjacency_init = self.compute_eigenmode_adjacency_cov(Y_3D_list)
+        # if self.adjacency_method is None:
+        #     adjacency_init = self.compute_None_adjacency()
+        # elif self.adjacency_method == 'eigenmode_cov':
+        #     adjacency_init = self.compute_eigenmode_adjacency_cov(Y_3D_list)
 
         if self.enable_window:
             Y_3D_win_list = self.form_window_input_signal_list(Y_3D_list, curr_window_weights)
@@ -304,15 +314,15 @@ class twomode_graph_wesn_pred_v2:
             
         Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
 
-        if self.edge_weight_update_method == 'grad_descent' and self.num_epochs > 0:
-            self.adjacency = self.optimize_adjacency_grad_descent(
-                Y_3D_win_list,
-                Y_target_3D_list,
-                meta_input,
-                adjacency_init,
-            )
-        else:
-            self.adjacency = adjacency_init.astype(np.float32, copy=False)
+        # if self.edge_weight_update_method == 'grad_descent' and self.num_epochs > 0:
+        #     self.adjacency = self.optimize_adjacency_grad_descent(
+        #         Y_3D_win_list,
+        #         Y_target_3D_list,
+        #         meta_input,
+        #         adjacency_init,
+        #     )
+        # else:
+        #     self.adjacency = adjacency_init.astype(np.float32, copy=False)
 
         S_3D_transit = self.state_transit(Y_3D_win_list, meta_input)
         T = S_3D_transit.shape[0]
@@ -794,7 +804,10 @@ class twomode_graph_wesn_pred_v2:
 
         return adj
     
-    def optimize_adjacency_grad_descent(self, Y_inputs, Y_targets, meta_input, adjacency_init):
+    def optimize_adjacency_grad_descent(self, h_freq_csi_history, adjacency_init):
+        
+        # Y_inputs, Y_targets, meta_input
+
         if self.num_epochs <= 0:
             return adjacency_init.astype(np.float32, copy=False)
 
@@ -805,23 +818,13 @@ class twomode_graph_wesn_pred_v2:
         adjacency_var = tf.Variable(lower_initial, dtype=tf.float32)
         optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
 
-        Y_inputs_tf = [tf.convert_to_tensor(arr, dtype=self.tf_dtype) for arr in Y_inputs]
-        Y_targets_tf = [tf.convert_to_tensor(arr, dtype=self.tf_dtype) for arr in Y_targets]
-        W_in_left_slices, W_in_right_slices = self._prepare_vertex_slices(meta_input)
-
         best_loss = np.inf
         best_weights = lower_initial.copy()
 
         for curr_epoch in range(self.num_epochs):
             with tf.GradientTape() as tape:
-                adjacency_matrix = self._build_adjacency_matrix_from_weights(adjacency_var)
-                loss = self._compute_training_loss_tf(
-                    Y_inputs_tf,
-                    Y_targets_tf,
-                    W_in_left_slices,
-                    W_in_right_slices,
-                    adjacency_matrix,
-                )
+                self.adjacency = self._build_adjacency_matrix_from_weights(adjacency_var)
+                loss = self._compute_training_loss_tf(h_freq_csi_history)
 
             gradients = tape.gradient(loss, adjacency_var)
             if gradients is None:
@@ -871,19 +874,135 @@ class twomode_graph_wesn_pred_v2:
         return adjacency
 
 
-    def _compute_training_loss_tf(self, Y_inputs_tf, Y_targets_tf, W_in_left_slices, W_in_right_slices, adjacency_matrix):
-        S_3D_transit = self.state_transit_tf(
-            Y_inputs_tf,
-            W_in_left_slices,
-            W_in_right_slices,
-            adjacency_matrix,
-        )
-        target_vec, pred_vec = self._predict_from_states_tf(
-            S_3D_transit,
-            Y_inputs_tf,
-            Y_targets_tf,
-        )
-        return self.cal_nmse_tf(target_vec, pred_vec)
+    def _compute_training_loss_tf(self, h_freq_csi_history):
+        
+        if tf.rank(h_freq_csi_history).numpy() == 8:
+            h_freq_csi_history = np.asarray(h_freq_csi_history).transpose([0,1,2,3,4,5,7,6])
+            T = h_freq_csi_history.shape[0]
+            num_batches = h_freq_csi_history.shape[1]
+            num_rx_nodes = h_freq_csi_history.shape[2]
+            num_rx_antennas = h_freq_csi_history.shape[3]
+            num_tx_nodes = h_freq_csi_history.shape[4]
+            num_tx_antennas = h_freq_csi_history.shape[5]
+            num_freq_res = h_freq_csi_history.shape[6]
+            num_ofdm_syms = h_freq_csi_history.shape[7]
+        else:
+            raise ValueError("\n The dimensions of h_freq_csi_history are not correct")
+        
+        channel_train_input = h_freq_csi_history[:-2, ...]
+        channel_train_gt    = h_freq_csi_history[1:T-1,  ...]
+
+        if not self.enable_window:
+            window_weights = None
+
+        S_list, Y_list = [], []
+
+        # --------- (A) FEATURE BUILD PHASE: stack all RBs (and OFDM syms) ----------
+        for freq_re in range(num_freq_res):
+            for ofdm_sym in range(num_ofdm_syms):
+
+                # Form lists of inputs and labels. 
+                # Each element in the list corresponds to a tx-rx node pair. 
+                # The lists loop over tx nodes first and rx nodes second
+                channel_train_input_list, meta_input = self.extract_tx_rx_node_pairs_numpy(channel_train_input[..., freq_re, ofdm_sym])
+                channel_train_gt_list, meta_gt = self.extract_tx_rx_node_pairs_numpy(channel_train_gt[..., freq_re, ofdm_sym])
+
+                # Optional: do NOT reset S_0 here if you want cross-RB continuity
+                # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+
+                S_f_list, Y_f_list = self.build_S_Y(channel_train_input_list, channel_train_gt_list, meta_input, curr_window_weights=None)
+                S_list.append(S_f_list); Y_list.append(Y_f_list)
+        
+        # S_list: list over RB/OFDM; each item is S_f_list (length N_v) where S_f_list[v] is (F_v, T_chunk). 
+        # Y_list: same structure; Y_f_list[v] is (n_rx_v*n_tx_v, T_chunk)
+        # Note: F_v = n_rx_v * L*n_tx_v + self.d_left*self.d_right
+
+        # 1) Aggregate per-vertex across all RB/OFDM chunks
+        S_vertex = [[] for _ in range(self.N_v)]
+        Y_vertex = [[] for _ in range(self.N_v)]
+
+        for S_f_list, Y_f_list in zip(S_list, Y_list):
+            for v in range(self.N_v):
+                S_vertex[v].append(S_f_list[v])  # (F_v, T_chunk)
+                Y_vertex[v].append(Y_f_list[v])  # (n_rx_v*n_tx_v, T_chunk)
+
+        # 2) Concatenate along time axis for each vertex
+        S_all_per_v = [np.concatenate(S_vertex[v], axis=1) for v in range(self.N_v)]   # (F_v, sum_T_v)
+        Y_all_per_v = [np.concatenate(Y_vertex[v], axis=1) for v in range(self.N_v)]   # (n_rx_v*n_tx_v, sum_T_v)
+
+        # 3) Solve ridge per vertex
+        self.W_out_list = []
+        for v in range(self.N_v):
+            S_v = S_all_per_v[v]                     # (F_v, T_v)
+            Y_v = Y_all_per_v[v]                     # (n_rx_v*n_tx_v, T_v)
+            G_v = self.reg_p_inv(S_v)                # (T_v, F_v) := S_v^H (S_v S_v^H + λI)^(-1)
+            W_out_v = Y_v @ G_v                      # (n_rx_v*n_tx_v, F_v)
+            self.W_out_list.append(W_out_v.astype(self.dtype, copy=False))
+
+        
+
+
+
+
+
+        chan_pred = np.squeeze(np.zeros(h_freq_csi_history[0, ...].shape, dtype=self.dtype))
+
+        for freq_re in range(num_freq_res):
+            for ofdm_sym in range(num_ofdm_syms):
+                # 1) Build per-vertex test inputs (use the last known sequence to predict next step)
+                channel_test_input_list, meta_test = self.extract_tx_rx_node_pairs_numpy(
+                    channel_train_gt[..., freq_re, ofdm_sym]
+                )  # list length N_v; each (T, n_rx_v, n_tx_v)
+
+                # Optional: continuity across RBs (comment these two lines to carry state)
+                # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+
+                # 2) Window & scale (same as training)
+                if self.enable_window:
+                    Y_3D_win_list = self.form_window_input_signal_list(channel_test_input_list, window_weights=None)
+                else:
+                    Y_3D_win_list = [arr.copy() for arr in channel_test_input_list]
+                Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
+
+                # 3) Transit states → (T, N_v, d_left*d_right)
+                S_3D_transit = self.state_transit(Y_3D_win_list, meta_test)
+                T_test = S_3D_transit.shape[0]
+                t_last = T_test - 1  # use the last column for next-step prediction
+
+                # 4) For each vertex: build feature S_v (F_v, T_test), predict, take last col
+                #    and stitch into a full [N_r, N_t] matrix
+                H_hat_full = np.zeros((self.N_r, self.N_t), dtype=self.dtype)
+
+                for v in range(self.N_v):
+                    # features
+                    S_transit_v = S_3D_transit[:, v, :]           # (T_test, 2*dL*dR)
+                    Yin_v = Y_3D_win_list[v]                      # (T_test, n_rx_v, L*n_tx_v)
+                    Yin_v_flat = Yin_v.reshape(T_test, -1)        # (T_test, n_rx_v * L*n_tx_v)
+                    S_v_time = np.concatenate([S_transit_v, Yin_v_flat], axis=-1)  # (T_test, F_v)
+                    S_v = S_v_time.T                               # (F_v, T_test)
+
+                    # predict per vertex
+                    W_out_v = self.W_out_list[v]                  # (n_rx_v*n_tx_v, F_v)
+                    Y_hat_v = W_out_v @ S_v                       # (n_rx_v*n_tx_v, T_test)
+
+                    # take next-step prediction from the last time column
+                    y_last = Y_hat_v[:, t_last]                   # (n_rx_v*n_tx_v,)
+                    entry = meta_test[v]
+                    rx_idx = entry["rx_ant_idx"]                  # list of rx antenna indices
+                    tx_idx = entry["tx_ant_idx"]                  # list of tx antenna indices
+                    n_rx_v = len(rx_idx)
+                    n_tx_v = len(tx_idx)
+                    H_v = y_last.reshape(n_rx_v, n_tx_v, order='C')
+
+                    # stitch block into full matrix
+                    H_hat_full[np.ix_(rx_idx, tx_idx)] = H_v
+
+                # 5) Write into your output tensor at the right slots
+                chan_pred[:, :, freq_re, ofdm_sym] = H_hat_full
+
+        loss = self.cal_nmse_tf(h_freq_csi_history[-1, ...], chan_pred)
+
+        return loss
 
 
     def _predict_from_states_tf(self, S_3D_transit, Y_inputs_tf, Y_targets_tf):
