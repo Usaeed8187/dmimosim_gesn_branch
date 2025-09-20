@@ -339,7 +339,7 @@ class MU_MIMO(Model):
                                                  num_freq_re=RB, 
                                                  num_rx_ant=RxAnt, 
                                                  num_tx_ant=TxAnt,
-                                                 adjacency_method='eigenmode_cov'
+                                                #  adjacency_method='eigenmode_cov'
                                                 )
             h_freq_csi_graph_twomode = graph_twomode_predictor.predict(h_freq_csi_history)
             pred_nmse_graph_twomode_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_graph_twomode[0,...])

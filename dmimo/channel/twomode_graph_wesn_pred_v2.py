@@ -13,6 +13,7 @@ class twomode_graph_wesn_pred_v2:
         self.ns3_config = Ns3Config()
 
         self.dtype = type
+        self.tf_dtype = tf.as_dtype(self.dtype)
 
         self.num_freq_re = num_freq_re
         self.N_r = num_rx_ant
@@ -26,6 +27,10 @@ class twomode_graph_wesn_pred_v2:
         self.enable_window = rc_config.enable_window
         self.history_len = rc_config.history_len
 
+        self.num_epochs = getattr(rc_config, "num_epochs", 0)
+        self.learning_rate = getattr(rc_config, "lr", 0.1)
+        self.edge_weight_update_method = getattr(rc_config, "edge_weight_update_method", "grad_descent")
+
         self.adjacency_method = adjacency_method
 
         seed = 10
@@ -36,6 +41,11 @@ class twomode_graph_wesn_pred_v2:
         self.num_rx_nodes = int((self.N_r - self.ns3_config.num_bs_ant)  / self.ns3_config.num_ue_ant) + 1
         self.N_v = self.num_rx_nodes * self.num_tx_nodes # number of vertices in the graph
         self.N_e = int((self.N_v*(self.N_v-1))/2) # number of edges in the graph (at most. some of them will be zeroed out)
+
+        lower_tri = np.tril_indices(self.N_v, k=-1)
+        self.lower_tri_indices = np.stack(lower_tri, axis=1).astype(np.int32)
+        self.num_adjacency_edges = lower_tri[0].size
+        self.lower_tri_indices_tf = tf.constant(self.lower_tri_indices, dtype=tf.int32)
 
         self.N_in_left = self.N_r
         if self.enable_window:
@@ -66,6 +76,14 @@ class twomode_graph_wesn_pred_v2:
         self.W_in_right = 2 * (self.RS.rand(self.N_in_right, self.d_right) - 0.5) # TODO: check if I should make this complex later
 
         self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+
+        W_left_blocks = [self.W_N_left[:, i*self.d_left:(i+1)*self.d_left] for i in range(self.N_v)]
+        W_right_blocks = [self.W_N_right[i*self.d_right:(i+1)*self.d_right, :] for i in range(self.N_v)]
+        self.W_N_left_blocks_tf = tf.constant(np.stack(W_left_blocks, axis=0).astype(self.dtype), dtype=self.tf_dtype)
+        self.W_N_right_blocks_tf = tf.constant(np.stack(W_right_blocks, axis=0).astype(self.dtype), dtype=self.tf_dtype)
+
+        self.W_in_left_tf = tf.cast(tf.constant(self.W_in_left, dtype=tf.float32), self.tf_dtype)
+        self.W_in_right_tf = tf.cast(tf.constant(self.W_in_right, dtype=tf.float32), self.tf_dtype)
     
     def predict(self, h_freq_csi_history):
 
@@ -153,7 +171,10 @@ class twomode_graph_wesn_pred_v2:
                     channel_train_gt[..., freq_re, ofdm_sym]
                 )  # list length N_v; each (T, n_rx_v, n_tx_v)
 
-                self.adjacency = self.compute_eigenmode_adjacency_cov(channel_test_input_list)
+                if self.adjacency_method is None:
+                    self.adjacency = self.compute_None_adjacency()
+                elif self.adjacency_method == 'eigenmode_cov':
+                    adjacency_init = self.compute_eigenmode_adjacency_cov(channel_test_input_list)
 
                 # Optional: continuity across RBs (comment these two lines to carry state)
                 # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
@@ -270,9 +291,9 @@ class twomode_graph_wesn_pred_v2:
 
         # Compute adjacency matrices once per RE and per ofdm sym.
         if self.adjacency_method is None:
-            self.adjacency = self.compute_None_adjacency()
+            adjacency_init = self.compute_None_adjacency()
         elif self.adjacency_method == 'eigenmode_cov':
-            self.adjacency = self.compute_eigenmode_adjacency_cov(Y_3D_list)
+            adjacency_init = self.compute_eigenmode_adjacency_cov(Y_3D_list)
 
         if self.enable_window:
             Y_3D_win_list = self.form_window_input_signal_list(Y_3D_list, curr_window_weights)
@@ -280,8 +301,19 @@ class twomode_graph_wesn_pred_v2:
             # TODO: not adapted to twomode input yet
             forget = getattr(self, "forget_length", 0)
             Y_3D_win = np.concatenate([Y_3D, np.zeros([Y_3D.shape[0], forget, Y_3D.shape[2]], dtype=self.dtype)], axis=1)
-
+            
         Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
+
+        if self.edge_weight_update_method == 'grad_descent' and self.num_epochs > 0:
+            self.adjacency = self.optimize_adjacency_grad_descent(
+                Y_3D_win_list,
+                Y_target_3D_list,
+                meta_input,
+                adjacency_init,
+            )
+        else:
+            self.adjacency = adjacency_init.astype(np.float32, copy=False)
+
         S_3D_transit = self.state_transit(Y_3D_win_list, meta_input)
         T = S_3D_transit.shape[0]
         
@@ -761,6 +793,181 @@ class twomode_graph_wesn_pred_v2:
         np.fill_diagonal(adj, 1.0)
 
         return adj
+    
+    def optimize_adjacency_grad_descent(self, Y_inputs, Y_targets, meta_input, adjacency_init):
+        if self.num_epochs <= 0:
+            return adjacency_init.astype(np.float32, copy=False)
+
+        lower_initial = adjacency_init[np.tril_indices(self.N_v, k=-1)].astype(np.float32, copy=False)
+        if not np.any(lower_initial):
+            lower_initial = lower_initial + 1e-2
+
+        adjacency_var = tf.Variable(lower_initial, dtype=tf.float32)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+
+        Y_inputs_tf = [tf.convert_to_tensor(arr, dtype=self.tf_dtype) for arr in Y_inputs]
+        Y_targets_tf = [tf.convert_to_tensor(arr, dtype=self.tf_dtype) for arr in Y_targets]
+        W_in_left_slices, W_in_right_slices = self._prepare_vertex_slices(meta_input)
+
+        best_loss = np.inf
+        best_weights = lower_initial.copy()
+
+        for curr_epoch in range(self.num_epochs):
+            with tf.GradientTape() as tape:
+                adjacency_matrix = self._build_adjacency_matrix_from_weights(adjacency_var)
+                loss = self._compute_training_loss_tf(
+                    Y_inputs_tf,
+                    Y_targets_tf,
+                    W_in_left_slices,
+                    W_in_right_slices,
+                    adjacency_matrix,
+                )
+
+            gradients = tape.gradient(loss, adjacency_var)
+            if gradients is None:
+                break
+
+            optimizer.apply_gradients([(gradients, adjacency_var)])
+            adjacency_var.assign(tf.clip_by_value(adjacency_var, 0.0, 5.0))
+
+            curr_loss = float(loss.numpy())
+            print(f"Epoch {curr_epoch+1}/{self.num_epochs}, Loss: {curr_loss:.6f}")
+
+            if curr_loss < best_loss:
+                best_loss = curr_loss
+                best_weights = adjacency_var.numpy()
+
+        optimized_adjacency = self._build_adjacency_matrix_from_weights(
+            tf.constant(best_weights, dtype=tf.float32)
+        )
+        
+        return optimized_adjacency.numpy().astype(np.float32, copy=False)
+
+    def _prepare_vertex_slices(self, meta_input):
+        W_in_left_slices = []
+        W_in_right_slices = []
+        for entry in meta_input:
+            rx_idx = tf.constant(entry["rx_ant_idx"], dtype=tf.int32)
+            tx_idx_list = entry["tx_ant_idx"]
+            if not tx_idx_list:
+                raise ValueError("Empty tx index list in meta input")
+            start = tx_idx_list[0] * self.window_length
+            end = (tx_idx_list[-1] + 1) * self.window_length
+            tx_idx = tf.constant(np.arange(start, end, dtype=np.int32), dtype=tf.int32)
+            W_in_left_slices.append(tf.gather(self.W_in_left_tf, rx_idx, axis=1))
+            W_in_right_slices.append(tf.gather(self.W_in_right_tf, tx_idx, axis=0))
+        return W_in_left_slices, W_in_right_slices
+
+
+    def _build_adjacency_matrix_from_weights(self, weights):
+        adjacency = tf.zeros((self.N_v, self.N_v), dtype=tf.float32)
+        adjacency = tf.tensor_scatter_nd_update(adjacency, self.lower_tri_indices_tf, weights)
+        adjacency = adjacency + tf.transpose(adjacency)
+        adjacency = tf.nn.relu(adjacency)
+        adjacency = tf.linalg.set_diag(adjacency, tf.zeros(self.N_v, dtype=tf.float32))
+        adjacency = tf.math.divide_no_nan(adjacency, tf.reduce_max(adjacency) + 1e-6)
+        adjacency = 0.5 * (adjacency + tf.transpose(adjacency))
+        adjacency = tf.linalg.set_diag(adjacency, tf.ones(self.N_v, dtype=tf.float32))
+        return adjacency
+
+
+    def _compute_training_loss_tf(self, Y_inputs_tf, Y_targets_tf, W_in_left_slices, W_in_right_slices, adjacency_matrix):
+        S_3D_transit = self.state_transit_tf(
+            Y_inputs_tf,
+            W_in_left_slices,
+            W_in_right_slices,
+            adjacency_matrix,
+        )
+        target_vec, pred_vec = self._predict_from_states_tf(
+            S_3D_transit,
+            Y_inputs_tf,
+            Y_targets_tf,
+        )
+        return self.cal_nmse_tf(target_vec, pred_vec)
+
+
+    def _predict_from_states_tf(self, S_3D_transit, Y_inputs_tf, Y_targets_tf):
+        predictions_flat = []
+        targets_flat = []
+        T = tf.shape(S_3D_transit)[0]
+
+        for v in range(self.N_v):
+            S_transit_v = S_3D_transit[:, v, :]
+            Yin_v_flat = tf.reshape(Y_inputs_tf[v], (T, -1))
+            S_v_time = tf.concat([S_transit_v, Yin_v_flat], axis=-1)
+            S_v = tf.transpose(S_v_time)
+
+            target_v = tf.reshape(Y_targets_tf[v], (T, -1))
+            Y_v = tf.transpose(target_v)
+
+            W_out_v = tf.matmul(Y_v, self.reg_p_inv_tf(S_v))
+            Y_hat_v = tf.matmul(W_out_v, S_v)
+
+            predictions_flat.append(tf.reshape(tf.transpose(Y_hat_v), [-1]))
+            targets_flat.append(tf.reshape(tf.transpose(Y_v), [-1]))
+
+        pred_all = tf.concat(predictions_flat, axis=0)
+        target_all = tf.concat(targets_flat, axis=0)
+        return target_all, pred_all
+
+
+    def state_transit_tf(self, Y_inputs_tf, W_in_left_slices, W_in_right_slices, adjacency_matrix):
+        T = Y_inputs_tf[0].shape[0]
+        S_prev = tf.zeros((self.N_v, self.d_left, self.d_right), dtype=self.tf_dtype)
+        states_over_time = []
+
+        adjacency_complex = tf.cast(adjacency_matrix, self.tf_dtype)
+
+        for t in range(T):
+            neighbor_states = []
+            for u in range(self.N_v):
+                state_u = S_prev[u, ...]
+                transformed = tf.matmul(self.W_N_left_blocks_tf[u], state_u)
+                transformed = tf.matmul(transformed, self.W_N_right_blocks_tf[u])
+                neighbor_states.append(transformed)
+            neighbor_states = tf.stack(neighbor_states, axis=0)
+
+            new_states = []
+            step_features = []
+            for v in range(self.N_v):
+                input_contrib = tf.matmul(
+                    tf.matmul(W_in_left_slices[v], Y_inputs_tf[v][t, ...]),
+                    W_in_right_slices[v],
+                )
+                weights = adjacency_complex[v, :]
+                neighborhood_contrib = tf.tensordot(weights, neighbor_states, axes=1)
+                S_new = self.complex_tanh_tf(input_contrib + neighborhood_contrib)
+                new_states.append(S_new)
+                step_features.append(tf.reshape(S_new, [-1]))
+
+            S_prev = tf.stack(new_states, axis=0)
+            states_over_time.append(tf.stack(step_features, axis=0))
+
+        return tf.stack(states_over_time, axis=0)
+
+
+    def reg_p_inv_tf(self, X):
+        X = tf.cast(X, self.tf_dtype)
+        F = tf.shape(X)[0]
+        identity = tf.eye(F, dtype=self.tf_dtype)
+        gram = tf.matmul(X, tf.transpose(tf.math.conj(X))) + tf.cast(self.reg, self.tf_dtype) * identity
+        gram_inv = tf.linalg.inv(gram)
+        return tf.matmul(tf.transpose(tf.math.conj(X)), gram_inv)
+
+
+    def cal_nmse_tf(self, H, H_hat):
+        H = tf.cast(H, self.tf_dtype)
+        H_hat = tf.cast(H_hat, self.tf_dtype)
+        mse = tf.reduce_sum(tf.abs(H - H_hat) ** 2)
+        denom = tf.reduce_sum((tf.abs(H) + tf.abs(H_hat)) ** 2) + 1e-12
+        return tf.math.real(mse / denom)
+
 
     def complex_tanh(self, Y):
         return np.tanh(np.real(Y)) + 1j * np.tanh(np.imag(Y))
+
+
+    def complex_tanh_tf(self, Y):
+        real = tf.math.tanh(tf.math.real(Y))
+        imag = tf.math.tanh(tf.math.imag(Y))
+        return tf.complex(real, imag)
