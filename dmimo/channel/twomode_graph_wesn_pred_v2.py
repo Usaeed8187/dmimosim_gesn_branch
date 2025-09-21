@@ -95,6 +95,13 @@ class twomode_graph_wesn_pred_v2:
         if not self.enable_window:
             window_weights = None
 
+        if self.adjacency_method is None:
+            self.adjacency = self.compute_None_adjacency()
+        elif self.adjacency_method == 'eigenmode_cov':
+            self.adjacency = self.compute_eigenmode_adjacency_cov(h_freq_csi_history)
+        else:
+            raise ValueError(f"Unsupported adjacency_method: {self.adjacency_method}")
+
         chan_pred = np.zeros(h_freq_csi_history[0,...].shape, dtype=self.dtype)
 
         S_list, Y_list = [], []
@@ -108,7 +115,6 @@ class twomode_graph_wesn_pred_v2:
                 # The lists loop over tx nodes first and rx nodes second
                 channel_train_input_list, meta_input = self.extract_tx_rx_node_pairs_numpy(channel_train_input[..., freq_re, ofdm_sym])
                 channel_train_gt_list, meta_gt = self.extract_tx_rx_node_pairs_numpy(channel_train_gt[..., freq_re, ofdm_sym])
-                num_node_pairs = len(channel_train_gt_list)
 
                 # Optional: do NOT reset S_0 here if you want cross-RB continuity
                 # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
@@ -153,7 +159,10 @@ class twomode_graph_wesn_pred_v2:
                     channel_train_gt[..., freq_re, ofdm_sym]
                 )  # list length N_v; each (T, n_rx_v, n_tx_v)
 
-                self.adjacency = self.compute_eigenmode_adjacency_cov(channel_test_input_list)
+                # if self.adjacency_method is None:
+                #     self.adjacency = self.compute_None_adjacency()
+                # elif self.adjacency_method == 'eigenmode_cov':
+                #     self.adjacency = self.compute_eigenmode_adjacency_cov(channel_test_input_list)
 
                 # Optional: continuity across RBs (comment these two lines to carry state)
                 # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
@@ -269,10 +278,12 @@ class twomode_graph_wesn_pred_v2:
         Y_target_3D_list = channel_output
 
         # Compute adjacency matrices once per RE and per ofdm sym.
-        if self.adjacency_method is None:
-            self.adjacency = self.compute_None_adjacency()
-        elif self.adjacency_method == 'eigenmode_cov':
-            self.adjacency = self.compute_eigenmode_adjacency_cov(Y_3D_list)
+        # if self.adjacency_method is None:
+        #     self.adjacency = self.compute_None_adjacency()
+        # elif self.adjacency_method == 'eigenmode_cov':
+        #     self.adjacency = self.compute_eigenmode_adjacency_cov(Y_3D_list)
+        if self.adjacency is None:
+            raise RuntimeError("Adjacency matrix has not been computed before build_S_Y call.")
 
         if self.enable_window:
             Y_3D_win_list = self.form_window_input_signal_list(Y_3D_list, curr_window_weights)
@@ -605,40 +616,82 @@ class twomode_graph_wesn_pred_v2:
 
     def compute_eigenmode_adjacency_cov(
         self,
-        channel_input,      # list of arrays, each (B, R_sel, T_sel)
+        h_freq_csi_history,
         subspace_rank_tx=2, # q_t
         subspace_rank_rx=2, # q_r
         shrinkage=0.0,
-        transpose_if_needed=False
+        transpose_if_needed=False,
+        center: bool = True,
+        unbiased: bool = True,
     ):
-        """
-        Covariance-based *joint* Tx/Rx subspace adjacency (Kronecker-space chordal affinity).
 
-        For each vertex v, estimate dominant Tx and Rx subspaces U_t[v] and U_r[v] from
-        time-averaged covariances R_tx, R_rx. The adjacency between vertices a,b is
+        B, _, _, R, _, T = h_freq_csi_history[..., 0, 0].shape
 
-            A[a,b] = ( || U_r[a]^H U_r[b] ||_F^2 / q_r ) * ( || U_t[a]^H U_t[b] ||_F^2 / q_t )
+        rx_nodes = self._node_slices(R, first_node_ants=4, rest_node_ants=2)
+        tx_nodes = self._node_slices(T, first_node_ants=4, rest_node_ants=2)
 
-        which equals the normalized chordal affinity of the *joint* subspaces span(U_r ⊗ U_t)
-        without explicitly forming Kronecker products. Values are in [0,1], diagonal = 1,
-        and the result is symmetrized.
+        per_link_channels = []
+        meta  = []
 
-        Args:
-            channel_input: list of length N_v; each item is array (B, R_sel, T_sel) of complex64
-                        mini-batches for that vertex/link.
-            subspace_rank_tx: q_t, target Tx subspace rank (capped by T_sel).
-            subspace_rank_rx: q_r, target Rx subspace rank (capped by R_sel).
-            shrinkage: scalar in [0,1]; if >0, apply diagonal shrinkage to covariances.
-            transpose_if_needed: if True and R_sel < T_sel, transpose per-batch matrices so
-                                that the "Rx" dimension is the larger one (keeps conventions).
+        # tx-major ordering of the list; change loop order if you prefer tx-major
+        for r_i, r_idx in enumerate(rx_nodes):
+            for t_i, t_idx in enumerate(tx_nodes):
+                # Slice: (B, r, t)
+                block = h_freq_csi_history[:, 0, 0, r_idx, 0, ...]
+                block = block[:, :, t_idx, ...]
+                per_link_channels.append(block)
+                meta.append({
+                    "rx_node": r_i,
+                    "rx_ant_idx": r_idx.tolist(),
+                    "tx_node": t_i,
+                    "tx_ant_idx": t_idx.tolist(),
+                    "block_shape": tuple(block.shape)
+                })
 
-        Returns:
-            adj: (N_v, N_v) float64 numpy array with values in [0,1].
-        """
-        import numpy as np
-
-        N_v = len(channel_input)
         Tx_bases, Rx_bases = [], []
+
+        for H in per_link_channels:
+
+            T, Rx, Tx, S, R = H.shape
+
+            Hk = np.reshape(H, (T, Rx, Tx, S * R))
+            Hk = np.moveaxis(Hk, (0, 3), (0, 1))  # (T, Rx, Tx, SR) -> (T, SR, Rx, Tx)
+            Hk = np.reshape(Hk, (T * S * R, Rx, Tx))  # (K, Rx, Tx)
+
+            K = Hk.shape[0]
+
+            if center:
+                mu = Hk.mean(axis=0, keepdims=True)  # (1, Rx, Tx)
+                Hk = Hk - mu
+
+            denom = float((K - 1) if (unbiased and K > 1) else K)
+
+            # --- Receive-side covariance: R_rx = E[ H H^H ] ---
+            # Compute per-snapshot products (K, Rx, Rx), then average over K
+            Hk_H = np.transpose(Hk.conj(), (0, 2, 1))        # (K, Tx, Rx)
+            prod_rx = Hk @ Hk_H                               # (K, Rx, Rx)
+            R_rx = prod_rx.sum(axis=0) / denom                # (Rx, Rx)
+
+            # --- Transmit-side covariance: R_tx = E[ H^H H ] ---
+            HkH = Hk.conj().transpose(0, 2, 1)               # (K, Tx, Rx)
+            prod_tx = HkH @ Hk                                # (K, Tx, Tx)
+            R_tx = prod_tx.sum(axis=0) / denom                # (Tx, Tx)
+
+            # Eigen-decomp (Hermitian), take top-q
+            eval_tx, evec_tx = np.linalg.eigh(R_tx)
+            eval_rx, evec_rx = np.linalg.eigh(R_rx)
+            idx_tx = np.argsort(eval_tx)[::-1]
+            idx_rx = np.argsort(eval_rx)[::-1]
+            Ut = evec_tx[:, idx_tx[:subspace_rank_tx]] 
+            Ur = evec_rx[:, idx_rx[:subspace_rank_rx]]
+
+            # QR for numerical stability (keeps orthonormal columns)
+            Ut, _ = np.linalg.qr(Ut)
+            Ur, _ = np.linalg.qr(Ur)
+                
+
+            Tx_bases.append(Ut)  # (T_sel x q_t)
+            Rx_bases.append(Ur)  # (R_sel x q_r)
 
         def pad_rows(Q, N_target):
             """Zero-pad rows of Q (n x q) to (N_target x q)."""
@@ -649,63 +702,6 @@ class twomode_graph_wesn_pred_v2:
             Qp[:n, :] = Q
             return Qp
 
-        # --- Per-vertex subspace estimation ---
-        for v in range(N_v):
-            Yv = channel_input[v]
-            if Yv.ndim != 3:
-                raise ValueError("Each list element must be 3D (B, R_sel, T_sel)")
-            if transpose_if_needed and Yv.shape[1] < Yv.shape[2]:
-                Yv = np.transpose(Yv, (0, 2, 1))  # now (B, T_sel, R_sel); next lines adapt via shapes
-
-            B, dim1, dim2 = Yv.shape
-
-            # Interpret as (B, R_sel, T_sel) regardless of optional transpose
-            # If we transposed above, then dim1 is T_sel and dim2 is R_sel; swap back logically.
-            if transpose_if_needed and Yv.shape[1] > Yv.shape[2]:
-                R_sel, T_sel = dim2, dim1
-                # Build covariances by viewing Hb as (R_sel x T_sel) again:
-                R_tx = np.zeros((T_sel, T_sel), dtype=np.complex64)
-                R_rx = np.zeros((R_sel, R_sel), dtype=np.complex64)
-                for b in range(B):
-                    Hb = Yv[b].T  # (R_sel, T_sel)
-                    R_tx += Hb.conj().T @ Hb
-                    R_rx += Hb @ Hb.conj().T
-            else:
-                R_sel, T_sel = dim1, dim2
-                R_tx = np.zeros((T_sel, T_sel), dtype=np.complex64)
-                R_rx = np.zeros((R_sel, R_sel), dtype=np.complex64)
-                for b in range(B):
-                    Hb = Yv[b]  # (R_sel, T_sel)
-                    R_tx += Hb.conj().T @ Hb
-                    R_rx += Hb @ Hb.conj().T
-
-            R_tx /= max(B, 1)
-            R_rx /= max(B, 1)
-
-            if shrinkage > 0.0:
-                tr_tx = float(np.real(np.trace(R_tx))) / max(T_sel, 1)
-                tr_rx = float(np.real(np.trace(R_rx))) / max(R_sel, 1)
-                R_tx = (1.0 - shrinkage) * R_tx + shrinkage * tr_tx * np.eye(T_sel, dtype=R_tx.dtype)
-                R_rx = (1.0 - shrinkage) * R_rx + shrinkage * tr_rx * np.eye(R_sel, dtype=R_rx.dtype)
-
-            # Eigen-decomp (Hermitian), take top-q
-            eval_tx, evec_tx = np.linalg.eigh(R_tx)
-            eval_rx, evec_rx = np.linalg.eigh(R_rx)
-            idx_tx = np.argsort(eval_tx)[::-1]
-            idx_rx = np.argsort(eval_rx)[::-1]
-            q_t = max(0, min(subspace_rank_tx, T_sel))
-            q_r = max(0, min(subspace_rank_rx, R_sel))
-            Ut = evec_tx[:, idx_tx[:q_t]] if q_t > 0 else np.zeros((T_sel, 0), dtype=R_tx.dtype)
-            Ur = evec_rx[:, idx_rx[:q_r]] if q_r > 0 else np.zeros((R_sel, 0), dtype=R_rx.dtype)
-
-            # QR for numerical stability (keeps orthonormal columns)
-            if q_t > 0:
-                Ut, _ = np.linalg.qr(Ut)
-            if q_r > 0:
-                Ur, _ = np.linalg.qr(Ur)
-
-            Tx_bases.append(Ut)  # (T_sel x q_t)
-            Rx_bases.append(Ur)  # (R_sel x q_r)
 
         # --- Joint subspace chordal affinity via product of Tx/Rx overlaps ---
         def joint_affinity(Ur_a, Ut_a, Ur_b, Ut_b):
@@ -751,14 +747,16 @@ class twomode_graph_wesn_pred_v2:
                 val = 0.0
             return float(np.clip(val, 0.0, 1.0))
 
-        adj = np.zeros((N_v, N_v), dtype=np.float64)
-        for a in range(N_v):
-            for b in range(N_v):
+        adj = np.zeros((self.N_v, self.N_v), dtype=np.float64)
+        for a in range(self.N_v):
+            for b in range(self.N_v):
                 adj[a, b] = joint_affinity(Rx_bases[a], Tx_bases[a], Rx_bases[b], Tx_bases[b])
 
         # Force symmetry and self-loops
         adj = 0.5 * (adj + adj.T)
         np.fill_diagonal(adj, 1.0)
+
+        adj = np.round(adj)
 
         return adj
 
