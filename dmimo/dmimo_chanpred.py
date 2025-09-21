@@ -50,17 +50,14 @@ class MU_MIMO(Model):
         self.sto_sigma = sto_val(cfg, cfg.sto_sigma)
         self.cfo_sigma = cfo_val(cfg, cfg.cfo_sigma)
 
-        # To use sionna-compatible interface, regard TxSquad as one BS transmitter
-        # A 4-antennas basestation is regarded as the combination of two 2-antenna UEs
-        self.num_streams_per_tx = cfg.num_tx_streams
-
         self.num_txs_ant = 2 * cfg.num_tx_ue_sel + 4  # gNB always present with 4 antennas
-        self.num_ue_ant = 1  # assuming 2 antennas per UE for reshaping data/channels
-        self.num_rxs_ant = cfg.ue_indices.shape[0] // self.num_ue_ant
-        self.num_rx_ue = self.num_rxs_ant
+        self.num_ue_ant = 2  # assuming 2 antennas per UE for reshaping data/channels
+        self.num_rx_ue = cfg.num_rx_ue_sel + 2
         if cfg.ue_ranks is None:
             cfg.ue_ranks = 1  # no rank adaptation
 
+        # To use sionna-compatible interface, regard TxSquad as one BS transmitter
+        # A 4-antennas basestation is regarded as the combination of two 2-antenna UEs
         self.num_streams_per_tx = cfg.num_tx_streams * self.num_rx_ue
 
         assert self.cfg.num_tx_ue_sel*2 + 4 >= self.num_streams_per_tx, "TxSquad should have antennas >= transmit streams"
@@ -548,41 +545,6 @@ class MU_MIMO(Model):
             pred_nmse_outdated = self.nmse(np.squeeze(h_freq_csi_true[0,...]), h_freq_csi_outdated)
             h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0,1,3,2])
             
-            # # Print out all results
-            # print("Outdated : ", pred_nmse_outdated)
-            # print("WESN : ", pred_nmse_wesn)
-            # print("Kalman : ", pred_nmse_kalman)
-            # print("WGESN (per_antenna_pair): ", pred_nmse_wgesn_per_antenna_pair)
-            # print("Window size:", rc_predictor_vanilla.window_length)
-
-            # Test plots
-            plot = False
-            if plot:
-                h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-                                                             batch_size=self.batch_size)
-                h_freq_csi_true = np.squeeze(h_freq_csi_true).transpose([0,1,2,4,3])
-                h_freq_csi_true = rc_predictor.rb_mapper(h_freq_csi_true)
-
-                h_freq_csi_predicted_gesn = h_freq_csi_grad_descent
-                if not rc_predictor_vanilla.rb_granularity:
-                    h_freq_csi_predicted_vanilla = rc_predictor.rb_mapper(tf.transpose(h_freq_csi_vanilla[:,0,:,0,...], perm=[0,1,2,4,3]))
-                else:
-                    h_freq_csi_predicted_vanilla = tf.transpose(h_freq_csi_vanilla[:,0,:,0,...], perm=[0,1,2,4,3])
-
-                debug_rx_ant = 0
-                debug_tx_ant = 0
-                debug_ofdm_sym = 10
-                
-                plt.figure()
-                plt.plot(np.real(h_freq_csi_predicted_gesn[debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="GESN Predicted Channel")
-                plt.plot(np.real(h_freq_csi_predicted_vanilla[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Vanilla ESN Predicted Channel")
-                plt.plot(np.real(h_freq_csi_outdated[debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Outdated Channel")
-                plt.plot(np.real(h_freq_csi_true[0, debug_rx_ant, debug_tx_ant, :, debug_ofdm_sym]), label="Ground Truth Channel")
-                plt.legend()
-                plt.savefig('prediction_comparison')
-                # plt.show()
-            plot = False
-
         else:
             # LMMSE channel estimation
             h_freq_csi, err_var_csi = lmmse_channel_estimation(dmimo_chans, self.rg_csi,
@@ -599,39 +561,46 @@ class MU_MIMO(Model):
         # h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0, 2, 1, 3, 4, 5, 6])
 
         # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-        # h_freq_csi_grad_descent =tf.reshape(h_freq_csi_grad_descent, (-1, self.num_rx_ue, 1, *h_freq_csi_grad_descent.shape[3:]))
         h_freq_csi_vanilla = tf.reshape(h_freq_csi_vanilla, (1, self.num_rx_ue, -1, *h_freq_csi_vanilla.shape[3:]))
         # h_freq_csi_kalman = tf.reshape(h_freq_csi_kalman, (-1, self.num_rx_ue, 1, *h_freq_csi_kalman.shape[3:]))
         h_freq_csi_twomode_all = tf.reshape(h_freq_csi_twomode_all, (1, self.num_rx_ue, -1, *h_freq_csi_twomode_all.shape[3:]))
         h_freq_csi_twomode_per_link = tf.reshape(h_freq_csi_twomode_per_link, (1, self.num_rx_ue, -1, *h_freq_csi_twomode_per_link.shape[3:]))
         h_freq_csi_graph_twomode = tf.reshape(h_freq_csi_graph_twomode, (1, self.num_rx_ue, -1, *h_freq_csi_graph_twomode.shape[3:]))
+        h_freq_csi_true = h_freq_csi_true[0:1,...]
+        h_freq_csi_true = tf.reshape(h_freq_csi_true, (1, self.num_rx_ue, -1, *h_freq_csi_true.shape[3:]))
 
-        # h_freq_csi_vanilla = tf.transpose(h_freq_csi_vanilla, perm=[1,2,0,3,4,5,6])
-        # h_freq_csi_twomode = tf.transpose(h_freq_csi_twomode, perm=[1,2,0,3,4,5,6])
 
         
         SNR_range = np.arange(0, 22, 2)
-        uncoded_bers = np.zeros((5, SNR_range.shape[0]))
+        uncoded_bers = 0.5*np.ones((6, SNR_range.shape[0]))
         
         for snr_idx, snr in enumerate(SNR_range):
             
             rx_snr_db = snr
 
-            for curr_method in range(5):
-
+            # apply dMIMO channels to the resource grid in the frequency domain.
+            h_freq, _ = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
+                                                                batch_size=self.batch_size)
+            
+            for curr_method in range(uncoded_bers.shape[0]):
+                
                 if curr_method == 0:
-                    h_freq_csi = h_freq_csi_outdated
+                    h_freq_csi = h_freq
+                    h_freq_csi = tf.reshape(h_freq_csi, (h_freq_csi.shape[0], self.num_rx_ue, -1, *h_freq_csi.shape[3:]))
                 elif curr_method == 1:
-                    h_freq_csi = h_freq_csi_vanilla
+                    h_freq_csi = h_freq_csi_outdated
                 elif curr_method == 2:
-                    h_freq_csi = h_freq_csi_twomode_all
+                    h_freq_csi = h_freq_csi_vanilla
                 elif curr_method == 3:
-                    h_freq_csi = h_freq_csi_twomode_per_link
+                    h_freq_csi = h_freq_csi_twomode_all
                 elif curr_method == 4:
+                    h_freq_csi = h_freq_csi_twomode_per_link
+                elif curr_method == 5:
                     h_freq_csi = h_freq_csi_graph_twomode
                 
-                h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
-                h_freq_csi = h_freq_csi[..., :512]
+                if curr_method != 0:
+                    h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
+                    h_freq_csi = h_freq_csi[..., :512]
 
                 # apply precoding to OFDM grids
                 if self.cfg.precoding_method == "ZF":
@@ -640,13 +609,7 @@ class MU_MIMO(Model):
                     # x_precoded, h_eff = self.zf_precoder([x_rg, tf.transpose(h_freq, perm=[0, 2, 1, 3, 4, 5, 6]), ue_indices, ue_ranks])
                     x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, ue_ranks])
                 else:
-                    ValueError("unsupported precoding method for MASS")
-
-                # apply dMIMO channels to the resource grid in the frequency domain.
-                h_freq, _ = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
-                                                                    batch_size=self.batch_size)
-                # rx_snr_db = tf.gather(rx_snr_db, tf.range(0, rx_snr_db.shape[2], 2), axis=2)
-                h_freq = tf.gather(h_freq, tf.range(0, h_freq.shape[2], 2), axis=2)
+                    ValueError("unsupported precoding method for MASS")                
                 
                 debug = False
                 if debug:
@@ -703,11 +666,12 @@ class MU_MIMO(Model):
                 uncoded_bers[curr_method, snr_idx] = compute_ber(d, d_hard).numpy()
 
         plt.figure()
-        plt.semilogy(SNR_range, uncoded_bers[0, :], label="Outdated Channel")
-        plt.semilogy(SNR_range, uncoded_bers[1, :], label="WESN Channel")
-        plt.semilogy(SNR_range, uncoded_bers[2, :], label="Twomode (All) WESN Channel")
-        plt.semilogy(SNR_range, uncoded_bers[3, :], label="Twomode (Per-Link) WESN Channel")
-        plt.semilogy(SNR_range, uncoded_bers[4, :], label="Twomode Graph WESN Channel")
+        plt.semilogy(SNR_range, uncoded_bers[0, :], label="Perfect Channel")
+        plt.semilogy(SNR_range, uncoded_bers[1, :], label="Outdated Channel")
+        plt.semilogy(SNR_range, uncoded_bers[2, :], label="WESN Channel")
+        plt.semilogy(SNR_range, uncoded_bers[3, :], label="Twomode (All) WESN Channel")
+        plt.semilogy(SNR_range, uncoded_bers[4, :], label="Twomode (Per-Link) WESN Channel")
+        plt.semilogy(SNR_range, uncoded_bers[5, :], label="Twomode Graph WESN Channel")
         plt.grid()
         plt.legend()
         plt.savefig('bers_tmp')
