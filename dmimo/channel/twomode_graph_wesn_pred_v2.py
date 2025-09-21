@@ -254,7 +254,6 @@ class twomode_graph_wesn_pred_v2:
         pairs = []
         meta  = []
 
-        # tx-major ordering of the list; change loop order if you prefer tx-major
         for r_i, r_idx in enumerate(rx_nodes):
             for t_i, t_idx in enumerate(tx_nodes):
                 # Slice: (B, r, t)
@@ -619,21 +618,18 @@ class twomode_graph_wesn_pred_v2:
         h_freq_csi_history,
         subspace_rank_tx=2, # q_t
         subspace_rank_rx=2, # q_r
-        shrinkage=0.0,
-        transpose_if_needed=False,
         center: bool = True,
         unbiased: bool = True,
     ):
 
-        B, _, _, R, _, T = h_freq_csi_history[..., 0, 0].shape
+        B, _, _, Rx, _, Tx = h_freq_csi_history[..., 0, 0].shape
 
-        rx_nodes = self._node_slices(R, first_node_ants=4, rest_node_ants=2)
-        tx_nodes = self._node_slices(T, first_node_ants=4, rest_node_ants=2)
+        rx_nodes = self._node_slices(Rx, first_node_ants=4, rest_node_ants=2)
+        tx_nodes = self._node_slices(Tx, first_node_ants=4, rest_node_ants=2)
 
         per_link_channels = []
         meta  = []
 
-        # tx-major ordering of the list; change loop order if you prefer tx-major
         for r_i, r_idx in enumerate(rx_nodes):
             for t_i, t_idx in enumerate(tx_nodes):
                 # Slice: (B, r, t)
