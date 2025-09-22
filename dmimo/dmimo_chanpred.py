@@ -632,20 +632,30 @@ class MU_MIMO(Model):
 
                 x_hat = np.zeros(x_rg.shape, dtype=np.complex64)
                 x_hat = x_hat[..., :self.rg.num_effective_subcarriers]
-                for rx_node in range(self.num_rx_ue):
-                    curr_y = tf.gather(y, rx_node, axis=2)
+                for rx_node in range(self.cfg.num_rx_ue_sel+1):
+                    
+                    if rx_node == 0:
+                        rx_ant = tf.range(0,4)
+                        stream_idx = tf.range(0,2*self.cfg.num_tx_streams)
+                    else:
+                        rx_ant = tf.range(4 + (rx_node-1)*2, 4 + rx_node*2)
+                        start = 2*self.cfg.num_tx_streams + (rx_node-1)*self.cfg.num_tx_streams
+                        end = 2*self.cfg.num_tx_streams + rx_node*self.cfg.num_tx_streams
+                        stream_idx = tf.range(start,end)
+
+                    curr_y = tf.gather(y, rx_ant, axis=2)
                     curr_y = tf.gather(curr_y, self.rg.effective_subcarrier_ind, axis=-1)
                     curr_y = tf.squeeze(curr_y)
 
-                    curr_h = tf.gather(h_hat, rx_node, axis=2)
+                    curr_h = tf.gather(h_hat, rx_ant, axis=2)
                     curr_h = tf.squeeze(curr_h)
-                    curr_h = tf.gather(curr_h, rx_node, axis=1)
+                    curr_h = tf.gather(curr_h, stream_idx, axis=2)
 
-                    curr_x_hat = curr_y / curr_h
+                    curr_x_hat = self.mmse_detect(curr_y, curr_h, snr_db=rx_snr_db)
                     curr_x_hat = curr_x_hat[:, np.newaxis, ...]
                     curr_x_hat = np.asarray(curr_x_hat)
 
-                    x_hat[:,:,rx_node,:,:] = curr_x_hat
+                    x_hat[:,:,stream_idx,:,:] = curr_x_hat
                 
                 all_symbols = tf.range(self.rg.num_ofdm_symbols)
                 pilot_symbols = self.rg._pilot_ofdm_symbol_indices
@@ -678,6 +688,58 @@ class MU_MIMO(Model):
 
         return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman], uncoded_bers, x_hat
     
+    def mmse_detect(self, curr_y, curr_h, snr_db=None, noise_var=None, eps=1e-7):
+        """
+        curr_y: [B, N_r, S, K]          (received)
+        curr_h: [B, N_r, N_t, S, K]     (channel estimate)
+        snr_db: scalar SNR in dB for noise variance (optional)
+        noise_var: scalar or [B, S, K] noise variance σ² (optional)
+        eps: small diagonal loading for numerical stability
+        returns: curr_x_hat [B, N_t, S, K]
+        """
+
+        B, Nr, S, K = curr_y.shape
+        Nt = curr_h.shape[2]
+
+        # Decide noise variance σ²
+        if noise_var is None:
+            if snr_db is None:
+                # Fallback: a modest regularization if no SNR/noise provided
+                sigma2 = tf.constant(1e-3, dtype=curr_h.dtype.real_dtype)
+            else:
+                sigma2 = tf.cast(10.0 ** (-snr_db / 10.0), curr_h.dtype.real_dtype)
+        else:
+            sigma2 = tf.cast(noise_var, curr_h.dtype.real_dtype)  # can be scalar or [B,S,K]
+
+        # Reorder to [B, S, K, N_r, N_t] and [B, S, K, N_r, 1]
+        H = tf.transpose(curr_h, perm=[0, 3, 4, 1, 2])                       # [B,S,K,Nr,Nt]
+        y = tf.transpose(curr_y, perm=[0, 2, 3, 1])                           # [B,S,K,Nr]
+        y = y[..., tf.newaxis]                                                # [B,S,K,Nr,1]
+
+        # Compute H^H H  and  H^H y
+        Hh = tf.linalg.adjoint(H)                                             # [B,S,K,Nt,Nr]
+        G  = tf.matmul(Hh, H)                                                 # [B,S,K,Nt,Nt]
+        Hy = tf.matmul(Hh, y)                                                 # [B,S,K,Nt,1]
+
+        # Add σ² I (supports scalar σ² or per-[B,S,K] variance)
+        I = tf.eye(Nt, dtype=H.dtype)[tf.newaxis, tf.newaxis, tf.newaxis, ...]    # [1,1,1,Nt,Nt]
+        if tf.rank(sigma2) == 0:
+            A = G + tf.cast(sigma2, G.dtype) * I
+        else:
+            # reshape σ² to [B,S,K,1,1] for broadcast
+            sig = tf.reshape(tf.cast(sigma2, G.dtype), [B, S, K, 1, 1])
+            A = G + sig * I
+        # Small extra loading
+        A = A + tf.cast(eps, A.dtype) * I
+
+        # Solve (H^H H + σ² I) x = H^H y via Cholesky (Hermitian PD)
+        L = tf.linalg.cholesky(A)
+        X = tf.linalg.cholesky_solve(L, Hy)                                   # [B,S,K,Nt,1]
+
+        # Back to [B, N_t, S, K]
+        X = tf.squeeze(X, axis=-1)                                            # [B,S,K,Nt]
+        curr_x_hat = tf.transpose(X, perm=[0, 3, 1, 2])                       # [B,Nt,S,K]
+        return curr_x_hat
 
     def nmse(self, H_true, H_pred, standard=True):
         # Promote both inputs to the same backend first

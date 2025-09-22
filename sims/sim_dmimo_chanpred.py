@@ -68,7 +68,7 @@ if __name__ == "__main__":
     cfg.start_slot_idx = 95     # starting slots (must be greater than csi_delay + 5)
     cfg.cfo_sigma = 0.0         # in Hz
     cfg.sto_sigma = 0.0         # in nanosecond
-    cfg.num_tx_ue_sel = 8
+    cfg.num_tx_ue_sel = 6
     if arguments == []:
         mobility = 'high_mobility'
         drop_idx = '2'
