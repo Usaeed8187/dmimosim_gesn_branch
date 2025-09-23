@@ -457,49 +457,90 @@ class twomode_graph_wesn_pred_v2:
 
         T = Y_3D_list[0].shape[0] # number of samples
 
-        S_3D = copy.deepcopy(self.S_0)
+        # ------------------------------------------------------------------
+        # Pre-compute per-vertex padded input blocks
+        # ------------------------------------------------------------------
+        max_rx = max(len(entry["rx_ant_idx"]) for entry in meta)
+        max_tx = self.window_length * max(len(entry["tx_ant_idx"]) for entry in meta)
+
+        W_in_left_blocks = np.zeros(
+            (self.N_v, self.d_left, max_rx), dtype=self.W_in_left.dtype
+        )
+        W_in_right_blocks = np.zeros(
+            (self.N_v, max_tx, self.d_right), dtype=self.W_in_right.dtype
+        )
+
+        Y_pad = np.zeros((T, self.N_v, max_rx, max_tx), dtype=self.dtype)
+
+        for v, entry in enumerate(meta):
+            rx_idx = np.asarray(entry["rx_ant_idx"], dtype=int)
+            tx_idx_list = np.asarray(entry["tx_ant_idx"], dtype=int)
+
+            n_rx_v = rx_idx.size
+            n_tx_v = tx_idx_list.size
+
+            if n_rx_v == 0 or n_tx_v == 0:
+                raise ValueError("Each meta entry must select at least one Rx and Tx antenna")
+
+            W_in_left_blocks[v, :, :n_rx_v] = self.W_in_left[:, rx_idx]
+
+            tx_rows = [
+                np.arange(tx_idx * self.window_length, (tx_idx + 1) * self.window_length, dtype=int)
+                for tx_idx in tx_idx_list
+            ]
+            tx_rows = np.concatenate(tx_rows, axis=0)
+            W_in_right_blocks[v, : tx_rows.size, :] = self.W_in_right[tx_rows, :]
+
+            Y_v = Y_3D_list[v]
+            if Y_v.shape[1] != n_rx_v or Y_v.shape[2] != self.window_length * n_tx_v:
+                raise ValueError(
+                    "Vertex input shape mismatch: expected (%d, %d) got %s" %
+                    (n_rx_v, self.window_length * n_tx_v, tuple(Y_v.shape[1:]))
+                )
+            Y_pad[:, v, :n_rx_v, : self.window_length * n_tx_v] = Y_v
+
+        W_in_left_blocks = W_in_left_blocks.astype(self.dtype, copy=False)
+        W_in_right_blocks = W_in_right_blocks.astype(self.dtype, copy=False)
+
+        # (N_v, T, d_left, max_tx)
+        Y_pad_transposed = np.transpose(Y_pad, (1, 0, 2, 3))
+        left_mult = np.matmul(W_in_left_blocks[:, None, :, :], Y_pad_transposed)
+        input_contrib = np.matmul(left_mult, W_in_right_blocks[:, None, :, :])
+        input_contrib = np.transpose(input_contrib, (1, 0, 2, 3))  # (T, N_v, d_left, d_right)
+
+        # ------------------------------------------------------------------
+        # Vectorized neighbor updates
+        # ------------------------------------------------------------------
+        W_N_left_blocks = np.stack(
+            [
+                self.W_N_left[:, u * self.d_left : (u + 1) * self.d_left]
+                for u in range(self.N_v)
+            ],
+            axis=0,
+        ).astype(self.dtype, copy=False)
+        W_N_right_blocks = np.stack(
+            [
+                self.W_N_right[u * self.d_right : (u + 1) * self.d_right, :]
+                for u in range(self.N_v)
+            ],
+            axis=0,
+        ).astype(self.dtype, copy=False)
+
+        S_3D = self.S_0.copy()
 
         S_3D_list = []
-        S_4D = []
-        
+
         for t in range(T):
+            transformed = np.matmul(S_3D, W_N_right_blocks)
+            neighbor_states = np.matmul(W_N_left_blocks, transformed)
+            neighborhood_contrib = np.tensordot(self.adjacency, neighbor_states, axes=([1], [0]))
 
-            step_features = []
-            neighbor_states = [None] * self.N_v
-
-            for u in range(self.N_v):
-                W_N_left_idx = np.arange((u*self.d_left),(u+1)*self.d_left)
-                W_N_right_idx = np.arange((u*self.d_right),(u+1)*self.d_right)
-                neighbor_states[u] = self.W_N_left[:, W_N_left_idx] @ S_3D[u, ...] @ self.W_N_right[W_N_right_idx, :]   # (d_left, d_right)
-
-            for v in range(self.N_v):
-                
-                entry = meta[v]
-                rx_idx = entry["rx_ant_idx"]
-                tx_idx = entry["tx_ant_idx"][-1]
-                prev_tx_idx = entry["tx_ant_idx"][0] * self.window_length
-                tx_idx = (tx_idx+1) * self.window_length
-                tx_idx = np.arange(prev_tx_idx, tx_idx)
-                prev_tx_idx = tx_idx[-1]+1
-
-                input_contrib = self.W_in_left[:, rx_idx] @ Y_3D_list[v][t, ...] @ self.W_in_right[tx_idx, :]
-
-                neighborhood_contrib = np.zeros((self.d_left, self.d_right), dtype=self.dtype)
-                row = self.adjacency[v]
-                for u in range(self.N_v):
-                    w = row[u]
-                    neighborhood_contrib += w * neighbor_states[u]
-
-                S_3D[v,...] = self.complex_tanh(input_contrib + neighborhood_contrib)
-
-                step_features.append(S_3D[v,...].reshape(-1))
-            
-            step_features = np.stack(step_features, axis=0)  # (N_v, d_left*d_right)
-            S_3D_list.append(step_features)
+            S_3D = self.complex_tanh(input_contrib[t] + neighborhood_contrib).astype(self.dtype, copy=False)
+            S_3D_list.append(S_3D.reshape(self.N_v, -1))
 
         self.S_0 = S_3D.copy()
 
-        S_3D = np.stack(S_3D_list, axis=0)  # (T, N_v, d_left*d_right)
+        S_3D = np.stack(S_3D_list, axis=0).astype(self.dtype, copy=False)
 
         return S_3D
     

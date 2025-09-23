@@ -641,15 +641,25 @@ class MU_MIMO(Model):
                         rx_ant = tf.range(4 + (rx_node-1)*2, 4 + rx_node*2)
                         start = 2*self.cfg.num_tx_streams + (rx_node-1)*self.cfg.num_tx_streams
                         end = 2*self.cfg.num_tx_streams + rx_node*self.cfg.num_tx_streams
-                        stream_idx = tf.range(start,end)
+                        stream_idx = tf.range(start,end)                    
 
                     curr_y = tf.gather(y, rx_ant, axis=2)
                     curr_y = tf.gather(curr_y, self.rg.effective_subcarrier_ind, axis=-1)
                     curr_y = tf.squeeze(curr_y)
 
-                    curr_h = tf.gather(h_hat, rx_ant, axis=2)
-                    curr_h = tf.squeeze(curr_h)
-                    curr_h = tf.gather(curr_h, stream_idx, axis=2)
+                    if curr_method == 0:
+                        curr_h = tf.gather(h_eff, stream_idx, axis=4)
+                        if rx_node == 0:
+                            curr_h = tf.gather(curr_h, tf.range(0,2), axis=1)
+                            curr_h = tf.reshape(curr_h, (curr_h.shape[0], -1, *curr_h.shape[3:]))
+                            curr_h = tf.squeeze(curr_h)
+                        else:
+                            curr_h = tf.gather(curr_h, rx_node+1, axis=1)
+                            curr_h = curr_h[:,:,0,:,...]
+                    else:
+                        curr_h = tf.gather(h_hat, rx_ant, axis=2)
+                        curr_h = tf.squeeze(curr_h)
+                        curr_h = tf.gather(curr_h, stream_idx, axis=2)
 
                     curr_x_hat = self.mmse_detect(curr_y, curr_h, snr_db=rx_snr_db)
                     curr_x_hat = curr_x_hat[:, np.newaxis, ...]
