@@ -1,4 +1,3 @@
-import copy
 import numpy as np
 import tensorflow as tf
 
@@ -82,30 +81,56 @@ class twomode_graph_wesn_pred_v2:
         self.vertex_meta = []
         max_rx = 0
         max_tx = 0
+        max_skip = 0
+        max_target = 0
 
-        for r_idx in rx_nodes:
+        for r_i, r_idx in enumerate(rx_nodes):
             rx_idx = np.asarray(r_idx, dtype=int)
-            for t_idx in tx_nodes:
+            for t_i, t_idx in enumerate(tx_nodes):
                 tx_idx = np.asarray(t_idx, dtype=int)
                 tx_rows = self._compute_tx_rows(tx_idx)
 
+                pad_rx_slice = slice(0, rx_idx.size)
+                pad_tx_slice = slice(0, tx_rows.size)
+
+                skip_dim = rx_idx.size * tx_rows.size
+                target_dim = rx_idx.size * tx_idx.size
+
                 meta_entry = {
+                    "rx_node": r_i,
                     "rx_idx": rx_idx,
                     "tx_idx": tx_idx,
+                    "tx_node": t_i,
                     "tx_rows": tx_rows,
                     "n_rx": rx_idx.size,
                     "n_tx": tx_idx.size,
-                    "pad_rx_slice": slice(0, rx_idx.size),
-                    "pad_tx_slice": slice(0, tx_rows.size),
+                    "pad_rx_slice": pad_rx_slice,
+                    "pad_tx_slice": pad_tx_slice,
+                    "skip_dim": skip_dim,
+                    "target_dim": target_dim,
                 }
                 self.vertex_meta.append(meta_entry)
 
                 max_rx = max(max_rx, rx_idx.size)
                 max_tx = max(max_tx, tx_idx.size)
+                max_skip = max(max_skip, skip_dim)
+                max_target = max(max_target, target_dim)
 
         self.max_rx_block = max_rx
         self.max_tx_ant = max_tx
         self.max_tx_block = max_tx * self.tx_window_factor
+
+        self.state_dim = self.d_left * self.d_right
+        self.max_skip_dim = max_skip
+        self.max_target_dim = max_target
+        self.max_feature_dim = self.state_dim + self.max_skip_dim
+
+        for entry in self.vertex_meta:
+            skip_dim = entry["skip_dim"]
+            target_dim = entry["target_dim"]
+            entry["feature_dim"] = self.state_dim + skip_dim
+            entry["feature_slice"] = slice(0, entry["feature_dim"])
+            entry["target_slice"] = slice(0, target_dim)
 
     def _compute_tx_rows(self, tx_idx_array):
 
@@ -189,9 +214,6 @@ class twomode_graph_wesn_pred_v2:
         channel_train_input = h_freq_csi_history[:-1, ...]
         channel_train_gt    = h_freq_csi_history[1:,  ...]
         
-        if not self.enable_window:
-            window_weights = None
-
         if self.adjacency_method is None:
             self.adjacency = self.compute_None_adjacency()
         elif self.adjacency_method == 'eigenmode_cov':
@@ -201,110 +223,102 @@ class twomode_graph_wesn_pred_v2:
 
         chan_pred = np.zeros(h_freq_csi_history[0,...].shape, dtype=self.dtype)
 
-        S_list, Y_list = [], []
+        total_chunks = num_freq_res * num_ofdm_syms
+        features_accum = None
+        targets_accum = None
+        offset = 0
 
         # --------- (A) FEATURE BUILD PHASE: stack all RBs (and OFDM syms) ----------
         for freq_re in range(num_freq_res):
             for ofdm_sym in range(num_ofdm_syms):
+                channel_train_input_array, meta_input = self.extract_tx_rx_node_pairs_numpy(
+                    channel_train_input[..., freq_re, ofdm_sym]
+                )
+                channel_train_gt_array, _ = self.extract_tx_rx_node_pairs_numpy(
+                    channel_train_gt[..., freq_re, ofdm_sym]
+                )
 
-                # Form lists of inputs and labels. 
-                # Each element in the list corresponds to a tx-rx node pair. 
-                # The lists loop over tx nodes first and rx nodes second
-                channel_train_input_list, meta_input = self.extract_tx_rx_node_pairs_numpy(channel_train_input[..., freq_re, ofdm_sym])
-                channel_train_gt_list, meta_gt = self.extract_tx_rx_node_pairs_numpy(channel_train_gt[..., freq_re, ofdm_sym])
+                features_chunk, targets_chunk = self.build_S_Y(
+                    channel_train_input_array,
+                    channel_train_gt_array,
+                    meta_input,
+                    curr_window_weights=None,
+                )
 
-                # Optional: do NOT reset S_0 here if you want cross-RB continuity
-                # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+                T_chunk = features_chunk.shape[-1]
+                if features_accum is None:
+                    total_T = T_chunk * total_chunks
+                    features_accum = np.zeros(
+                        (self.N_v, self.max_feature_dim, total_T),
+                        dtype=self.dtype,
+                    )
+                    targets_accum = np.zeros(
+                        (self.N_v, self.max_target_dim, total_T),
+                        dtype=self.dtype,
+                    )
 
-                S_f_list, Y_f_list = self.build_S_Y(channel_train_input_list, channel_train_gt_list, meta_input, curr_window_weights=None)
-                S_list.append(S_f_list); Y_list.append(Y_f_list)
-        
-        # S_list: list over RB/OFDM; each item is S_f_list (length N_v) where S_f_list[v] is (F_v, T_chunk). 
-        # Y_list: same structure; Y_f_list[v] is (n_rx_v*n_tx_v, T_chunk)
-        # Note: F_v = n_rx_v * L*n_tx_v + self.d_left*self.d_right
+                features_accum[:, :, offset:offset + T_chunk] = features_chunk
+                targets_accum[:, :, offset:offset + T_chunk] = targets_chunk
+                offset += T_chunk
 
-        # 1) Aggregate per-vertex across all RB/OFDM chunks
-        S_vertex = [[] for _ in range(self.N_v)]
-        Y_vertex = [[] for _ in range(self.N_v)]
+        if features_accum is None:
+            raise RuntimeError("No training chunks were processed")
 
-        for S_f_list, Y_f_list in zip(S_list, Y_list):
-            for v in range(self.N_v):
-                S_vertex[v].append(S_f_list[v])  # (F_v, T_chunk)
-                Y_vertex[v].append(Y_f_list[v])  # (n_rx_v*n_tx_v, T_chunk)
+        total_T_actual = offset
+        features_accum = features_accum[:, :, :total_T_actual]
+        targets_accum = targets_accum[:, :, :total_T_actual]
 
-        # 2) Concatenate along time axis for each vertex
-        S_all_per_v = [np.concatenate(S_vertex[v], axis=1) for v in range(self.N_v)]   # (F_v, sum_T_v)
-        Y_all_per_v = [np.concatenate(Y_vertex[v], axis=1) for v in range(self.N_v)]   # (n_rx_v*n_tx_v, sum_T_v)
+        self.W_out_matrix = np.zeros(
+            (self.N_v, self.max_target_dim, self.max_feature_dim),
+            dtype=self.dtype,
+        )
 
-        # 3) Solve ridge per vertex
-        self.W_out_list = []
-        for v in range(self.N_v):
-            S_v = S_all_per_v[v]                     # (F_v, T_v)
-            Y_v = Y_all_per_v[v]                     # (n_rx_v*n_tx_v, T_v)
-            G_v = self.reg_p_inv(S_v)                # (T_v, F_v) := S_v^H (S_v S_v^H + λI)^(-1)
-            W_out_v = Y_v @ G_v                      # (n_rx_v*n_tx_v, F_v)
-            self.W_out_list.append(W_out_v.astype(self.dtype, copy=False))
+        for v, info in enumerate(self.vertex_meta):
+            feature_slice = info["feature_slice"]
+            target_slice = info["target_slice"]
 
+            S_v = features_accum[v, feature_slice, :]
+            Y_v = targets_accum[v, target_slice, :]
+            G_v = self.reg_p_inv(S_v)
+            W_out_v = Y_v @ G_v
+            self.W_out_matrix[v, target_slice, feature_slice] = W_out_v.astype(self.dtype, copy=False)
 
         # --------- (C) PREDICTION PHASE with per-vertex W_out ----------
         chan_pred = np.squeeze(np.zeros(h_freq_csi_history[0, ...].shape, dtype=self.dtype))
 
         for freq_re in range(num_freq_res):
             for ofdm_sym in range(num_ofdm_syms):
-                # 1) Build per-vertex test inputs (use the last known sequence to predict next step)
-                channel_test_input_list, meta_test = self.extract_tx_rx_node_pairs_numpy(
+                channel_test_input_array, meta_test = self.extract_tx_rx_node_pairs_numpy(
                     channel_train_gt[..., freq_re, ofdm_sym]
-                )  # list length N_v; each (T, n_rx_v, n_tx_v)
+                )
 
-                # if self.adjacency_method is None:
-                #     self.adjacency = self.compute_None_adjacency()
-                # elif self.adjacency_method == 'eigenmode_cov':
-                #     self.adjacency = self.compute_eigenmode_adjacency_cov(channel_test_input_list)
+                Y_3D_win = self.form_window_input_signal_list(channel_test_input_array, window_weights=None)
+                Y_3D_win = Y_3D_win * self.input_scale
 
-                # Optional: continuity across RBs (comment these two lines to carry state)
-                # self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
-
-                # 2) Window & scale (same as training)
-                if self.enable_window:
-                    Y_3D_win_list = self.form_window_input_signal_list(channel_test_input_list, window_weights=None)
-                else:
-                    Y_3D_win_list = [arr.copy() for arr in channel_test_input_list]
-                Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
-
-                # 3) Transit states → (T, N_v, d_left*d_right)
-                S_3D_transit = self.state_transit(Y_3D_win_list, meta_test)
+                S_3D_transit = self.state_transit(Y_3D_win, meta_test)
                 T_test = S_3D_transit.shape[0]
-                t_last = T_test - 1  # use the last column for next-step prediction
+                t_last = T_test - 1
 
-                # 4) For each vertex: build feature S_v (F_v, T_test), predict, take last col
-                #    and stitch into a full [N_r, N_t] matrix
                 H_hat_full = np.zeros((self.N_r, self.N_t), dtype=self.dtype)
 
-                for v in range(self.N_v):
-                    # features
-                    S_transit_v = S_3D_transit[:, v, :]           # (T_test, 2*dL*dR)
-                    Yin_v = Y_3D_win_list[v]                      # (T_test, n_rx_v, L*n_tx_v)
-                    Yin_v_flat = Yin_v.reshape(T_test, -1)        # (T_test, n_rx_v * L*n_tx_v)
-                    S_v_time = np.concatenate([S_transit_v, Yin_v_flat], axis=-1)  # (T_test, F_v)
-                    S_v = S_v_time.T                               # (F_v, T_test)
+                for v, info in enumerate(self.vertex_meta):
+                    feature_slice = info["feature_slice"]
+                    target_slice = info["target_slice"]
+                    n_rx_v = info["n_rx"]
+                    n_tx_v = info["n_tx"]
+                    expected_tx = info["pad_tx_slice"].stop
 
-                    # predict per vertex
-                    W_out_v = self.W_out_list[v]                  # (n_rx_v*n_tx_v, F_v)
-                    Y_hat_v = W_out_v @ S_v                       # (n_rx_v*n_tx_v, T_test)
+                    S_transit_v = S_3D_transit[t_last, v, :]
+                    Yin_v = Y_3D_win[v, t_last, :n_rx_v, :expected_tx]
+                    Yin_v_flat = Yin_v.reshape(-1)
+                    feature_vec = np.concatenate([S_transit_v, Yin_v_flat], axis=0)
 
-                    # take next-step prediction from the last time column
-                    y_last = Y_hat_v[:, t_last]                   # (n_rx_v*n_tx_v,)
-                    entry = meta_test[v]
-                    rx_idx = entry["rx_ant_idx"]                  # list of rx antenna indices
-                    tx_idx = entry["tx_ant_idx"]                  # list of tx antenna indices
-                    n_rx_v = len(rx_idx)
-                    n_tx_v = len(tx_idx)
+                    W_out_v = self.W_out_matrix[v, target_slice, feature_slice]
+                    y_last = W_out_v @ feature_vec
+
                     H_v = y_last.reshape(n_rx_v, n_tx_v, order='C')
+                    H_hat_full[np.ix_(info["rx_idx"], info["tx_idx"])] = H_v
 
-                    # stitch block into full matrix
-                    H_hat_full[np.ix_(rx_idx, tx_idx)] = H_v
-
-                # 5) Write into your output tensor at the right slots
                 chan_pred[:, :, freq_re, ofdm_sym] = H_hat_full
 
         # transpose back if you transposed earlier
@@ -334,89 +348,79 @@ class twomode_graph_wesn_pred_v2:
         return nodes  # list of 1D index arrays
 
     def extract_tx_rx_node_pairs_numpy(self, h_freq_csi_history):
-        """
-        h: (B, R, T)
-        returns:
-        pairs: list of arrays with shape (B, R_sel, T_sel)
-        meta: list of dicts describing (rx_node, tx_node, their antenna indices)
-        """
+        """Extract per-vertex channel blocks as a zero-padded array."""
+
         if h_freq_csi_history.ndim != 6:
             raise ValueError("Expected shape (B,1,1,R,1,T)")
 
-        B, _, _, R, _, T = h_freq_csi_history.shape
+        T = h_freq_csi_history.shape[0]
 
-        rx_nodes = self._node_slices(R, first_node_ants=4, rest_node_ants=2)
-        tx_nodes = self._node_slices(T, first_node_ants=4, rest_node_ants=2)
+        padded_pairs = np.zeros(
+            (self.N_v, T, self.max_rx_block, self.max_tx_ant),
+            dtype=self.dtype,
+        )
+        meta = []
 
-        pairs = []
-        meta  = []
+        for v, info in enumerate(self.vertex_meta):
+            rx_idx = info["rx_idx"]
+            tx_idx = info["tx_idx"]
 
-        for r_i, r_idx in enumerate(rx_nodes):
-            for t_i, t_idx in enumerate(tx_nodes):
-                # Slice: (B, r, t)
-                block = h_freq_csi_history[:, 0, 0, r_idx, 0, ...]
-                block = block[:, :, t_idx]
-                pairs.append(block)
-                meta.append({
-                    "rx_node": r_i,
-                    "rx_ant_idx": r_idx.tolist(),
-                    "tx_node": t_i,
-                    "tx_ant_idx": t_idx.tolist(),
-                    "block_shape": tuple(block.shape)
-                })
+            block = h_freq_csi_history[:, 0, 0, rx_idx, 0, ...]
+            block = block[:, :, tx_idx]
 
-        return pairs, meta
+            n_rx = info["n_rx"]
+            n_tx = info["n_tx"]
+
+            padded_pairs[v, :, :n_rx, :n_tx] = block
+
+            meta.append({
+                "rx_node": info["rx_node"],
+                "rx_ant_idx": rx_idx.tolist(),
+                "tx_node": info["tx_node"],
+                "tx_ant_idx": tx_idx.tolist(),
+                "block_shape": tuple(block.shape),
+            })
+
+        return padded_pairs, meta
 
 
     def build_S_Y(self, channel_input, channel_output, meta_input, curr_window_weights):
-        # channel_input, channel_output: [T, N_r, N_t]
-        Y_3D_list = channel_input
-        Y_target_3D_list = channel_output
-
-        # Compute adjacency matrices once per RE and per ofdm sym.
-        # if self.adjacency_method is None:
-        #     self.adjacency = self.compute_None_adjacency()
-        # elif self.adjacency_method == 'eigenmode_cov':
-        #     self.adjacency = self.compute_eigenmode_adjacency_cov(Y_3D_list)
         if self.adjacency is None:
             raise RuntimeError("Adjacency matrix has not been computed before build_S_Y call.")
 
-        if self.enable_window:
-            Y_3D_win_list = self.form_window_input_signal_list(Y_3D_list, curr_window_weights)
-        else:
-            # TODO: not adapted to twomode input yet
-            forget = getattr(self, "forget_length", 0)
-            Y_3D_win = np.concatenate([Y_3D, np.zeros([Y_3D.shape[0], forget, Y_3D.shape[2]], dtype=self.dtype)], axis=1)
+        if channel_input.ndim != 4 or channel_input.shape[0] != self.N_v:
+            raise ValueError("channel_input must be (N_v, T, max_rx, max_tx_ant)")
+        if channel_output.shape != channel_input.shape:
+            raise ValueError("channel_output must match channel_input shape")
 
-        Y_3D_win_list = [arr * self.input_scale for arr in Y_3D_win_list]
-        S_3D_transit = self.state_transit(Y_3D_win_list, meta_input)
+        Y_3D_win = self.form_window_input_signal_list(channel_input, curr_window_weights)
+        Y_3D_win = Y_3D_win * self.input_scale
+
+        S_3D_transit = self.state_transit(Y_3D_win, meta_input)
         T = S_3D_transit.shape[0]
-        
-        S_list, Y_list = [], []
 
-        for v in range(self.N_v):
+        features = np.zeros((self.N_v, self.max_feature_dim, T), dtype=self.dtype)
+        targets = np.zeros((self.N_v, self.max_target_dim, T), dtype=self.dtype)
 
-            # ---- features for vertex v ----
-            # S_3D_transit per-vertex slice: (T, d_left*d_right)
-            S_transit_v = S_3D_transit[:, v, ...]  # time-major
+        for v, info in enumerate(self.vertex_meta):
+            n_rx = info["n_rx"]
+            n_tx = info["n_tx"]
+            expected_tx = info["pad_tx_slice"].stop
 
-            # Flatten windowed input for skip (varies with vertex dims)
-            Yin_v = Y_3D_win_list[v]                 # (T, n_rx_v, L*n_tx_v)
-            Yin_v_flat = Yin_v.reshape(T, -1)        # (T, n_rx_v * L*n_tx_v)
+            S_transit_v = S_3D_transit[:, v, :]  # (T, state_dim)
+            Yin_v = Y_3D_win[v, :, :n_rx, :expected_tx]
+            Yin_v_flat = Yin_v.reshape(T, -1)
+            S_v_time_major = np.concatenate([S_transit_v, Yin_v_flat], axis=-1)
 
-            # Concatenate [state || skip] per time, then transpose to (F_v, T)
-            S_v_time_major = np.concatenate([S_transit_v, Yin_v_flat], axis=-1)  # (T, F_v)
-            S_v = S_v_time_major.T  # (F_v, T)
-            S_list.append(S_v.astype(self.dtype, copy=False))
+            feature_slice = info["feature_slice"]
+            features[v, feature_slice, :] = S_v_time_major.T.astype(self.dtype, copy=False)
 
-            # ---- targets for vertex v ----
-            # Use the GT block. Flatten per time, then transpose to (n_rx_v*n_tx_v, T)
-            Yv = Y_target_3D_list[v]                          # (T, n_rx_v, n_tx_v)
-            Yv_flat = Yv.reshape(T, -1, order='C')            # (T, n_rx_v*n_tx_v)
-            Y_v = Yv_flat.T                                   # (n_rx_v*n_tx_v, T)
-            Y_list.append(Y_v.astype(self.dtype, copy=False))
+            Yv = channel_output[v, :, :n_rx, :n_tx]
+            Yv_flat = Yv.reshape(T, -1, order='C')
+            target_slice = info["target_slice"]
+            targets[v, target_slice, :] = Yv_flat.T.astype(self.dtype, copy=False)
 
-        return S_list, Y_list
+        return features, targets
 
 
     def calculate_window_weights(self, h_freq_csi_history):
@@ -473,123 +477,76 @@ class twomode_graph_wesn_pred_v2:
         return G
 
     def form_window_input_signal_list(self,
-        pairs_list,
-        window_weights=None,   # optional: shape (L,) or broadcastable to (L, 1, 1)
+        pairs_array,
+        window_weights=None,
     ):
-        """
-        Args
-        ----
-        pairs_list : list of np.ndarray
-            Each element has shape (B, T_sel, R_sel), where:
-            - B is num_time_steps
-            - T_sel is #Tx antennas for this node-pair
-            - R_sel is #Rx antennas for this node-pair
-        window_length : int
-            Causal window length L.
-        dtype : np.dtype or None
-            Output dtype; defaults to dtype of each input element.
-        window_weights : array-like or None
-            Optional weights applied per lag ell (0..L-1). If provided,
-            blocks[ell] *= window_weights[ell]. Must be broadcastable to (T_sel, R_sel).
+        if pairs_array.ndim != 4 or pairs_array.shape[0] != self.N_v:
+            raise ValueError("pairs_array must be (N_v, T, max_rx, max_tx)")
 
-        Returns
-        -------
-        out_list : list of np.ndarray
-            Each element has shape (B, L*T_sel, R_sel).
-        """
-        L = int(self.window_length)
-        if L <= 0:
-            raise ValueError("window_length must be >= 1")
+        if self.enable_window:
+            L = int(self.window_length)
+            if L <= 0:
+                raise ValueError("window_length must be >= 1")
+        else:
+            L = 1
 
-        #TODO: not adding window weight functionality yet
-        # if window_weights is not None:
-        #     ww = np.asarray(window_weights)
-        #     if ww.ndim == 1:
-        #         # (L,) → scale entire (T_sel, R_sel) slice by ww[ell]
-        #         if ww.shape[0] != L:
-        #             raise ValueError("window_weights length must equal window_length")
-        #     else:
-        #         # e.g., (L,1,1) or (L,T_sel,1) etc., will broadcast per block
-        #         if ww.shape[0] != L:
-        #             raise ValueError("window_weights first dim must equal window_length")
-        # else:
-        #     ww = None
+        out = np.zeros(
+            (self.N_v, pairs_array.shape[1], self.max_rx_block, self.max_tx_block),
+            dtype=self.dtype,
+        )
 
-        out_list = []
+        for v, info in enumerate(self.vertex_meta):
+            n_rx = info["n_rx"]
+            n_tx = info["n_tx"]
 
-        for Y in pairs_list:
-            if Y.ndim != 3:
-                raise ValueError("Each list element must be [B, R_sel, T_sel]")
-            B, R_sel, T_sel = Y.shape
+            if n_rx == 0 or n_tx == 0:
+                raise ValueError("Each vertex must select at least one Rx and Tx antenna")
 
-            Y_win = np.zeros((B, R_sel, L * T_sel), dtype=self.dtype)
+            data = pairs_array[v, :, :n_rx, :n_tx].astype(self.dtype, copy=False)
 
-            # Prebuild a zero block for causal padding
-            zero_block = np.zeros((R_sel, T_sel), dtype=self.dtype)
+            if self.enable_window:
+                Y_win = np.zeros((data.shape[0], n_rx, L * n_tx), dtype=self.dtype)
+                zero_block = np.zeros((n_rx, n_tx), dtype=self.dtype)
+                for k in range(data.shape[0]):
+                    for ell in range(L):
+                        t = k - ell
+                        block = data[t] if t >= 0 else zero_block
+                        start = ell * n_tx
+                        end = start + n_tx
+                        Y_win[k, :, start:end] = block
+                padded = Y_win
+            else:
+                padded = data
 
-            for k in range(B):
-                blocks = []
-                for ell in range(L):
-                    t = k - ell
-                    if t >= 0:
-                        block = Y[t]  # (R_sel, T_sel)
-                    else:
-                        block = zero_block
+            out[v, :, info["pad_rx_slice"], info["pad_tx_slice"]] = padded
 
-                    # if ww is not None:
-                    #     # multiply by weight for this lag; rely on broadcasting
-                    #     block = block * ww[ell]
-
-                    blocks.append(block)
-
-                # Concatenate along Tx axis → (R_sel, L*T_sel)
-                Y_win[k] = np.concatenate(blocks, axis=1)
-
-            out_list.append(Y_win)
-
-        return out_list
+        return out
 
 
-    def state_transit(self, Y_3D_list, meta):
+    def state_transit(self, Y_3D, meta):
 
-        T = Y_3D_list[0].shape[0] # number of samples
-
-        if len(Y_3D_list) != self.N_v:
-            raise ValueError("Y_3D_list length does not match number of vertices")
+        if Y_3D.ndim != 4 or Y_3D.shape[0] != self.N_v:
+            raise ValueError("Y_3D must be (N_v, T, max_rx, max_tx)")
 
         if meta is not None and len(meta) != self.N_v:
             raise ValueError("meta length does not match number of vertices")
 
-        max_rx = self.max_rx_block
-        max_tx = self.max_tx_block
+        T = Y_3D.shape[1]
 
-        if max_rx == 0 or max_tx == 0:
-            raise ValueError("Invalid cached block sizes; ensure _build_vertex_metadata was called")
-        
-        Y_pad = np.zeros((T, self.N_v, max_rx, max_tx), dtype=self.dtype)
-
-        for v, (Y_v, info) in enumerate(zip(Y_3D_list, self.vertex_meta)):
+        for v, info in enumerate(self.vertex_meta):
             n_rx_v = info["n_rx"]
             expected_tx = info["pad_tx_slice"].stop
-
             if n_rx_v == 0 or expected_tx == 0:
                 raise ValueError("Each vertex must select at least one Rx and Tx antenna")
-
-            if Y_v.shape[1] != n_rx_v or Y_v.shape[2] != expected_tx:
-                raise ValueError(
-                    "Vertex input shape mismatch: expected (%d, %d) got %s" %
-                    (n_rx_v, expected_tx, tuple(Y_v.shape[1:]))
-                )
-
-            Y_pad[:, v, info["pad_rx_slice"], info["pad_tx_slice"]] = Y_v
-
+            slice_view = Y_3D[v, :, :n_rx_v, :expected_tx]
+            if slice_view.shape[2] != expected_tx:
+                raise ValueError("Windowed input width mismatch for vertex %d" % v)
             if meta is not None:
                 entry = meta[v]
                 if entry["rx_ant_idx"] != info["rx_idx"].tolist() or entry["tx_ant_idx"] != info["tx_idx"].tolist():
                     raise ValueError("Runtime metadata does not match cached vertex configuration")
-        
-        # (N_v, T, d_left, max_tx)
-        Y_pad_transposed = np.transpose(Y_pad, (1, 0, 2, 3))
+
+        Y_pad_transposed = Y_3D.astype(self.dtype, copy=False)
         left_mult = np.matmul(self.W_in_left_blocks[:, None, :, :], Y_pad_transposed)
         input_contrib = np.matmul(left_mult, self.W_in_right_blocks[:, None, :, :])
         input_contrib = np.transpose(input_contrib, (1, 0, 2, 3))  # (T, N_v, d_left, d_right)
