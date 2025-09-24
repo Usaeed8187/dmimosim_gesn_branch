@@ -46,6 +46,8 @@ class twomode_graph_wesn_pred_v2:
         self.d_left = self.ns3_config.num_bs_ant # TODO: currently just basing on the size of the input. try other configurations
         self.d_right = self.ns3_config.num_bs_ant * self.window_length
 
+        self._build_vertex_metadata()
+
         self.init_weights()
 
     def init_weights(self):
@@ -66,6 +68,101 @@ class twomode_graph_wesn_pred_v2:
         self.W_in_right = 2 * (self.RS.rand(self.N_in_right, self.d_right) - 0.5) # TODO: check if I should make this complex later
 
         self.S_0 = np.zeros([self.N_v, self.d_left, self.d_right], dtype=self.dtype)
+
+        self._precompute_input_blocks()
+        self._precompute_neighbor_blocks()
+
+    def _build_vertex_metadata(self):
+
+        self.tx_window_factor = self.window_length if self.enable_window else 1
+
+        rx_nodes = self._node_slices(self.N_r, first_node_ants=4, rest_node_ants=2)
+        tx_nodes = self._node_slices(self.N_t, first_node_ants=4, rest_node_ants=2)
+
+        self.vertex_meta = []
+        max_rx = 0
+        max_tx = 0
+
+        for r_idx in rx_nodes:
+            rx_idx = np.asarray(r_idx, dtype=int)
+            for t_idx in tx_nodes:
+                tx_idx = np.asarray(t_idx, dtype=int)
+                tx_rows = self._compute_tx_rows(tx_idx)
+
+                meta_entry = {
+                    "rx_idx": rx_idx,
+                    "tx_idx": tx_idx,
+                    "tx_rows": tx_rows,
+                    "n_rx": rx_idx.size,
+                    "n_tx": tx_idx.size,
+                    "pad_rx_slice": slice(0, rx_idx.size),
+                    "pad_tx_slice": slice(0, tx_rows.size),
+                }
+                self.vertex_meta.append(meta_entry)
+
+                max_rx = max(max_rx, rx_idx.size)
+                max_tx = max(max_tx, tx_idx.size)
+
+        self.max_rx_block = max_rx
+        self.max_tx_ant = max_tx
+        self.max_tx_block = max_tx * self.tx_window_factor
+
+    def _compute_tx_rows(self, tx_idx_array):
+
+        tx_idx_array = np.asarray(tx_idx_array, dtype=int)
+        if self.tx_window_factor == 1:
+            return tx_idx_array.copy()
+
+        rows = [
+            np.arange(idx * self.tx_window_factor, (idx + 1) * self.tx_window_factor, dtype=int)
+            for idx in tx_idx_array
+        ]
+        if rows:
+            return np.concatenate(rows, axis=0)
+        return np.asarray([], dtype=int)
+
+    def _precompute_input_blocks(self):
+
+        max_rx = getattr(self, "max_rx_block", 0)
+        max_tx = getattr(self, "max_tx_block", 0)
+
+        if max_rx == 0 or max_tx == 0:
+            self.W_in_left_blocks = np.zeros((self.N_v, self.d_left, 0), dtype=self.dtype)
+            self.W_in_right_blocks = np.zeros((self.N_v, 0, self.d_right), dtype=self.dtype)
+            return
+
+        W_in_left_blocks = np.zeros((self.N_v, self.d_left, max_rx), dtype=self.W_in_left.dtype)
+        W_in_right_blocks = np.zeros((self.N_v, max_tx, self.d_right), dtype=self.W_in_right.dtype)
+
+        for v, info in enumerate(self.vertex_meta):
+            n_rx = info["n_rx"]
+            if n_rx:
+                W_in_left_blocks[v, :, :n_rx] = self.W_in_left[:, info["rx_idx"]]
+
+            tx_rows = info["tx_rows"]
+            if tx_rows.size:
+                W_in_right_blocks[v, :tx_rows.size, :] = self.W_in_right[tx_rows, :]
+
+        self.W_in_left_blocks = W_in_left_blocks.astype(self.dtype, copy=False)
+        self.W_in_right_blocks = W_in_right_blocks.astype(self.dtype, copy=False)
+
+    def _precompute_neighbor_blocks(self):
+
+        self.W_N_left_blocks = np.stack(
+            [
+                self.W_N_left[:, u * self.d_left : (u + 1) * self.d_left]
+                for u in range(self.N_v)
+            ],
+            axis=0,
+        ).astype(self.dtype, copy=False)
+
+        self.W_N_right_blocks = np.stack(
+            [
+                self.W_N_right[u * self.d_right : (u + 1) * self.d_right, :]
+                for u in range(self.N_v)
+            ],
+            axis=0,
+        ).astype(self.dtype, copy=False)
     
     def predict(self, h_freq_csi_history):
 
@@ -457,82 +554,56 @@ class twomode_graph_wesn_pred_v2:
 
         T = Y_3D_list[0].shape[0] # number of samples
 
-        # ------------------------------------------------------------------
-        # Pre-compute per-vertex padded input blocks
-        # ------------------------------------------------------------------
-        max_rx = max(len(entry["rx_ant_idx"]) for entry in meta)
-        max_tx = self.window_length * max(len(entry["tx_ant_idx"]) for entry in meta)
+        if len(Y_3D_list) != self.N_v:
+            raise ValueError("Y_3D_list length does not match number of vertices")
 
-        W_in_left_blocks = np.zeros(
-            (self.N_v, self.d_left, max_rx), dtype=self.W_in_left.dtype
-        )
-        W_in_right_blocks = np.zeros(
-            (self.N_v, max_tx, self.d_right), dtype=self.W_in_right.dtype
-        )
+        if meta is not None and len(meta) != self.N_v:
+            raise ValueError("meta length does not match number of vertices")
 
+        max_rx = self.max_rx_block
+        max_tx = self.max_tx_block
+
+        if max_rx == 0 or max_tx == 0:
+            raise ValueError("Invalid cached block sizes; ensure _build_vertex_metadata was called")
+        
         Y_pad = np.zeros((T, self.N_v, max_rx, max_tx), dtype=self.dtype)
 
-        for v, entry in enumerate(meta):
-            rx_idx = np.asarray(entry["rx_ant_idx"], dtype=int)
-            tx_idx_list = np.asarray(entry["tx_ant_idx"], dtype=int)
+        for v, (Y_v, info) in enumerate(zip(Y_3D_list, self.vertex_meta)):
+            n_rx_v = info["n_rx"]
+            expected_tx = info["pad_tx_slice"].stop
 
-            n_rx_v = rx_idx.size
-            n_tx_v = tx_idx_list.size
+            if n_rx_v == 0 or expected_tx == 0:
+                raise ValueError("Each vertex must select at least one Rx and Tx antenna")
 
-            if n_rx_v == 0 or n_tx_v == 0:
-                raise ValueError("Each meta entry must select at least one Rx and Tx antenna")
-
-            W_in_left_blocks[v, :, :n_rx_v] = self.W_in_left[:, rx_idx]
-
-            tx_rows = [
-                np.arange(tx_idx * self.window_length, (tx_idx + 1) * self.window_length, dtype=int)
-                for tx_idx in tx_idx_list
-            ]
-            tx_rows = np.concatenate(tx_rows, axis=0)
-            W_in_right_blocks[v, : tx_rows.size, :] = self.W_in_right[tx_rows, :]
-
-            Y_v = Y_3D_list[v]
-            if Y_v.shape[1] != n_rx_v or Y_v.shape[2] != self.window_length * n_tx_v:
+            if Y_v.shape[1] != n_rx_v or Y_v.shape[2] != expected_tx:
                 raise ValueError(
                     "Vertex input shape mismatch: expected (%d, %d) got %s" %
-                    (n_rx_v, self.window_length * n_tx_v, tuple(Y_v.shape[1:]))
+                    (n_rx_v, expected_tx, tuple(Y_v.shape[1:]))
                 )
-            Y_pad[:, v, :n_rx_v, : self.window_length * n_tx_v] = Y_v
 
-        W_in_left_blocks = W_in_left_blocks.astype(self.dtype, copy=False)
-        W_in_right_blocks = W_in_right_blocks.astype(self.dtype, copy=False)
+            Y_pad[:, v, info["pad_rx_slice"], info["pad_tx_slice"]] = Y_v
 
+            if meta is not None:
+                entry = meta[v]
+                if entry["rx_ant_idx"] != info["rx_idx"].tolist() or entry["tx_ant_idx"] != info["tx_idx"].tolist():
+                    raise ValueError("Runtime metadata does not match cached vertex configuration")
+        
         # (N_v, T, d_left, max_tx)
         Y_pad_transposed = np.transpose(Y_pad, (1, 0, 2, 3))
-        left_mult = np.matmul(W_in_left_blocks[:, None, :, :], Y_pad_transposed)
-        input_contrib = np.matmul(left_mult, W_in_right_blocks[:, None, :, :])
+        left_mult = np.matmul(self.W_in_left_blocks[:, None, :, :], Y_pad_transposed)
+        input_contrib = np.matmul(left_mult, self.W_in_right_blocks[:, None, :, :])
         input_contrib = np.transpose(input_contrib, (1, 0, 2, 3))  # (T, N_v, d_left, d_right)
 
         # ------------------------------------------------------------------
         # Vectorized neighbor updates
         # ------------------------------------------------------------------
-        W_N_left_blocks = np.stack(
-            [
-                self.W_N_left[:, u * self.d_left : (u + 1) * self.d_left]
-                for u in range(self.N_v)
-            ],
-            axis=0,
-        ).astype(self.dtype, copy=False)
-        W_N_right_blocks = np.stack(
-            [
-                self.W_N_right[u * self.d_right : (u + 1) * self.d_right, :]
-                for u in range(self.N_v)
-            ],
-            axis=0,
-        ).astype(self.dtype, copy=False)
-
         S_3D = self.S_0.copy()
 
         S_3D_list = []
 
         for t in range(T):
-            transformed = np.matmul(S_3D, W_N_right_blocks)
-            neighbor_states = np.matmul(W_N_left_blocks, transformed)
+            transformed = np.matmul(S_3D, self.W_N_right_blocks)
+            neighbor_states = np.matmul(self.W_N_left_blocks, transformed)
             neighborhood_contrib = np.tensordot(self.adjacency, neighbor_states, axes=([1], [0]))
 
             S_3D = self.complex_tanh(input_contrib[t] + neighborhood_contrib).astype(self.dtype, copy=False)
