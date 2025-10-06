@@ -18,12 +18,9 @@ from sionna.channel import ApplyOFDMChannel
 from sionna.utils import expand_to_rank, complex_normal, flatten_last_dims
 
 from dmimo.config import Ns3Config, SimConfig, NetworkConfig, RCConfig
-from dmimo.channel import dMIMOChannels, lmmse_channel_estimation, standard_rc_pred_freq_mimo, gesn_pred_freq_dmimo
-from dmimo.channel import multimode_esn_pred
-from dmimo.channel import twomode_wesn_pred
-from dmimo.channel import twomode_graph_wesn_pred, twomode_graph_wesn_pred_v2
+from dmimo.channel import dMIMOChannels, lmmse_channel_estimation
+from dmimo.channel import standard_rc_pred_freq_mimo, gesn_pred_freq_dmimo, twomode_wesn_pred, twomode_graph_wesn_pred_v2, weiner_filter_pred
 from dmimo.channel.wesn_pred import WESN
-from dmimo.channel.kalman_pred_freq_dmimo import kalman_pred_freq_dmimo
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val, compute_UE_wise_BER, compute_UE_wise_SER
@@ -283,6 +280,48 @@ class MU_MIMO(Model):
             # plt.plot(np.real(h_freq_csi_twomode_per_link[0,0,0,0,0,0,:]), label='Twomode (Per-Link)')
             # plt.legend()
             # plt.savefig('b')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            # Weiner Filter based prediction (per_tx_rx_node_pair)
+            weiner_filter_predictor = weiner_filter_pred(method="using_one_link")
+            h_freq_csi_weiner_filter = np.asarray(weiner_filter_predictor.predict(h_freq_csi_history))
+            pred_nmse_weiner_filter = self.nmse(h_freq_csi_true[0,...], h_freq_csi_weiner_filter[0,...])
+            print("Weiner Filter (Per-Link) WESN NMSE: ", pred_nmse_weiner_filter)
+
+            rx_ant = 2
+            tx_ant = 3
+            ofdm_sym = 5
+            plt.figure()
+            plt.plot(np.real(h_freq_csi_true[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='true future channel')
+            plt.plot(np.real(h_freq_csi_weiner_filter[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Weiner Filter (Per-Link)')
+            plt.legend()
+            plt.savefig('b')
+
+            hold = 1
+
+
+
 
 
 
@@ -688,10 +727,10 @@ class MU_MIMO(Model):
         plt.figure()
         plt.semilogy(SNR_range, uncoded_bers[0, :], label="Perfect Channel")
         plt.semilogy(SNR_range, uncoded_bers[1, :], label="Outdated Channel")
-        plt.semilogy(SNR_range, uncoded_bers[2, :], label="WESN Channel")
-        plt.semilogy(SNR_range, uncoded_bers[3, :], label="Twomode (All) WESN Channel")
+        # plt.semilogy(SNR_range, uncoded_bers[2, :], label="WESN Channel")
+        # plt.semilogy(SNR_range, uncoded_bers[3, :], label="Twomode (All) WESN Channel")
         plt.semilogy(SNR_range, uncoded_bers[4, :], label="Twomode (Per-Link) WESN Channel")
-        plt.semilogy(SNR_range, uncoded_bers[5, :], label="Twomode Graph WESN Channel")
+        # plt.semilogy(SNR_range, uncoded_bers[5, :], label="Twomode Graph WESN Channel")
         plt.grid()
         plt.legend()
         plt.savefig('bers_tmp')
@@ -804,15 +843,16 @@ def sim_mu_mimo(cfg: SimConfig, rc_config:RCConfig):
     """
     cfg.return_estimated_channel = False
 
-    # dMIMO channels from ns-3 simulator
     ns3cfg = Ns3Config(data_folder=cfg.ns3_folder, total_slots=cfg.total_slots)
-    dmimo_chans = dMIMOChannels(ns3cfg, "dMIMO", add_noise=True)
-    cfg.bs_txpwr_dbm = ns3cfg.bs_txpwr_dbm
 
-    # UE selection
-    if cfg.enable_ue_selection is True:
-        tx_ue_mask, rx_ue_mask = update_node_selection(cfg)
-        ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
+    tx_ue_mask = np.zeros(10)
+    tx_ue_mask[:cfg.num_tx_ue_sel] = True
+    rx_ue_mask = np.zeros(10)
+    rx_ue_mask[:cfg.num_rx_ue_sel] = True
+    ns3cfg.update_ue_mask(tx_ue_mask, rx_ue_mask)
+
+    # dMIMO channels from ns-3 simulator
+    dmimo_chans = dMIMOChannels(ns3cfg, "dMIMO", add_noise=True)
 
     # Create MU-MIMO simulation
     mu_mimo = MU_MIMO(cfg, rc_config)
