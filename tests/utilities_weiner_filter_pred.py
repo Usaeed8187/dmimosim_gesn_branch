@@ -1,6 +1,55 @@
 
 import numpy as np
 
+
+def _standardize_columns(Phi):
+    # Phi: [B, F]
+    mu = Phi.mean(axis=0, keepdims=True)
+    Phi0 = Phi - mu
+    # RMS per column (complex): sqrt(mean(|.|^2))
+    scale = np.sqrt(np.mean(np.abs(Phi0)**2, axis=0, keepdims=True)) + 1e-12
+    Phi_std = Phi0 / scale
+    return Phi_std, mu, scale
+
+def _standardize_vector(y):
+    mu = y.mean()
+    y0 = y - mu
+    scale = np.sqrt(np.mean(np.abs(y0)**2)) + 1e-12
+    y_std = y0 / scale
+    return y_std, mu, scale
+
+def _solve_ridge_complex_scaled(Phi, y, lam):
+    """
+    Standardize Phi (per-column) and y, solve ridge on the standardized system,
+    then return (w_unscaled, pack) where pack holds scaling to apply at test-time.
+    """
+    Phi_std, mu_phi, sc_phi = _standardize_columns(Phi)     # [B,F]
+    y_std,  mu_y,  sc_y  = _standardize_vector(y)           # [B]
+
+    F = Phi_std.shape[1]
+    A = Phi_std.conj().T @ Phi_std
+    b = Phi_std.conj().T @ y_std
+    A_reg = A + lam * np.eye(F, dtype=np.complex128)
+    try:
+        w_std = np.linalg.solve(A_reg, b)
+    except np.linalg.LinAlgError:
+        w_std, *_ = np.linalg.lstsq(A_reg, b, rcond=None)
+
+    # Unscale weights so you can use them on raw Phi at inference:
+    # y_std ≈ ( (Phi - mu_phi)/sc_phi ) @ w_std  ⇒
+    # y_hat ≈ mu_y + sc_y * y_std = mu_y + sc_y * ((Phi - mu_phi)/sc_phi) @ w_std
+    # Define w_unscaled and bias:
+    w_unscaled = (sc_y * w_std) / sc_phi.flatten()
+    bias = mu_y - (mu_phi @ w_unscaled).item()
+
+    pack = dict(mu_phi=mu_phi, sc_phi=sc_phi, mu_y=mu_y, sc_y=sc_y, bias=bias)
+    return w_unscaled, bias, pack
+
+def _predict_with_pack(Phi, w_unscaled, bias):
+    # Phi: raw features [B,F]
+    return Phi @ w_unscaled + bias
+
+
 def complex_power_std(x: np.ndarray):
     """
     Return RMS magnitude std for a complex array: sqrt(mean(|x|^2)).
@@ -89,87 +138,326 @@ def complex_corr_coeff(x: np.ndarray, y: np.ndarray):
         return 0.0 + 0.0j
     return num / den
 
+def _nmse(y_hat, y_true, eps=1e-12):
+    mse = np.mean(np.abs(y_hat - y_true)**2)
+    pwr = np.mean(np.abs(y_true)**2)
+    return mse / (pwr + eps), mse, pwr
 
-def wiener_predict_last_subframe_from_both_links(h_freq_csi_history_list_corr, lam=1e-4):
+def wiener_predict_TEST_last_subframe_from_both_links(h_freq_csi_history_list_corr, lam=1e-4, target_link=1):
     H0, H1 = h_freq_csi_history_list_corr
-    assert H0.shape == H1.shape, "H0 and H1 must have identical shapes"
+    assert H0.shape == H1.shape
     S, N_r, N_t, Nsym, Nsc = H0.shape
+    assert S >= 3
 
-    assert S >= 2, "Need at least 2 subframes to leave one out as target."
-
-    # Number of features: 2 links * (S-1) past subframes
-    F = 2*(S-1)
-
-    # Reshape to [S, B] where B = N_r*N_t*Nsym*Nsc
     B = N_r * N_t * Nsym * Nsc
-    H0_reshaped = H0.reshape(S, B).astype(np.complex128, copy=False)
-    H1_reshaped = H1.reshape(S, B).astype(np.complex128, copy=False)
+    H0r = H0.reshape(S, B).astype(np.complex128, copy=False)
+    H1r = H1.reshape(S, B).astype(np.complex128, copy=False)
 
-    # Target: last subframe of link 2 (index 1)
-    y = H1_reshaped[-1, :]  # [B]
+    # Choose which link to predict
+    Hr_tar = H0r if target_link == 0 else H1r
 
-    # Features: [H0[0], H1[0], H0[1], H1[1], ..., H0[S-2], H1[S-2]]
-    Phi = np.empty((B, F), dtype=np.complex128)
+    # Build train features (both links, times 0..S-3)
+    F = 2 * (S - 2)
+    Phi_train = np.empty((B, F), dtype=np.complex128)
     col = 0
-    for s in range(S-1):
-        Phi[:, col]   = H0_reshaped[s, :]; col += 1
-        Phi[:, col]   = H1_reshaped[s, :]; col += 1
+    for s in range(0, S-2):
+        Phi_train[:, col] = H0r[s, :]; col += 1
+        Phi_train[:, col] = H1r[s, :]; col += 1
+    y_train = Hr_tar[S-2, :]
 
-    # Solve complex ridge regression: w = (Phi^H Phi + lam*I)^-1 Phi^H y
-    A = Phi.conj().T @ Phi  # [F, F]
-    b = Phi.conj().T @ y    # [F]
-    A_reg = A + lam * np.eye(F, dtype=np.complex128)
-    w = np.linalg.solve(A_reg, b)  # [F]
+    w, bias, _ = _solve_ridge_complex_scaled(Phi_train, y_train, lam)
+    y_train_hat = _predict_with_pack(Phi_train, w, bias)
+    nmse_train, mse_train, pwr_train = _nmse(y_train_hat, y_train)
 
-    y_hat = Phi @ w  # [B]
+    # Test features (both links, times 1..S-2)
+    Phi_test = np.empty((B, F), dtype=np.complex128)
+    col = 0
+    for s in range(1, S-1):
+        Phi_test[:, col] = H0r[s, :]; col += 1
+        Phi_test[:, col] = H1r[s, :]; col += 1
+    y_test = Hr_tar[S-1, :]
 
-    y_hat_tensor = y_hat.reshape(N_r, N_t, Nsym, Nsc)
-    mse = np.mean(np.abs(y_hat - y)**2)
-    nmse = mse / (np.mean(np.abs(y)**2) + 1e-12)
-    return y_hat_tensor, w, dict(mse=mse, nmse=nmse, F=F, B=B, S=S, shape_last=(N_r, N_t, Nsym, Nsc))
+    y_test_hat = _predict_with_pack(Phi_test, w, bias)
+    nmse_test, mse_test, pwr_test = _nmse(y_test_hat, y_test)
 
+    y_test_hat_tensor = y_test_hat.reshape(N_r, N_t, Nsym, Nsc)
+    return (
+        y_test_hat_tensor,
+        w,
+        dict(
+            mode="both_links",
+            target_link=target_link,
+            F=F, B=B, S=S, shape_last=(N_r, N_t, Nsym, Nsc),
+            nmse_test=nmse_test, mse_test=mse_test, pwr_test=pwr_test,
+            nmse_train=nmse_train, mse_train=mse_train, pwr_train=pwr_train,
+            lam=lam
+        )
+    )
 
-def wiener_predict_last_subframe_single_link(h_freq_csi_history_list_corr, lam=1e-4, link_index=0):
+def wiener_predict_TEST_last_subframe_single_link(h_freq_csi_history_list_corr, lam=1e-4, link_index=0):
     """
-    Predict the last subframe of the specified link using ONLY its own prior subframes.
-    
-    Args:
-        h_freq_csi_history_list_corr: list [H0, H1], each of shape 
-            [S, N_r, N_t, Nsym, Nsc], complex.
-        lam: ridge regularization scalar (>=0).
-        link_index: which link to predict (0 or 1). Default: 0.
-        
-    Returns:
-        y_hat_tensor: predicted last subframe tensor, shape [N_r, N_t, Nsym, Nsc]
-        w: complex filter of length (S-1)
-        info: dict with diagnostics (mse, nmse, S, B, etc.)
+    Train on times {1..S-2} --> target {S-1} for the chosen link,
+    then apply learned w to {2..S-1} to predict {S}. Returns TEST NMSE.
     """
     H = h_freq_csi_history_list_corr[link_index]
     S, N_r, N_t, Nsym, Nsc = H.shape
-    assert S >= 2, "Need at least 2 subframes to leave the last one as target."
+    assert S >= 3, "Need S >= 3 for a non-empty train set and a test step."
 
-    # Flatten per subframe to [B], with B = N_r*N_t*Nsym*Nsc
     B = N_r * N_t * Nsym * Nsc
-    H_flat = H.reshape(S, B).astype(np.complex128, copy=False)
+    Hr = H.reshape(S, B).astype(np.complex128, copy=False)
 
-    # Target: last subframe of the chosen link
-    y = H_flat[-1, :]  # [B]
+    # -------- Train: features {0..S-3} -> target {S-2}
+    F = (S - 2)
+    Phi_train = Hr[0:S-2, :].T          # [B, S-2]
+    y_train = Hr[S-2, :]                # target at time S-1 (1-based)
 
-    # Features: all *previous* subframes of the same link
-    F = (S - 1)
-    Phi = H_flat[:-1, :].T  # [B, F]
+    w, bias, _ = _solve_ridge_complex_scaled(Phi_train, y_train, lam)
+    y_train_hat = _predict_with_pack(Phi_train, w, bias)
+    nmse_train, mse_train, pwr_train = _nmse(y_train_hat, y_train)
 
-    # Solve complex ridge regression
-    A = Phi.conj().T @ Phi  # [F, F]
-    b = Phi.conj().T @ y    # [F]
-    A_reg = A + lam * np.eye(F, dtype=np.complex128)
-    w = np.linalg.solve(A_reg, b)  # [F]
+    # -------- Test: features {1..S-2} -> target {S-1}
+    Phi_test = Hr[1:S-1, :].T           # [B, S-2]
+    y_test = Hr[S-1, :]
 
-    # Predict and reshape
-    y_hat = Phi @ w  # [B]
-    y_hat_tensor = y_hat.reshape(N_r, N_t, Nsym, Nsc)
+    y_test_hat = _predict_with_pack(Phi_test, w, bias)
+    nmse_test, mse_test, pwr_test = _nmse(y_test_hat, y_test)
 
-    mse = np.mean(np.abs(y_hat - y)**2)
-    nmse = mse / (np.mean(np.abs(y)**2) + 1e-12)
+    y_test_hat_tensor = y_test_hat.reshape(N_r, N_t, Nsym, Nsc)
 
-    return y_hat_tensor, w, dict(mse=mse, nmse=nmse, F=F, B=B, S=S, shape_last=(N_r, N_t, Nsym, Nsc))
+    return (
+        y_test_hat_tensor,
+        w,
+        dict(
+            mode="single_link",
+            link_index=link_index,
+            F=F, B=B, S=S, shape_last=(N_r, N_t, Nsym, Nsc),
+            nmse_test=nmse_test, mse_test=mse_test, pwr_test=pwr_test,
+            nmse_train=nmse_train, mse_train=mse_train, pwr_train=pwr_train,
+            lam=lam
+        )
+    )
+
+def pretty_print_wiener_info(info, title="Result"):
+    mode = info.get("mode", "N/A")
+    link = info.get("link_index", "-")
+    nmse_t, nmse_tr = info["nmse_test"], info["nmse_train"]
+    S, F, lam = info["S"], info["F"], info["lam"]
+    N_r, N_t, Nsym, Nsc = info["shape_last"]
+
+    print(f"\n[{title}]")
+    print(f"  Mode: {mode} (link={link}) | λ={lam:.1e} | S={S}, F={F}")
+    print(f"  Test NMSE={nmse_t:.3e}, Train NMSE={nmse_tr:.3e}")
+    print(f"  Output shape: ({N_r}×{N_t}×{Nsym}×{Nsc})")
+
+
+def pairwise_complex_correlations(h_freq_csi_history_list, by_abs=True):
+    """
+    Compute empirical complex correlation coefficients for all pairs (i,j)
+    in h_freq_csi_history_list that have the *same shape*.
+    
+    corr(x,y) = E[x * conj(y)] / sqrt(E|x|^2 * E|y|^2), computed over all entries.
+    
+    Args:
+        h_freq_csi_history_list: list of np.ndarray (complex or real).
+        by_abs: if True, sort by |corr| descending; else by real(corr) descending.
+    
+    Returns:
+        results: list of dicts sorted from highest to lowest with keys:
+            {
+              "i": int,           # index of first element
+              "j": int,           # index of second element
+              "corr": complex,    # complex correlation coefficient
+              "abs_corr": float,  # magnitude of corr
+              "shape": tuple      # common shape used
+            }
+    """
+    def _corr(x, y, eps=1e-12):
+        x = x.reshape(-1).astype(np.complex128, copy=False)
+        y = y.reshape(-1).astype(np.complex128, copy=False)
+        num = np.mean(x * np.conj(y))
+        den = np.sqrt(np.mean(np.abs(x)**2) * np.mean(np.abs(y)**2)) + eps
+        return num / den
+
+    n = len(h_freq_csi_history_list)
+    results = []
+    for i in range(n):
+        Xi = h_freq_csi_history_list[i]
+        if Xi is None:
+            continue
+        for j in range(i+1, n):
+            Xj = h_freq_csi_history_list[j]
+            if Xj is None:
+                continue
+            if Xi.shape != Xj.shape:
+                continue  # only compare arrays with identical shape
+            c = _corr(Xi, Xj)
+            results.append({
+                "i": i,
+                "j": j,
+                "corr": c,
+                "abs_corr": float(np.abs(c)),
+                "shape": Xi.shape
+            })
+    # Sort
+    if by_abs:
+        results.sort(key=lambda d: d["abs_corr"], reverse=True)
+    else:
+        results.sort(key=lambda d: d["corr"].real, reverse=True)
+    return results
+
+
+def pairwise_lagged_correlations(h_freq_csi_history_list, max_lag=1, by_abs=True):
+    """
+    Compute lagged cross-correlation between all pairs of CSI histories
+    (with the same shape), averaged over antennas/subcarriers.
+    
+    Args:
+        h_freq_csi_history_list: list of CSI tensors, each [S, ...] complex
+        max_lag: maximum time lag to test (default: 1)
+        by_abs: if True, sort by absolute correlation magnitude
+
+    Returns:
+        List of dicts sorted by descending |corr| (or real corr if by_abs=False):
+          [
+            {
+              'i': int,               # index of first link
+              'j': int,               # index of second link
+              'lag': int,             # lag (positive: i leads j)
+              'corr': complex,        # complex correlation at that lag
+              'abs_corr': float,      # |corr|
+              'shape': tuple          # shape of compared tensors
+            },
+            ...
+          ]
+    """
+    n = len(h_freq_csi_history_list)
+    results = []
+    for i in range(n):
+        Hi = h_freq_csi_history_list[i]
+        if Hi is None: continue
+        for j in range(i+1, n):
+            Hj = h_freq_csi_history_list[j]
+            if Hj is None or Hi.shape != Hj.shape:
+                continue
+
+            S = Hi.shape[0]
+            if S <= max_lag:
+                continue
+
+            # Flatten spatial/freq dims
+            Xi = Hi.reshape(S, -1).astype(np.complex128)
+            Xj = Hj.reshape(S, -1).astype(np.complex128)
+
+            for lag in range(1, max_lag + 1):
+                # i leads j: correlate Xi[t] with Xj[t+lag]
+                A = Xi[:-lag, :]
+                B = Xj[lag:, :]
+
+                num = np.mean(A * np.conj(B))
+                den = np.sqrt(np.mean(np.abs(A)**2) * np.mean(np.abs(B)**2)) + 1e-12
+                corr = num / den
+
+                results.append(dict(
+                    i=i, j=j, lag=lag,
+                    corr=corr,
+                    abs_corr=np.abs(corr),
+                    shape=Hi.shape
+                ))
+
+    # Sort results
+    key = (lambda r: r['abs_corr']) if by_abs else (lambda r: np.real(r['corr']))
+    results.sort(key=key, reverse=True)
+    return results
+
+def evaluate_pairwise_wiener_candidates(h_freq_csi_history_list, lam=0.0, max_pairs=None):
+    """
+    Rank link pairs for the 'both-links' Wiener predictor using the *same* protocol as
+    wiener_predict_TEST_last_subframe_from_both_links:
+      - Train:  features from times {0..S-3}  -> target {S-2}
+      - Test:   features from times {1..S-2}  -> target {S-1}
+    For each pair (i,j) with identical shapes, evaluates *both* directions:
+      - target_link = i (use i & j as features to predict i)
+      - target_link = j (use i & j as features to predict j)
+
+    Args:
+        h_freq_csi_history_list: list of CSI tensors, each shaped [S, N_r, N_t, Nsym, Nsc] (complex).
+        lam: ridge regularization (use 0.0 for OLS).
+        max_pairs: optional int to stop after this many best-scoring results (post-sort).
+
+    Returns:
+        results: list of dicts sorted by ascending test NMSE. Each dict has:
+            {
+              "i": int, "j": int,                 # pair indices (i<j)
+              "target_link": int,                 # which link is predicted: i or j
+              "nmse_test": float, "nmse_train": float,
+              "mse_test": float,  "mse_train": float,
+              "pwr_test": float,  "pwr_train": float,
+              "S": int, "F": int, "B": int,       # meta info
+              "shape": tuple, "lam": float
+            }
+    """
+    results = []
+    n = len(h_freq_csi_history_list)
+
+    for i in range(n):
+        Hi = h_freq_csi_history_list[i]
+        if Hi is None:
+            continue
+        for j in range(i+1, n):
+            Hj = h_freq_csi_history_list[j]
+            if Hj is None or Hi.shape != Hj.shape:
+                continue
+
+            # Shapes and basic checks
+            S, N_r, N_t, Nsym, Nsc = Hi.shape
+            if S < 3:
+                continue
+            B = N_r * N_t * Nsym * Nsc
+            F = 2 * (S - 2)
+
+            # Flatten time vs all-other dims
+            Hir = Hi.reshape(S, B).astype(np.complex128, copy=False)
+            Hjr = Hj.reshape(S, B).astype(np.complex128, copy=False)
+
+            # Build training features (both links, times 0..S-3)
+            Phi_train = np.empty((B, F), dtype=np.complex128)
+            col = 0
+            for s in range(0, S-2):
+                Phi_train[:, col] = Hir[s, :]; col += 1
+                Phi_train[:, col] = Hjr[s, :]; col += 1
+
+            # Build test features (both links, times 1..S-2)
+            Phi_test = np.empty((B, F), dtype=np.complex128)
+            col = 0
+            for s in range(1, S-1):
+                Phi_test[:, col] = Hir[s, :]; col += 1
+                Phi_test[:, col] = Hjr[s, :]; col += 1
+
+            # Evaluate both target directions: predict Hi and predict Hj
+            for target_link, Hr in ((i, Hir), (j, Hjr)):
+                y_train = Hr[S-2, :]
+                y_test  = Hr[S-1, :]
+
+                # Solve on TRAIN using your standardized ridge
+                w, bias, _ = _solve_ridge_complex_scaled(Phi_train, y_train, lam)
+
+                # Predictions
+                y_hat_train = _predict_with_pack(Phi_train, w, bias)
+                y_hat_test  = _predict_with_pack(Phi_test,  w, bias)
+
+                # Metrics (same NMSE you use)
+                nmse_train, mse_train, pwr_train = _nmse(y_hat_train, y_train)
+                nmse_test,  mse_test,  pwr_test  = _nmse(y_hat_test,  y_test)
+
+                results.append(dict(
+                    i=i, j=j, target_link=target_link,
+                    nmse_test=float(nmse_test),  mse_test=float(mse_test),  pwr_test=float(pwr_test),
+                    nmse_train=float(nmse_train), mse_train=float(mse_train), pwr_train=float(pwr_train),
+                    S=S, F=F, B=B, shape=Hi.shape, lam=float(lam)
+                ))
+
+    # Rank by *lowest* test NMSE
+    results.sort(key=lambda d: d["nmse_test"])
+    if max_pairs is not None:
+        results = results[:max_pairs]
+    return results

@@ -71,7 +71,7 @@ if __name__ == "__main__":
     cfg.num_tx_ue_sel = 6
     if arguments == []:
         mobility = 'high_mobility'
-        drop_idx = '2'
+        drop_idx = '3'
         rx_ues_arr = [3]
         vector_inputs = 'tx_ants' # tx_ants, rx_ants, none, all
         csi_delays = [4, 5, 6, 7, 8]

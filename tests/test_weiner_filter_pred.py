@@ -17,7 +17,9 @@ num_bs_ant = 4
 syms_per_subframe = 14
 num_subcarriers = 512
 mobility = 'high_mobility'
-drop_idx = 2
+drop_idx = 1
+add_correlation = False
+rho_target = 0.9
 
 num_rx_nodes = 4
 num_tx_nodes = 7
@@ -79,24 +81,31 @@ hold = 1
 # Adding correlation
 ################################################################################
 
-h_freq_csi_history_list_truncated = [h_freq_csi_history_list[1], h_freq_csi_history_list[2]]
+
+cands = evaluate_pairwise_wiener_candidates(h_freq_csi_history_list, lam=0.0, max_pairs=10)
+for r in cands:
+    i, j, t = r["i"], r["j"], r["target_link"]
+    print(f"(i,j)=({i},{j}) → predict {t} | test NMSE={r['nmse_test']:.4e} | train NMSE={r['nmse_train']:.4e} | shape={r['shape']}")
+
+candidate_to_use = 3
+
+h_freq_csi_history_list_truncated = [h_freq_csi_history_list[cands[candidate_to_use]["i"]], h_freq_csi_history_list[cands[candidate_to_use]["j"]]]
 
 # Measure empirical complex correlation before
 corr_before = complex_corr_coeff(h_freq_csi_history_list_truncated[0], h_freq_csi_history_list_truncated[1])
+print(f"\nEmpirical complex corr before: {np.abs(corr_before):.4f}")
 
-# # Choose target correlation magnitude (real-valued rho in [-0.999, 0.999]).
-# rho_target = 0.2
+if add_correlation:    
 
-# h_freq_csi_history_list_truncated[1] = impose_crosslink_correlation(h_freq_csi_history_list_truncated[0], 
-#                                                                     h_freq_csi_history_list_truncated[1], 
-#                                                                     rho_target=rho_target, 
-#                                                                     rng=np.random.default_rng(2025))
+    h_freq_csi_history_list_truncated[1] = impose_crosslink_correlation(h_freq_csi_history_list_truncated[0], 
+                                                                        h_freq_csi_history_list_truncated[1], 
+                                                                        rho_target=rho_target, 
+                                                                        rng=np.random.default_rng(2025))
 
-# # Measure empirical complex correlation after
-# corr_after  = complex_corr_coeff(h_freq_csi_history_list_truncated[0], h_freq_csi_history_list_truncated[1])
+    # Measure empirical complex correlation after
+    corr_after  = complex_corr_coeff(h_freq_csi_history_list_truncated[0], h_freq_csi_history_list_truncated[1])
 
-# print(f"\nEmpirical complex corr before: {np.abs(corr_before):.4f}")
-# print(f"Empirical complex corr after : {np.abs(corr_after):.4f} (target ~ {rho_target})")
+    print(f"Empirical complex corr after : {np.abs(corr_after):.4f} (target ~ {rho_target})")
 
 h_freq_csi_history_list_corr = h_freq_csi_history_list_truncated
 
@@ -106,18 +115,16 @@ hold = 1
 # Weiner Filter Based Prediction
 ################################################################################
 
-y1_hat_last, w1, info1 = wiener_predict_last_subframe_single_link(
-    h_freq_csi_history_list_corr, lam=1e-3, link_index=1
+link_to_predict = 0 if cands[candidate_to_use]["i"] == cands[candidate_to_use]["target_link"] else 1
+
+y1_hat_last, w1, info1 = wiener_predict_TEST_last_subframe_single_link(
+    h_freq_csi_history_list_corr, lam=1e-3, link_index=link_to_predict
 )
-print("\nPrediction using one link:")
-print(info1)
+pretty_print_wiener_info(info1, title="Prediction using ONE link")
 
-y_hat_last, w_filter, info = wiener_predict_last_subframe_from_both_links(
-    h_freq_csi_history_list_corr, lam=1e-3
+y_hat_last, w_filter, info = wiener_predict_TEST_last_subframe_from_both_links(
+    h_freq_csi_history_list_corr, lam=1e-3, target_link=link_to_predict
 )
-print("\nPrediction using both links:")
-print(info)
-
-
+pretty_print_wiener_info(info, title="Prediction using BOTH links")
 
 hold = 1

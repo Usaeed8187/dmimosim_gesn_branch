@@ -152,20 +152,19 @@ class MU_MIMO(Model):
         :param info_bits: information bits
         :return: decoded bits, uncoded BER, demodulated QAM symbols (for debugging purpose)
         """
+        
+        # LDPC encoder processing
+        info_bits = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
+                                        self.num_codewords, self.encoder.k])
+        c = self.encoder(info_bits)
+        c = tf.reshape(c, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords * self.encoder.n])
 
-        if not self.cfg.return_estimated_channel:
-            # LDPC encoder processing
-            info_bits = tf.reshape(info_bits, [self.batch_size, 1, self.rg.num_streams_per_tx,
-                                            self.num_codewords, self.encoder.k])
-            c = self.encoder(info_bits)
-            c = tf.reshape(c, [self.batch_size, 1, self.rg.num_streams_per_tx, self.num_codewords * self.encoder.n])
+        # Interleaving for coded bits
+        d = self.intlvr(c)
 
-            # Interleaving for coded bits
-            d = self.intlvr(c)
-
-            # QAM mapping for the OFDM grid
-            x = self.mapper(d)
-            x_rg = self.rg_mapper(x)
+        # QAM mapping for the OFDM grid
+        x = self.mapper(d)
+        x_rg = self.rg_mapper(x)
 
         if self.cfg.perfect_csi is True:
             # Perfect channel estimation
@@ -307,18 +306,139 @@ class MU_MIMO(Model):
             weiner_filter_predictor = weiner_filter_pred(method="using_one_link")
             h_freq_csi_weiner_filter = np.asarray(weiner_filter_predictor.predict(h_freq_csi_history))
             pred_nmse_weiner_filter = self.nmse(h_freq_csi_true[0,...], h_freq_csi_weiner_filter[0,...])
-            print("Weiner Filter (Per-Link) WESN NMSE: ", pred_nmse_weiner_filter)
+            print("Weiner Filter (Per-Link) NMSE: ", pred_nmse_weiner_filter)
 
-            rx_ant = 2
-            tx_ant = 3
+            hold = 1
+
+
+
+
+
+
+
+            
+
+
+
+
+
+
+
+
+            # Weiner Filter based prediction (MIMO) (per_tx_rx_node_pair)
+            weiner_filter_predictor = weiner_filter_pred(method="using_one_link_MIMO")
+
+            best_nmse = 1.0
+            best_K = None
+            best_h_freq_csi_weiner_filter_MIMO = None
+            best_pred_nmse_weiner_filter_MIMO = None
+            for K in range(1,h_freq_csi_history.shape[0]-1):
+                h_freq_csi_weiner_filter_MIMO = np.asarray(weiner_filter_predictor.predict(h_freq_csi_history, K=K))
+                pred_nmse_weiner_filter_MIMO = self.nmse(h_freq_csi_true[0,...], h_freq_csi_weiner_filter_MIMO[0,...])
+
+                if pred_nmse_weiner_filter_MIMO < best_nmse:
+                    best_nmse = pred_nmse_weiner_filter_MIMO
+                    best_h_freq_csi_weiner_filter_MIMO = h_freq_csi_weiner_filter_MIMO
+                    best_pred_nmse_weiner_filter_MIMO = pred_nmse_weiner_filter_MIMO
+                    best_K = K
+                    
+            h_freq_csi_weiner_filter_MIMO = best_h_freq_csi_weiner_filter_MIMO
+            print("Weiner Filter (MIMO) (Per-Link) NMSE for K={}: ".format(best_K), best_pred_nmse_weiner_filter_MIMO)
+
+            hold = 1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            # Weiner Filter based prediction (MIMO, all links)
+            weiner_filter_predictor = weiner_filter_pred(method="using_all_links_MIMO")
+
+            best_nmse = 1.0
+            best_K = None
+            best_h_freq_csi_weiner_filter_MIMO_all_links = None
+            best_pred_nmse_weiner_filter_MIMO_all_links = None
+            for K in range(1,h_freq_csi_history.shape[0]-1):
+                h_freq_csi_weiner_filter_MIMO_all_links = np.asarray(weiner_filter_predictor.predict(h_freq_csi_history, K=K))
+                pred_nmse_weiner_filter_MIMO_all_links = self.nmse(h_freq_csi_true[0,...], h_freq_csi_weiner_filter_MIMO_all_links[0,...])
+
+                if pred_nmse_weiner_filter_MIMO_all_links < best_nmse:
+                    best_nmse = pred_nmse_weiner_filter_MIMO_all_links
+                    best_h_freq_csi_weiner_filter_MIMO_all_links = h_freq_csi_weiner_filter_MIMO_all_links
+                    best_pred_nmse_weiner_filter_MIMO_all_links = pred_nmse_weiner_filter_MIMO_all_links
+                    best_K = K
+                    
+            h_freq_csi_weiner_filter_MIMO_all_links = best_h_freq_csi_weiner_filter_MIMO_all_links
+            print("Weiner Filter (MIMO, all links) NMSE for K={}: ".format(best_K), best_pred_nmse_weiner_filter_MIMO_all_links)
+
+
+
+            rx_ant = 0
+            tx_ant = 0
             ofdm_sym = 5
             plt.figure()
             plt.plot(np.real(h_freq_csi_true[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='true future channel')
+            # plt.plot(np.real(h_freq_csi_twomode_per_link[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Twomode (Per_link)')
             plt.plot(np.real(h_freq_csi_weiner_filter[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Weiner Filter (Per-Link)')
+            plt.plot(np.real(h_freq_csi_weiner_filter_MIMO[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Weiner Filter (MIMO) (Per-Link)')
+            plt.plot(np.real(h_freq_csi_weiner_filter_MIMO_all_links[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Weiner Filter (MIMO, all links)')
             plt.legend()
             plt.savefig('b')
 
             hold = 1
+
+
+
+
+
+
+
+
+
+
+
+
+            # # Weiner Filter (Windowed) based prediction (per_tx_rx_node_pair)
+            # weiner_filter_predictor = weiner_filter_pred(method="using_one_link_windowed")
+            # best_nmse = 1.0
+            # best_K = None
+            # best_h_freq_csi_weiner_filter_windowed = None
+            # best_pred_nmse_weiner_filter_windowed = None
+            # for K in range(1,h_freq_csi_history.shape[0]-1):
+            #     h_freq_csi_weiner_filter_windowed = np.asarray(weiner_filter_predictor.predict(h_freq_csi_history, K=K))
+            #     pred_nmse_weiner_filter_windowed = self.nmse(h_freq_csi_true[0,...], h_freq_csi_weiner_filter_windowed[0,...])
+
+            #     if pred_nmse_weiner_filter_windowed < best_nmse:
+            #         best_nmse = pred_nmse_weiner_filter_windowed
+            #         best_h_freq_csi_weiner_filter_windowed = h_freq_csi_weiner_filter_windowed
+            #         best_pred_nmse_weiner_filter_windowed = pred_nmse_weiner_filter_windowed
+            #         best_K = K
+                    
+            # h_freq_csi_weiner_filter_windowed = best_h_freq_csi_weiner_filter_windowed
+            # print("Weiner Filter (Windowed) (Per-Link) WESN NMSE for K={}: ".format(best_K), best_pred_nmse_weiner_filter_windowed)
+
+            # rx_ant = 3
+            # tx_ant = 8
+            # ofdm_sym = 5
+            # plt.figure()
+            # plt.plot(np.real(h_freq_csi_true[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='true future channel')
+            # plt.plot(np.real(h_freq_csi_twomode_per_link[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Twomode (Per_link)')
+            # plt.plot(np.real(h_freq_csi_weiner_filter[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Weiner Filter (Per-Link)')
+            # plt.plot(np.real(h_freq_csi_weiner_filter_windowed[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label='Weiner Filter (Windowed) (Per-Link)')
+            # plt.legend()
+            # plt.savefig('b')
+
+            # hold = 1
 
 
 
@@ -605,13 +725,16 @@ class MU_MIMO(Model):
         h_freq_csi_twomode_all = tf.reshape(h_freq_csi_twomode_all, (1, self.num_rx_ue, -1, *h_freq_csi_twomode_all.shape[3:]))
         h_freq_csi_twomode_per_link = tf.reshape(h_freq_csi_twomode_per_link, (1, self.num_rx_ue, -1, *h_freq_csi_twomode_per_link.shape[3:]))
         h_freq_csi_graph_twomode = tf.reshape(h_freq_csi_graph_twomode, (1, self.num_rx_ue, -1, *h_freq_csi_graph_twomode.shape[3:]))
+        h_freq_csi_weiner_filter = tf.reshape(h_freq_csi_weiner_filter, (1, self.num_rx_ue, -1, *h_freq_csi_weiner_filter.shape[3:]))
+        # h_freq_csi_weiner_filter_windowed = tf.reshape(h_freq_csi_weiner_filter_windowed, (1, self.num_rx_ue, -1, *h_freq_csi_weiner_filter_windowed.shape[3:]))
+        h_freq_csi_weiner_filter_MIMO = tf.reshape(h_freq_csi_weiner_filter_MIMO, (1, self.num_rx_ue, -1, *h_freq_csi_weiner_filter_MIMO.shape[3:]))
         h_freq_csi_true = h_freq_csi_true[0:1,...]
         h_freq_csi_true = tf.reshape(h_freq_csi_true, (1, self.num_rx_ue, -1, *h_freq_csi_true.shape[3:]))
 
 
         
-        SNR_range = np.arange(0, 22, 2)
-        uncoded_bers = 0.5*np.ones((6, SNR_range.shape[0]))
+        SNR_range = np.arange(0, 22, 4)
+        uncoded_bers = 0.5*np.ones((8, SNR_range.shape[0]))
         
         for snr_idx, snr in enumerate(SNR_range):
             
@@ -623,19 +746,23 @@ class MU_MIMO(Model):
             
             for curr_method in range(uncoded_bers.shape[0]):
                 
-                if curr_method == 0:
+                if curr_method == 0:        # Perfect
                     h_freq_csi = h_freq
                     h_freq_csi = tf.reshape(h_freq_csi, (h_freq_csi.shape[0], self.num_rx_ue, -1, *h_freq_csi.shape[3:]))
-                elif curr_method == 1:
+                elif curr_method == 1:      # Outdated
                     h_freq_csi = h_freq_csi_outdated
-                elif curr_method == 2:
+                elif curr_method == 2:      # Vanilla WESN
                     h_freq_csi = h_freq_csi_vanilla
-                elif curr_method == 3:
+                elif curr_method == 3:      # Twomode WESN (all links together)
                     h_freq_csi = h_freq_csi_twomode_all
-                elif curr_method == 4:
+                elif curr_method == 4:      # Twomode WESN (per link)
                     h_freq_csi = h_freq_csi_twomode_per_link
-                elif curr_method == 5:
+                elif curr_method == 5:      # Twomode Graph ESN
                     h_freq_csi = h_freq_csi_graph_twomode
+                elif curr_method == 6:      # Weiner Filter
+                    h_freq_csi = h_freq_csi_weiner_filter
+                elif curr_method == 7:      # Weiner Filter (MIMO)
+                    h_freq_csi = h_freq_csi_weiner_filter_MIMO
                 
                 if curr_method != 0:
                     h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
@@ -648,18 +775,8 @@ class MU_MIMO(Model):
                     # x_precoded, h_eff = self.zf_precoder([x_rg, tf.transpose(h_freq, perm=[0, 2, 1, 3, 4, 5, 6]), ue_indices, ue_ranks])
                     x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, ue_ranks])
                 else:
-                    ValueError("unsupported precoding method for MASS")                
+                    ValueError("unsupported precoding method")                
                 
-                debug = False
-                if debug:
-                    plt.figure()
-                    debug_rx_ant = 3
-                    debug_tx_ant = 1
-                    debug_ofdm_sym = 10
-                    plt.plot(np.real(h_freq[0,0,debug_rx_ant,0,debug_tx_ant,debug_ofdm_sym,:]))
-                    plt.plot(np.real(h_freq_csi_history[-1,0,0,debug_rx_ant,0,debug_tx_ant,debug_ofdm_sym,:]))
-                    plt.savefig('a')
-                debug = False
                 y = self.apply_channel([x_precoded, h_freq])
                 no = np.power(10.0, rx_snr_db / (-10.0))
                 y = self.awgn([y, no])
@@ -671,37 +788,25 @@ class MU_MIMO(Model):
 
                 x_hat = np.zeros(x_rg.shape, dtype=np.complex64)
                 x_hat = x_hat[..., :self.rg.num_effective_subcarriers]
-                for rx_node in range(self.cfg.num_rx_ue_sel+1):
+                for rx_node in range(self.num_rx_ue):
                     
-                    if rx_node == 0:
-                        rx_ant = tf.range(0,4)
-                        stream_idx = tf.range(0,2*self.cfg.num_tx_streams)
+                    rx_ant = tf.range(rx_node*2, (rx_node+1)*2)
+                    stream_idx = rx_node
+
+                    if curr_method == 0:
+                        curr_h = tf.gather(h_eff, stream_idx, axis=4)
+                        curr_h = tf.gather(curr_h, rx_node, axis=1)
                     else:
-                        rx_ant = tf.range(4 + (rx_node-1)*2, 4 + rx_node*2)
-                        start = 2*self.cfg.num_tx_streams + (rx_node-1)*self.cfg.num_tx_streams
-                        end = 2*self.cfg.num_tx_streams + rx_node*self.cfg.num_tx_streams
-                        stream_idx = tf.range(start,end)                    
+                        curr_h = tf.gather(h_hat, rx_ant, axis=2)
+                        curr_h = tf.squeeze(curr_h)
+                        curr_h = tf.gather(curr_h, stream_idx, axis=2)
+                        curr_h = curr_h[:, :, tf.newaxis, ...]
 
                     curr_y = tf.gather(y, rx_ant, axis=2)
                     curr_y = tf.gather(curr_y, self.rg.effective_subcarrier_ind, axis=-1)
                     curr_y = tf.squeeze(curr_y)
 
-                    if curr_method == 0:
-                        curr_h = tf.gather(h_eff, stream_idx, axis=4)
-                        if rx_node == 0:
-                            curr_h = tf.gather(curr_h, tf.range(0,2), axis=1)
-                            curr_h = tf.reshape(curr_h, (curr_h.shape[0], -1, *curr_h.shape[3:]))
-                            curr_h = tf.squeeze(curr_h)
-                        else:
-                            curr_h = tf.gather(curr_h, rx_node+1, axis=1)
-                            curr_h = curr_h[:,:,0,:,...]
-                    else:
-                        curr_h = tf.gather(h_hat, rx_ant, axis=2)
-                        curr_h = tf.squeeze(curr_h)
-                        curr_h = tf.gather(curr_h, stream_idx, axis=2)
-
                     curr_x_hat = self.mmse_detect(curr_y, curr_h, snr_db=rx_snr_db)
-                    curr_x_hat = curr_x_hat[:, np.newaxis, ...]
                     curr_x_hat = np.asarray(curr_x_hat)
 
                     x_hat[:,:,stream_idx,:,:] = curr_x_hat
@@ -723,6 +828,10 @@ class MU_MIMO(Model):
                 # Hard-decision bit error rate
                 d_hard = tf.cast(llr > 0, tf.float32) # Shape: [nbatches, 1, number of streams, number of effective subcarriers * number of data OFDM symbols * QAM order]
                 uncoded_bers[curr_method, snr_idx] = compute_ber(d, d_hard).numpy()
+                
+                node_wise_ber, node_wise_bler = compute_UE_wise_BER(d, d_hard, self.cfg.ue_ranks, self.cfg.num_tx_streams*self.num_rx_ue)
+
+                hold = 1
 
         plt.figure()
         plt.semilogy(SNR_range, uncoded_bers[0, :], label="Perfect Channel")
@@ -731,6 +840,8 @@ class MU_MIMO(Model):
         # plt.semilogy(SNR_range, uncoded_bers[3, :], label="Twomode (All) WESN Channel")
         plt.semilogy(SNR_range, uncoded_bers[4, :], label="Twomode (Per-Link) WESN Channel")
         # plt.semilogy(SNR_range, uncoded_bers[5, :], label="Twomode Graph WESN Channel")
+        plt.semilogy(SNR_range, uncoded_bers[6, :], label="Weiner Filter Channel")
+        plt.semilogy(SNR_range, uncoded_bers[7, :], label="Weiner Filter (MIMO) Channel")
         plt.grid()
         plt.legend()
         plt.savefig('bers_tmp')
