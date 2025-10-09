@@ -134,7 +134,10 @@ def mumimo_zf_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
                 # support only one stream adaptation
                 assert(ue_ranks[k] == 1)
                 # Calculate combining weights
-                Rk = tf.matmul(h_ue, h_ue, adjoint_b=True) 
+                Nr_k = int(h_ue.shape[-2])
+                Ik   = tf.eye(Nr_k, dtype=h_ue.dtype)[None,None,None,None,:,:]
+                
+                Rk   = tf.matmul(h_ue, h_ue, adjoint_b=True) + tf.cast(1e-6, h_ue.dtype)*Ik
                 eigvals, eigvecs = tf.linalg.eigh(Rk) # eigvecs: [..., Nr_k, Nr_k]
                 uk_raw = eigvecs[..., -1]                   # principal eigenvector [B,1,S,K,Nr_k]
 
@@ -149,8 +152,8 @@ def mumimo_zf_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
                 u_prev = uk_slices[0]
                 aligned.append(u_prev)
 
-                for k in range(1, len(uk_slices)):
-                    u_curr = uk_slices[k]
+                for i in range(1, len(uk_slices)):
+                    u_curr = uk_slices[i]
 
                     if u_curr.dtype.is_complex:
                         # complex phase alignment
@@ -199,8 +202,6 @@ def mumimo_zf_precoder(x, h, ue_indices, ue_ranks, return_precoding_matrix=False
     # Normalize each column to unit power
     norm = tf.sqrt(tf.reduce_sum(tf.abs(g)**2, axis=-2, keepdims=True))
     g = g/tf.cast(norm, g.dtype)
-
-    g = g / tf.cast(tf.sqrt(tf.reduce_sum(tf.abs(g)**2, axis=-2, keepdims=True)), g.dtype)
 
     # Expand last dim of `x` for precoding
     x_precoded = tf.expand_dims(x, -1)

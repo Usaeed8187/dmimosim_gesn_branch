@@ -750,15 +750,18 @@ class MU_MIMO(Model):
                     h_freq_csi = h_freq
                     h_freq_csi = tf.reshape(h_freq_csi, (h_freq_csi.shape[0], self.num_rx_ue, -1, *h_freq_csi.shape[3:]))
                 elif curr_method == 1:      # Outdated
-                    h_freq_csi = h_freq_csi_outdated
+                    # h_freq_csi = h_freq_csi_outdated
+                    continue
                 elif curr_method == 2:      # Vanilla WESN
-                    h_freq_csi = h_freq_csi_vanilla
+                    # h_freq_csi = h_freq_csi_vanilla
+                    continue
                 elif curr_method == 3:      # Twomode WESN (all links together)
                     h_freq_csi = h_freq_csi_twomode_all
                 elif curr_method == 4:      # Twomode WESN (per link)
                     h_freq_csi = h_freq_csi_twomode_per_link
                 elif curr_method == 5:      # Twomode Graph ESN
-                    h_freq_csi = h_freq_csi_graph_twomode
+                    # h_freq_csi = h_freq_csi_graph_twomode
+                    continue
                 elif curr_method == 6:      # Weiner Filter
                     h_freq_csi = h_freq_csi_weiner_filter
                 elif curr_method == 7:      # Weiner Filter (MIMO)
@@ -835,7 +838,7 @@ class MU_MIMO(Model):
 
         plt.figure()
         plt.semilogy(SNR_range, uncoded_bers[0, :], label="Perfect Channel")
-        plt.semilogy(SNR_range, uncoded_bers[1, :], label="Outdated Channel")
+        # plt.semilogy(SNR_range, uncoded_bers[1, :], label="Outdated Channel")
         # plt.semilogy(SNR_range, uncoded_bers[2, :], label="WESN Channel")
         # plt.semilogy(SNR_range, uncoded_bers[3, :], label="Twomode (All) WESN Channel")
         plt.semilogy(SNR_range, uncoded_bers[4, :], label="Twomode (Per-Link) WESN Channel")
