@@ -15,6 +15,7 @@ class ZFPrecoder(Layer):
                  resource_grid,
                  stream_management,
                  return_effective_channel=False,
+                 return_precoder=False,
                  dtype=tf.complex64,
                  **kwargs):
         super().__init__(trainable=False, dtype=dtype, **kwargs)
@@ -23,6 +24,7 @@ class ZFPrecoder(Layer):
         self._resource_grid = resource_grid
         self._stream_management = stream_management
         self._return_effective_channel = return_effective_channel
+        self._return_precoder = return_precoder
         self._remove_nulled_scs = RemoveNulledSubcarriers(self._resource_grid)
 
     def _compute_effective_channel(self, h, g):
@@ -145,6 +147,12 @@ class ZFPrecoder(Layer):
 
         if self._return_effective_channel:
             h_eff = self._compute_effective_channel(h, g)
-            return x_precoded, h_eff
+            if self._return_precoder:
+                return x_precoded, h_eff, g
+            else:
+                return x_precoded, h_eff
         else:
-            return x_precoded
+            if self._return_precoder:
+                return x_precoded, g
+            else:
+                return x_precoded

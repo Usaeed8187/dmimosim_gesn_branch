@@ -125,7 +125,7 @@ class MU_MIMO(Model):
 
         # The zero forcing and block diagonalization precoder
         self.bd_precoder = BDPrecoder(self.rg, sm, return_effective_channel=True)
-        self.zf_precoder = ZFPrecoder(self.rg, sm, return_effective_channel=True)
+        self.zf_precoder = ZFPrecoder(self.rg, sm, return_effective_channel=True, return_precoder=True)
         self.bd_equalizer = BDEqualizer(self.rg, sm)
 
         # The LS channel estimator will provide channel estimates and error variances
@@ -192,9 +192,9 @@ class MU_MIMO(Model):
                                     batch_size=self.batch_size)
             h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
             
-            h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history[-3:,...])
-            pred_nmse_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
-            print("Vanilla WESN NMSE: ", pred_nmse_wesn)
+            # h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history[-3:,...])
+            # pred_nmse_wesn = self.nmse(h_freq_csi_true[0,...], h_freq_csi_vanilla[0,...])
+            # print("Vanilla WESN NMSE: ", pred_nmse_wesn)
 
 
 
@@ -470,7 +470,6 @@ class MU_MIMO(Model):
 
             # plt.figure()
             # plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
-            # plt.plot(np.real(h_freq_csi_vanilla[0,0,0,0,0,0,:]), label='Vanilla')
             # plt.plot(np.real(h_freq_csi_twomode[0,0,0,0,0,0,:]), label='Twomode')
             # plt.plot(np.real(h_freq_csi_graph_twomode[0,0,0,0,0,0,:]), label='Graph Twomode')
             # plt.legend()
@@ -720,7 +719,10 @@ class MU_MIMO(Model):
         # h_freq_csi_outdated = tf.transpose(h_freq_csi_outdated, perm=[0, 2, 1, 3, 4, 5, 6])
 
         # [batch_size, num_rx_ue, num_ue_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
-        h_freq_csi_vanilla = tf.reshape(h_freq_csi_vanilla, (1, self.num_rx_ue, -1, *h_freq_csi_vanilla.shape[3:]))
+        try:
+            h_freq_csi_vanilla = tf.reshape(h_freq_csi_vanilla, (1, self.num_rx_ue, -1, *h_freq_csi_vanilla.shape[3:]))
+        except:
+            hold = 1
         # h_freq_csi_kalman = tf.reshape(h_freq_csi_kalman, (-1, self.num_rx_ue, 1, *h_freq_csi_kalman.shape[3:]))
         h_freq_csi_twomode_all = tf.reshape(h_freq_csi_twomode_all, (1, self.num_rx_ue, -1, *h_freq_csi_twomode_all.shape[3:]))
         h_freq_csi_twomode_per_link = tf.reshape(h_freq_csi_twomode_per_link, (1, self.num_rx_ue, -1, *h_freq_csi_twomode_per_link.shape[3:]))
@@ -773,10 +775,8 @@ class MU_MIMO(Model):
 
                 # apply precoding to OFDM grids
                 if self.cfg.precoding_method == "ZF":
-                    # ue_indices = [[i] for i in range(self.num_rx_ue)]
                     ue_ranks = self.num_streams_per_tx / self.num_rx_ue
-                    # x_precoded, h_eff = self.zf_precoder([x_rg, tf.transpose(h_freq, perm=[0, 2, 1, 3, 4, 5, 6]), ue_indices, ue_ranks])
-                    x_precoded, h_eff = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, ue_ranks])
+                    x_precoded, h_eff, g = self.zf_precoder([x_rg, h_freq_csi, self.cfg.ue_indices, ue_ranks])
                 else:
                     ValueError("unsupported precoding method")                
                 
@@ -787,7 +787,15 @@ class MU_MIMO(Model):
                 # LS channel estimation with linear interpolation
                 no = tf.reduce_mean(no)
                 no = tf.cast(no, tf.float32)
-                h_hat, err_var = self.ls_estimator([y, no])
+                if self.cfg.use_perfect_dmrs_estimate:
+                    # Perfect DMRS estimation
+                    h_freq_reshaped = tf.transpose(h_freq[:,0,...], perm=[0,2,4,5,1,3])
+                    h_hat = tf.matmul(h_freq_reshaped, g)
+                    h_hat = tf.transpose(h_hat, perm=[0,1,4,5,2,3])
+                    h_hat = h_hat[:,:,:,tf.newaxis,...]
+                    h_hat = tf.gather(h_hat, self.rg.effective_subcarrier_ind, axis=-1)
+                else:
+                    h_hat, err_var = self.ls_estimator([y, no])
 
                 x_hat = np.zeros(x_rg.shape, dtype=np.complex64)
                 x_hat = x_hat[..., :self.rg.num_effective_subcarriers]
@@ -847,7 +855,10 @@ class MU_MIMO(Model):
         plt.semilogy(SNR_range, uncoded_bers[7, :], label="Weiner Filter (MIMO) Channel")
         plt.grid()
         plt.legend()
-        plt.savefig('bers_tmp')
+        if self.cfg.use_perfect_dmrs_estimate:
+            plt.savefig('bers_tmp_perfect_dmrs_ce')
+        else:
+            plt.savefig('bers_tmp')
 
         return [pred_nmse_outdated, pred_nmse_wesn, pred_nmse_wgesn_per_antenna_pair, pred_nmse_kalman], uncoded_bers, x_hat
     

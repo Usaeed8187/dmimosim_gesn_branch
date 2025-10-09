@@ -7,7 +7,7 @@ from dmimo.channel import lmmse_channel_estimation
 
 class standard_rc_pred_freq_mimo:
 
-    def __init__(self, architecture, rc_config, num_rx_ant=8, num_neurons=None):
+    def __init__(self, architecture, rc_config, num_rx_ant=8, num_neurons=None, rb_granularity=True):
         
         ns3_config = Ns3Config()
         self.rc_config = rc_config
@@ -18,7 +18,7 @@ class standard_rc_pred_freq_mimo:
         self.subcarriers_per_RB = 12
         self.num_rbs = int(np.ceil(self.nfft_full / self.subcarriers_per_RB))
 
-        self.rb_granularity = True
+        self.rb_granularity = rb_granularity
         if self.rb_granularity:
             self.num_freq_re = self.num_rbs
         else:

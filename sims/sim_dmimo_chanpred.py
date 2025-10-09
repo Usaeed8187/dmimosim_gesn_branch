@@ -71,7 +71,7 @@ if __name__ == "__main__":
     cfg.num_tx_ue_sel = 6
     if arguments == []:
         mobility = 'high_mobility'
-        drop_idx = '3'
+        drop_idx = '2'
         rx_ues_arr = [3]
         vector_inputs = 'tx_ants' # tx_ants, rx_ants, none, all
         csi_delays = [4, 5, 6, 7, 8]
@@ -114,6 +114,7 @@ if __name__ == "__main__":
     cfg.rank_adapt = True
     cfg.link_adapt = True
     cfg.csi_prediction = True
+    cfg.use_perfect_dmrs_estimate = False
     cfg.predictor = 'gesn'
 
     for ue_arr_idx in range(np.size(rx_ues_arr)):
