@@ -24,7 +24,7 @@ from dmimo.channel.wesn_pred import WESN
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val, compute_UE_wise_BER, compute_UE_wise_SER
-from dmimo.utils import rb_to_subcarriers
+from dmimo.utils import rb_to_sc_ls
 
 from .txs_mimo import TxSquad
 from .rxs_mimo import RxSquad
@@ -191,6 +191,7 @@ class MU_MIMO(Model):
                                                     num_neurons=self.rc_config.num_neurons)
             h_freq_csi_true, rx_snr_db = dmimo_chans.load_channel(slot_idx=self.cfg.first_slot_idx,
                                     batch_size=self.batch_size)
+            h_freq_csi_true_sc_granularity = h_freq_csi_true
             h_freq_csi_true = rc_predictor_vanilla.rb_mapper(h_freq_csi_true)
             
             # h_freq_csi_vanilla = rc_predictor_vanilla.predict(h_freq_csi_history[-3:,...])
@@ -223,8 +224,6 @@ class MU_MIMO(Model):
             h_freq_csi_twomode_all = twomode_predictor.predict(h_freq_csi_history)
             pred_nmse_twomode_wesn_all = self.nmse(h_freq_csi_true[0,...], h_freq_csi_twomode_all[0,...])
             print("Two-Mode (All) WESN NMSE: ", pred_nmse_twomode_wesn_all)
-
-
 
 
 
@@ -274,12 +273,26 @@ class MU_MIMO(Model):
             pred_nmse_twomode_wesn_per_link = self.nmse(h_freq_csi_true[0,...], h_freq_csi_twomode_per_link[0,...])
             print("Two-Mode (Per-Link) WESN NMSE: ", pred_nmse_twomode_wesn_per_link)
 
-            # plt.figure()
-            # plt.plot(np.real(h_freq_csi_true[0,0,0,0,0,0,:]), label='true future channel')
-            # plt.plot(np.real(h_freq_csi_twomode_all[0,0,0,0,0,0,:]), label='Twomode (All)')
-            # plt.plot(np.real(h_freq_csi_twomode_per_link[0,0,0,0,0,0,:]), label='Twomode (Per-Link)')
-            # plt.legend()
-            # plt.savefig('b')
+            rx_ant = 1
+            tx_ant = 1
+            ofdm_sym = 5
+
+            plt.figure()
+            plt.plot(np.real(h_freq_csi_true[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label="true channel (rb granularity)")
+            plt.plot(np.real(h_freq_csi_twomode_per_link[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label="Two-Mode (Per-Link) WESN channel (rb granularity)")
+            plt.legend()
+            plt.savefig('rb granularity comparison')
+
+            plt.figure()
+            plt.plot(np.real(h_freq_csi_true_sc_granularity[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label="true channel")
+            h_freq_csi_true_demapped = rb_to_sc_ls(h_freq_csi_true, Nsc=self.cfg.fft_size, rb_size=12, lam=1e-3,
+                         dtype=h_freq_csi_true.dtype)
+            plt.plot(np.real(h_freq_csi_true_demapped[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label="true channel mapped to RBs and demapped")
+            h_freq_csi_twomode_per_link_demapped = rb_to_sc_ls(h_freq_csi_twomode_per_link, Nsc=self.cfg.fft_size, rb_size=12, lam=1e-3,
+                         dtype=h_freq_csi_twomode_all.dtype)
+            plt.plot(np.real(h_freq_csi_twomode_per_link_demapped[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label="Two-Mode (All) WESN channel demapped")
+            plt.legend()
+            plt.savefig('rbs demapped to scs comparison')
 
 
 
@@ -759,22 +772,40 @@ class MU_MIMO(Model):
                     # h_freq_csi = h_freq_csi_vanilla
                     continue
                 elif curr_method == 3:      # Twomode WESN (all links together)
-                    h_freq_csi = h_freq_csi_twomode_all
+                    # h_freq_csi = h_freq_csi_twomode_all
+                    continue
                 elif curr_method == 4:      # Twomode WESN (per link)
                     h_freq_csi = h_freq_csi_twomode_per_link
                 elif curr_method == 5:      # Twomode Graph ESN
                     # h_freq_csi = h_freq_csi_graph_twomode
                     continue
                 elif curr_method == 6:      # Weiner Filter
-                    h_freq_csi = h_freq_csi_weiner_filter
+                    # h_freq_csi = h_freq_csi_weiner_filter
+                    continue
                 elif curr_method == 7:      # Weiner Filter (MIMO)
                     h_freq_csi = h_freq_csi_weiner_filter_MIMO
                 
                 if curr_method != 0:
                     # h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
                     # h_freq_csi = h_freq_csi[..., :512]
-                    h_freq_csi = rb_to_subcarriers(h_freq_csi, 516)
-                    h_freq_csi = h_freq_csi[..., :512]
+                    h_freq_csi = rb_to_sc_ls(h_freq_csi, Nsc=self.cfg.fft_size, rb_size=12, lam=1e-3,
+                         dtype=h_freq_csi.dtype)
+                
+                debug = False
+                if debug:
+                    h_freq_csi_perfect = h_freq
+                    h_freq_csi_perfect = tf.reshape(h_freq_csi_perfect, (h_freq_csi_perfect.shape[0], self.num_rx_ue, -1, *h_freq_csi_perfect.shape[3:]))
+                    h_freq_csi_weiner_filter_MIMO_rb_demapped = rb_to_sc_ls(h_freq_csi_weiner_filter_MIMO, Nsc=self.cfg.fft_size, rb_size=12, lam=1e-3,
+                         dtype=h_freq_csi.dtype)
+                    h_freq_csi_weiner_filter_MIMO_repeated = tf.repeat(h_freq_csi_weiner_filter_MIMO, repeats=12, axis=-1)
+                    h_freq_csi_weiner_filter_MIMO_repeated = h_freq_csi_weiner_filter_MIMO_repeated[..., :512]
+                    plt.figure()
+                    plt.plot(np.imag(h_freq_csi_perfect[0,1,1,0,1,1,:]), label="perfect channel")
+                    plt.plot(np.imag(h_freq_csi_weiner_filter_MIMO_rb_demapped[0,1,1,0,1,1,:]), label="fourier rb demapping")
+                    plt.plot(np.imag(h_freq_csi_weiner_filter_MIMO_repeated[0,1,1,0,1,1,:]), label="repeating")
+                    plt.legend()
+                    plt.savefig('a')
+                debug = False
 
                 # apply precoding to OFDM grids
                 if self.cfg.precoding_method == "ZF":
@@ -812,6 +843,7 @@ class MU_MIMO(Model):
                         curr_h = tf.gather(curr_h, rx_node, axis=1)
                     else:
                         curr_h = tf.gather(h_hat, rx_ant, axis=2)
+
                         curr_h = tf.squeeze(curr_h)
                         curr_h = tf.gather(curr_h, stream_idx, axis=2)
                         curr_h = curr_h[:, :, tf.newaxis, ...]
@@ -854,7 +886,7 @@ class MU_MIMO(Model):
         # plt.semilogy(SNR_range, uncoded_bers[3, :], label="Twomode (All) WESN Channel")
         plt.semilogy(SNR_range, uncoded_bers[4, :], label="Twomode (Per-Link) WESN Channel")
         # plt.semilogy(SNR_range, uncoded_bers[5, :], label="Twomode Graph WESN Channel")
-        plt.semilogy(SNR_range, uncoded_bers[6, :], label="Weiner Filter Channel")
+        # plt.semilogy(SNR_range, uncoded_bers[6, :], label="Weiner Filter Channel")
         plt.semilogy(SNR_range, uncoded_bers[7, :], label="Weiner Filter (MIMO) Channel")
         plt.grid()
         plt.legend()
