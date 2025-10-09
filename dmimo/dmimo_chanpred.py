@@ -24,6 +24,7 @@ from dmimo.channel.wesn_pred import WESN
 from dmimo.mimo import BDPrecoder, BDEqualizer, ZFPrecoder, rankAdaptation, linkAdaptation
 from dmimo.mimo import update_node_selection
 from dmimo.utils import add_frequency_offset, add_timing_offset, cfo_val, sto_val, compute_UE_wise_BER, compute_UE_wise_SER
+from dmimo.utils import rb_to_subcarriers
 
 from .txs_mimo import TxSquad
 from .rxs_mimo import RxSquad
@@ -770,7 +771,9 @@ class MU_MIMO(Model):
                     h_freq_csi = h_freq_csi_weiner_filter_MIMO
                 
                 if curr_method != 0:
-                    h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
+                    # h_freq_csi = tf.repeat(h_freq_csi, repeats=12, axis=-1)
+                    # h_freq_csi = h_freq_csi[..., :512]
+                    h_freq_csi = rb_to_subcarriers(h_freq_csi, 516)
                     h_freq_csi = h_freq_csi[..., :512]
 
                 # apply precoding to OFDM grids
