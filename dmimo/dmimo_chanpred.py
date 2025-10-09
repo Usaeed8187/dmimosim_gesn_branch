@@ -749,7 +749,7 @@ class MU_MIMO(Model):
 
 
         
-        SNR_range = np.arange(0, 22, 4)
+        SNR_range = np.arange(20, 22, 4)
         uncoded_bers = 0.5*np.ones((8, SNR_range.shape[0]))
         
         for snr_idx, snr in enumerate(SNR_range):
