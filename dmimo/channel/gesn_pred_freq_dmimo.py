@@ -150,7 +150,7 @@ class gesn_pred_freq_dmimo:
             self.RLS_lambda = self.rc_config.RLS_lambda
             self.RLS_w = 1
 
-    def get_csi_history(self, first_slot_idx, csi_delay, rg_csi, dmimo_chans):
+    def get_csi_history(self, first_slot_idx, csi_delay, rg_csi, dmimo_chans, fix_SNR=None):
         """
         Returns a tf tensor of shape:
         [history_length, batch_size, num_rx, num_rx_ant, num_tx, num_tx_ant, num_ofdm_sym, fft_size]
@@ -165,12 +165,15 @@ class gesn_pred_freq_dmimo:
             # h_freq_csi has shape [batch_size, num_rx, num_rx_ant, num_tx, num_txs_ant, num_ofdm_sym, fft_size]
             folder_path = "ns3/channel_estimates_{}_{}_rx_{}_tx_{}".format(self.rc_config.mobility, self.rc_config.drop_idx,
                                                                                                 self.N_r, self.N_t)
-            file_path = "{}/dmimochans_{}".format(folder_path, slot_idx)
+            if fix_SNR is not None:
+                file_path = "{}/dmimochans_{}_snr_{}".format(folder_path, slot_idx, fix_SNR)
+            else:
+                file_path = "{}/dmimochans_{}_snr_not_fixed".format(folder_path, slot_idx)
             try:
                 data = np.load("{}.npz".format(file_path))
                 h_freq_csi = data['h_freq_csi']
             except:
-                h_freq_csi, _ = lmmse_channel_estimation(dmimo_chans, rg_csi, slot_idx=slot_idx)
+                h_freq_csi, _ = lmmse_channel_estimation(dmimo_chans, rg_csi, slot_idx=slot_idx, fix_snr=fix_SNR)
                 os.makedirs(folder_path, exist_ok=True)
                 np.savez(file_path, h_freq_csi=h_freq_csi)
             indices = tf.constant([[loop_idx]])

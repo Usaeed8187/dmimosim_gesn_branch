@@ -182,7 +182,7 @@ class MU_MIMO(Model):
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)
             h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
-                                                                self.rg_csi, dmimo_chans)
+                                                                self.rg_csi, dmimo_chans, fix_SNR=15)
             
             # Do channel prediction
             # Get Vanilla RC NMSE for comparison
@@ -293,6 +293,11 @@ class MU_MIMO(Model):
             plt.plot(np.real(h_freq_csi_twomode_per_link_demapped[0,0,rx_ant,0,tx_ant,ofdm_sym,:]), label="Two-Mode (All) WESN channel demapped")
             plt.legend()
             plt.savefig('rbs demapped to scs comparison')
+
+            pred_nmse_twomode_wesn_per_link = self.nmse(h_freq_csi_true_sc_granularity[0,...], h_freq_csi_twomode_per_link_demapped[0,...])
+            print("Two-Mode (Per-Link) WESN NMSE: ", pred_nmse_twomode_wesn_per_link)
+
+            hold = 1
 
 
 
@@ -749,7 +754,7 @@ class MU_MIMO(Model):
 
 
         
-        SNR_range = np.arange(20, 22, 4)
+        SNR_range = np.arange(0, 22, 4)
         uncoded_bers = 0.5*np.ones((8, SNR_range.shape[0]))
         
         for snr_idx, snr in enumerate(SNR_range):
@@ -763,8 +768,8 @@ class MU_MIMO(Model):
             for curr_method in range(uncoded_bers.shape[0]):
                 
                 if curr_method == 0:        # Perfect
-                    h_freq_csi = h_freq
-                    h_freq_csi = tf.reshape(h_freq_csi, (h_freq_csi.shape[0], self.num_rx_ue, -1, *h_freq_csi.shape[3:]))
+                    h_freq_reshaped = tf.reshape(h_freq, (h_freq.shape[0], self.num_rx_ue, -1, *h_freq.shape[3:]))
+                    h_freq_csi = h_freq_reshaped
                 elif curr_method == 1:      # Outdated
                     # h_freq_csi = h_freq_csi_outdated
                     continue
