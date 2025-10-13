@@ -181,6 +181,7 @@ class MU_MIMO(Model):
             
             # Get CSI history
             # TODO: optimize channel estimation and optimization procedures (currently very slow)
+            # TODO: fixing CE SNR to 15 for now. will do a per-SNR point channel estimation when generating final results
             h_freq_csi_history = rc_predictor.get_csi_history(self.cfg.first_slot_idx, self.cfg.csi_delay,
                                                                 self.rg_csi, dmimo_chans, fix_SNR=15)
             
